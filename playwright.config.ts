@@ -21,6 +21,9 @@ export default defineConfig({
       AGENTA_ENGINE_OVERRIDE: 'mock',
       AGENTA_DB_PATH: 'data/e2e/agenta.db',
       AGENTA_WEB_HOST: '127.0.0.1',
+      // Engines always look "not set up" in e2e, whatever the owner has in .env.local / data/secrets.
+      CLAUDE_CODE_OAUTH_TOKEN: '',
+      AGENTA_SECRETS_DIR: 'data/e2e/secrets',
     },
   },
 });

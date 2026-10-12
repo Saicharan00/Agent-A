@@ -72,3 +72,41 @@ Flags seen: `--config <path>`, `--browser <browser|channel>`, `--headless` (head
 `--isolated`, `--user-data-dir <path>`, `--no-sandbox`, `--output-dir <path>`, `--port <port>` (HTTP/SSE
 transport, default stdio), `--host <host>`. With `--port`, it serves streamable HTTP at `/mcp` (legacy `/sse`).
 Verified: starts with `docker/bot/defaults/playwright-mcp.json`; headed Chromium launches on `DISPLAY=:99`.
+
+## Authentication (F06, observed 2026-10-12)
+
+### Claude Code
+- `claude setup-token` (no flags): "Set up a long-lived authentication token (requires Claude subscription)".
+  Interactive OAuth: prints a URL, the owner approves in a browser and pastes the code back; the token is printed.
+- The CLI reads the token from **`CLAUDE_CODE_OAUTH_TOKEN`**. With it set, `claude auth status` (JSON by default,
+  `--text` for prose) prints `"loggedIn": true, "authMethod": "oauth_token"` and exits 0; without any login it prints
+  `"loggedIn": false, "authMethod": "none"` and exits 1. **The check is offline**: it passes with
+  `docker run --network none` and with a fake `sk-ant-oat01-…` value, so it proves presence/shape, not validity.
+- Interactive login (`claude` → `/login`, or `claude auth login`) stores credentials in `~/.claude/.credentials.json`
+  (the per-bot fallback; the runner detects that file).
+- Token prefix seen in docs/CLI output: `sk-ant-oat01-`. API keys (`sk-ant-api…`) are rejected by our check.
+
+### Codex
+- `codex login --device-auth` (device-code flow) or `codex login` (browser callback, unusable headless);
+  `--with-api-key` / `--with-access-token` read from stdin.
+- Login state = `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`):
+  `{ "OPENAI_API_KEY": null, "tokens": { "id_token", "access_token", "refresh_token", "account_id" }, "last_refresh" }`.
+  The `id_token` is a JWT whose `https://api.openai.com/auth` claim carries `chatgpt_plan_type` and `chatgpt_account_id`.
+- `codex login status`: `Logged in using ChatGPT` (exit 0), `Not logged in` (exit 1), or
+  `Error checking login status: invalid ID token format…` (exit 1) for a malformed id_token. **Offline** as well.
+- Codex refreshes tokens itself and rewrites auth.json, hence the copy-back after runs.
+
+### Domains (sandbox network policy)
+Reachable already: `api.anthropic.com`, `platform.claude.com`. "Approval required" on 2026-10-12:
+`claude.ai`, `console.anthropic.com` (Claude OAuth/setup-token), `auth.openai.com` (Codex device login),
+`chatgpt.com`, `api.openai.com` (Codex runs). See HUMAN_TODO 12.
+
+### How the runner uses this (apps/runner/src/engines/)
+- `EngineAuth.execEnv('claude')` → `{ CLAUDE_CODE_OAUTH_TOKEN }` passed as **exec-time env** only
+  (`ContainerManager.exec({ env })`); never in the container spec (`docker inspect` Env), never on disk, redacted in logs.
+- The token is read from the shell env, else `.env.local` (re-read on change; no restart needed).
+- Codex: `data/secrets/codex/auth.json` (600) → `<home>/.codex/auth.json` (600) before each container start
+  (`prepareHome` hook) and before each Codex run (`beforeCodexRun`, F09); `afterCodexRun` copies a newer same-account
+  copy back under a lock file. A bot logged in to a *different* account is left alone (per-bot fallback).
+- `GET /api/settings/engines[?verify=1]`: state/mode per engine; `verify` runs the offline status commands above
+  inside a running bot computer. No prompt is ever sent by these checks.

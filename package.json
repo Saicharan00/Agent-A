@@ -21,6 +21,9 @@
     "db:migrate": "pnpm --filter @agenta/db db:migrate",
     "db:seed": "pnpm --filter @agenta/db db:seed",
     "image:build": "tsx scripts/image-build.ts",
+    "auth:claude": "tsx scripts/engine-login.ts claude",
+    "auth:codex": "tsx scripts/engine-login.ts codex",
+    "smoke:auth": "vitest run --config tests/smoke/vitest.config.ts auth",
     "doctor": "tsx scripts/doctor.ts"
   },
   "devDependencies": {

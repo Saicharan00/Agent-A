@@ -6,6 +6,8 @@ import type { Repos } from '@agenta/db';
 import type { RunnerConfig } from './config';
 import type { ContainerManager } from './containers/manager';
 import { registerComputerRoutes } from './containers/routes';
+import type { EngineAuth } from './engines/auth';
+import { registerEngineRoutes } from './engines/routes';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -18,13 +20,25 @@ export type ServerDeps = {
   repos?: Repos;
   /** Bot container manager (F05). Without it, /api/health reports docker as disabled. */
   containers?: ContainerManager;
+  /** Engine credentials (F06): GET /api/settings/engines. */
+  engineAuth?: EngineAuth;
 };
+
+/** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
+export const LOG_REDACT = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'env.CLAUDE_CODE_OAUTH_TOKEN',
+  '*.env.CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  '*.CLAUDE_CODE_OAUTH_TOKEN',
+];
 
 export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: config.logLevel,
-      redact: ['req.headers.authorization', 'req.headers.cookie'],
+      redact: LOG_REDACT,
     },
   });
 
@@ -52,6 +66,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   });
 
   if (deps.containers) registerComputerRoutes(app, deps.containers);
+  if (deps.engineAuth) registerEngineRoutes(app, deps.engineAuth);
 
   return app;
 }

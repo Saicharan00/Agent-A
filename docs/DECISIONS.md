@@ -150,3 +150,23 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   terminals hold leases via `acquire()`/`execTty()`.
 - **Event bus stub:** `apps/runner/src/bus.ts` (EventEmitter, channel → listeners); F11 adds WebSocket fan-out.
 - **New deps:** `dockerode` (stack) + dev `@types/dockerode`.
+
+## F06 — Engine authentication plumbing (2026-10-12)
+- **Claude token = exec-time env only.** `CLAUDE_CODE_OAUTH_TOKEN` is passed per `docker exec` for engine runs (and the
+  CLI status check), never as container Env, never written into the bot home. Plain execs/terminals don't get it, so
+  it doesn't leak into terminal history or `env` output by default. pino redacts `*.CLAUDE_CODE_OAUTH_TOKEN` paths.
+- **Secrets are re-read from `.env.local`** (mtime-cached) instead of only at startup, so a pasted token works after
+  "Re-check" without a restart. A variable set by the shell (even to "") wins; the runner snapshots `process.env`
+  *before* loading .env.local to know which is which. Playwright uses this to force engines to "missing".
+- **Codex shared login sync**: copy-in before container start and before each Codex run; copy-back after runs when the
+  bot copy is newer and the same account; lock file (`auth.json.lock`, O_EXCL, stale after 30 s) instead of a new
+  dependency; mtimes preserved on copy so "newer" means newer token. Different-account copies = per-bot login, untouched.
+- **Status checks never send a prompt.** Base status is host-side (token shape, auth.json shape/JWT claims). "Re-check"
+  (`?verify=1`) additionally runs `claude auth status` / `codex login status` (both verified offline) inside an
+  already-running bot computer; it never starts one just to check.
+- **Login helpers** `pnpm auth:claude` / `pnpm auth:codex` run the CLIs in a throwaway `agenta-bot` container
+  (labelled `agenta=1`), so the owner needs nothing installed in the VM; the Claude token is read with hidden input
+  and written to `.env.local` (600), the Codex auth.json goes to `data/secrets/codex/auth.json` (600).
+- **Smoke test** `SMOKE=1 pnpm smoke:auth` (tests/smoke, own vitest config, not in `pnpm test`): one "reply OK" prompt
+  per configured engine in a throwaway container.
+- No new dependencies.

@@ -5,6 +5,9 @@ import { Bell, Monitor, Moon, Search, Sun } from 'lucide-react';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
+import { ENGINES_QUERY_KEY } from '@/components/settings/engines-section';
+import { api } from '@/lib/api';
+import { ENGINE_LABELS, dockerPill, enginePillLabel, engineView } from '@/lib/engines';
 import { fetchRunnerStatus } from '@/lib/runner';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
@@ -28,6 +31,45 @@ function RunnerPill() {
   );
 }
 
+function EnginePills() {
+  const { data } = useQuery({
+    queryKey: ENGINES_QUERY_KEY,
+    queryFn: () => api.engines(),
+    refetchInterval: 60_000,
+  });
+  return (
+    <>
+      {(['claude', 'codex'] as const).map((engine) => {
+        const s = data?.engines.find((e) => e.engine === engine);
+        return (
+          <StatusPill
+            key={engine}
+            data-testid={`${engine}-status`}
+            tone={s ? engineView(s).tone : 'neutral'}
+            title={s ? `${ENGINE_LABELS[engine]}: ${s.detail}` : 'Checking…'}
+          >
+            {enginePillLabel(s, engine)}
+          </StatusPill>
+        );
+      })}
+    </>
+  );
+}
+
+function DockerPill() {
+  const { data } = useQuery({
+    queryKey: ['runner-status'],
+    queryFn: () => fetchRunnerStatus(),
+    refetchInterval: 15_000,
+  });
+  const pill = dockerPill(data?.state === 'ok' ? data.health.docker : undefined);
+  return (
+    <StatusPill data-testid="docker-status" tone={pill.tone} title={pill.title}>
+      {pill.label}
+    </StatusPill>
+  );
+}
+
 export function TopBar() {
   const { theme, toggleTheme, computerOpen, setComputerOpen, setPaletteOpen } = useShell();
 
@@ -45,21 +87,14 @@ export function TopBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Engine pills are placeholders until engine health lands (F06–F09, F28). */}
+        {/* Engine pills show auth status (F06); rate-limit state joins them in F10/F28. */}
         {/* With the Computer panel open the centre column is narrow; keep the search usable. */}
         <div
           className={cn('hidden items-center gap-1.5', computerOpen ? '2xl:flex' : 'lg:flex')}
           aria-label="Engine status"
         >
-          <StatusPill tone="neutral" title="Not checked yet">
-            Claude
-          </StatusPill>
-          <StatusPill tone="neutral" title="Not checked yet">
-            Codex
-          </StatusPill>
-          <StatusPill tone="neutral" title="Not checked yet">
-            Docker
-          </StatusPill>
+          <EnginePills />
+          <DockerPill />
           <RunnerPill />
         </div>
 

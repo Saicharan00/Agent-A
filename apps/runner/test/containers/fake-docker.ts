@@ -19,6 +19,11 @@ export class FakeDocker implements DockerApi {
   imagePresent = true;
   startHealth: HealthState = 'healthy';
   down = false;
+  /** Scripted exec result (default: echoes the command, exit 0). */
+  execResult: (opts: ExecOptions) => { stdout: string; code: number } = (opts) => ({
+    stdout: `ran ${opts.cmd.join(' ')}\n`,
+    code: 0,
+  });
   private seq = 0;
   private nextPort = 40000;
 
@@ -92,9 +97,10 @@ export class FakeDocker implements DockerApi {
     this.execs.push({ id, opts });
     const stdout = new PassThrough();
     const stderr = new PassThrough();
-    stdout.end(`ran ${opts.cmd.join(' ')}\n`);
+    const result = this.execResult(opts);
+    stdout.end(result.stdout);
     stderr.end();
-    return { stdout, stderr, wait: async () => 0 };
+    return { stdout, stderr, wait: async () => result.code };
   }
   async execTty(id: string, opts: ExecOptions): Promise<TtyHandle> {
     this.must(id);

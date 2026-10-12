@@ -5,11 +5,16 @@ import { loadConfig } from './config';
 import { createDockerApi } from './containers/docker';
 import { ContainerManager } from './containers/manager';
 import { proxyEnv } from './containers/spec';
-import { buildServer } from './server';
+import { EngineAuth } from './engines/auth';
+import { envFileSource } from './engines/secrets';
+import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
 
+// Snapshot before .env.local is merged in: variables set by the shell win over the file (see envFileSource).
+const shellEnv = { ...process.env };
 loadRootEnv();
 const config = loadConfig();
+const rootLog = pino({ level: config.logLevel, redact: LOG_REDACT });
 // Opening the DB applies pending migrations (idempotent), so a fresh checkout just works.
 const db = openDb(config.dbPath);
 const repos = createRepos(db);
@@ -19,13 +24,23 @@ const containers = config.dockerEnabled
       docker: createDockerApi(),
       repos,
       bus,
-      log: pino({ level: config.logLevel }).child({ module: 'containers' }),
+      log: rootLog.child({ module: 'containers' }),
       botsDir: config.botsDir,
       sharedDir: config.sharedDir,
+      // Proxy settings only: engine credentials are injected per exec (EngineAuth.execEnv), never here.
       containerEnv: proxyEnv(process.env),
+      prepareHome: (botId, home) => engineAuth.prepareHome(botId, home),
     })
   : undefined;
-const app = await buildServer(config, { repos, containers });
+const engineAuth: EngineAuth = new EngineAuth({
+  secrets: envFileSource({ shellEnv, envFile: config.envFile }),
+  secretsDir: config.secretsDir,
+  botsDir: config.botsDir,
+  repos,
+  exec: containers && ((botId, opts) => containers.exec(botId, opts)),
+  log: rootLog.child({ module: 'engine-auth' }),
+});
+const app = await buildServer(config, { repos, containers, engineAuth });
 app.addHook('onClose', async () => {
   // Bot containers keep running across runner restarts; the reconcile loop adopts them on start.
   containers?.stopLoops();

@@ -44,6 +44,11 @@ export type ManagerOptions = {
   sharedDir: string;
   /** Extra container env (proxy settings). Never secrets: these show up in `docker inspect`. */
   containerEnv?: string[];
+  /**
+   * Runs before a container starts, with the bot's home on the host (F06: copies the Codex login in).
+   * A failure is logged and the start continues: engines report their own auth errors.
+   */
+  prepareHome?: (botId: string, home: string) => Promise<void>;
   image?: string;
   network?: string;
   stopTimeoutSec?: number;
@@ -385,6 +390,9 @@ export class ContainerManager {
     }
     this.setStatus(bot, 'starting', { containerId: created.id });
     try {
+      await this.opts.prepareHome?.(bot.id, botHomeDir(this.opts.botsDir, bot.id)).catch((err: unknown) => {
+        this.opts.log.warn({ botId: bot.id, err: (err as Error).message }, 'prepareHome failed');
+      });
       await this.docker.start(created.id);
       const ready = await this.waitHealthy(created.id);
       this.setStatus(bot, 'running', { containerId: ready.id, novncPort: ready.hostPort });

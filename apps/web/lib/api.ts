@@ -1,6 +1,6 @@
 // Typed client for the runner REST API. The browser always calls the web origin's /api,
 // which Next rewrites to the runner (see docs/DECISIONS.md, F01).
-import { apiErrorSchema, healthResponseSchema } from '@agenta/shared';
+import { apiErrorSchema, engineSettingsResponseSchema, healthResponseSchema } from '@agenta/shared';
 import type { z } from 'zod';
 
 export class ApiClientError extends Error {
@@ -82,4 +82,12 @@ export async function apiRequest<S extends z.ZodType>(
 /** Endpoint helpers. Later features add bots, threads, runs… here. */
 export const api = {
   health: (fetchImpl?: typeof fetch) => apiRequest('/health', healthResponseSchema, {}, fetchImpl),
+  /** Engine auth status (F06). `verify` asks each CLI inside a running bot computer (no prompt is sent). */
+  engines: (opts: { verify?: boolean } = {}, fetchImpl?: typeof fetch) =>
+    apiRequest(
+      '/settings/engines',
+      engineSettingsResponseSchema,
+      { query: { verify: opts.verify ? 1 : undefined } },
+      fetchImpl,
+    ),
 };
