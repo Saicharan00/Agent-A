@@ -59,3 +59,26 @@ TypeScript is pinned to ~6.0 because typescript-eslint 8.x supports `<6.1` (TS 7
 supported yet). ESLint 10 flat config + typescript-eslint + @next/eslint-plugin-next + eslint-config-prettier.
 Next.js telemetry is disabled in the launcher and `agentRules: false` stops Next from writing `apps/web/AGENTS.md`.
 New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), eslint-config-prettier.
+
+## F02 — Data layer shape
+- **Sync repositories.** better-sqlite3 is synchronous, so repos return values (not Promises) and use Drizzle's
+  `.get()/.all()/.run()`. `createRepos(db)` (packages/db) is the only place SQL lives.
+- **Repos validate their own input** with the zod DTOs from `packages/shared/src/dto.ts` (defaults applied there),
+  so the runner, MCP tools and seeds all get the same validation, not just HTTP routes.
+- **Enums live in `packages/shared/src/enums.ts`** and both the Drizzle schema and the zod DTOs import them.
+  drizzle-kit resolves the `@agenta/shared/*` tsconfig path alias, so no duplication is needed.
+- **Migrations:** drizzle-kit SQL files in `packages/db/drizzle/`, applied by `openDb()` (drizzle migrator,
+  tracked in `__drizzle_migrations`, idempotent). The runner opens the DB on start, so it always auto-migrates.
+  `pnpm db:generate` after editing `schema.ts`.
+- **Pragmas per connection:** WAL, `foreign_keys=ON`, `busy_timeout=5000`, `synchronous=NORMAL` (safe with WAL).
+- **Columns added beyond PLAN's list:** `runs.created_at` (queue FIFO order) and `schedules.created_at`
+  (stable listing). `run_events.id` is an INTEGER autoincrement (high-volume, never referenced by id).
+- **Stable ordering:** IDs are random and timestamps are millisecond-resolution, so lists that must keep
+  insertion order (messages, runs queue, task events) tie-break on SQLite's `rowid`.
+- **Polymorphic references are not FKs:** `tasks.created_by`, `decisions.created_by` ('user' or a bot id) and
+  `lessons.source_id`. Other references are FKs: owned children cascade (members, messages, run events, sessions),
+  optional links `SET NULL` (a deleted bot unassigns its tasks rather than deleting them).
+- **DB location:** `AGENTA_DB_PATH` (absolute or repo-relative), default `data/agenta.db`. Playwright uses
+  `data/e2e/agenta.db` so e2e runs never touch the owner's data. Unit tests use a fresh temp file per test.
+- **New deps:** `better-sqlite3` + `drizzle-orm` (+ dev `drizzle-kit`, `@types/better-sqlite3`) in packages/db;
+  `nanoid` in packages/shared (IDs). `better-sqlite3` added to `onlyBuiltDependencies` for its native build.

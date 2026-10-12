@@ -2,15 +2,29 @@ import cors from '@fastify/cors';
 import { apiError, type HealthResponse } from '@agenta/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pkg from '../package.json' with { type: 'json' };
+import type { Repos } from '@agenta/db';
 import type { RunnerConfig } from './config';
 
-export async function buildServer(config: RunnerConfig): Promise<FastifyInstance> {
+declare module 'fastify' {
+  interface FastifyInstance {
+    repos: Repos | null;
+  }
+}
+
+export type ServerDeps = {
+  /** Data access for API routes (F12+). Null in tests that don't need a DB. */
+  repos?: Repos;
+};
+
+export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: config.logLevel,
       redact: ['req.headers.authorization', 'req.headers.cookie'],
     },
   });
+
+  app.decorate('repos', deps.repos ?? null);
 
   await app.register(cors, { origin: [config.webOrigin] });
 

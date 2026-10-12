@@ -1,10 +1,15 @@
+import { closeDb, createRepos, openDb } from '@agenta/db';
 import { loadRootEnv } from '@agenta/shared/env';
 import { loadConfig } from './config';
 import { buildServer } from './server';
 
 loadRootEnv();
 const config = loadConfig();
-const app = await buildServer(config);
+// Opening the DB applies pending migrations (idempotent), so a fresh checkout just works.
+const db = openDb(config.dbPath);
+const app = await buildServer(config, { repos: createRepos(db) });
+app.addHook('onClose', async () => closeDb(db));
+app.log.info({ dbPath: config.dbPath }, 'database ready');
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {

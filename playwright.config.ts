@@ -15,6 +15,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     // Tests must never reach a real engine.
-    env: { AGENTA_ENGINE_OVERRIDE: 'mock' },
+    // E2E gets its own DB so tests never touch the owner's data/agenta.db.
+    env: { AGENTA_ENGINE_OVERRIDE: 'mock', AGENTA_DB_PATH: 'data/e2e/agenta.db' },
   },
 });
