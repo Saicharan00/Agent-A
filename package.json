@@ -1,0 +1,40 @@
+{
+  "name": "agent-a",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22.12 <23"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n web,runner -c cyan,magenta \"pnpm --filter @agenta/web dev\" \"pnpm --filter @agenta/runner dev\"",
+    "build": "pnpm -r build",
+    "start": "concurrently -k -n web,runner -c cyan,magenta \"pnpm --filter @agenta/web start\" \"pnpm --filter @agenta/runner start\"",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "check:secrets": "tsx scripts/check-secrets.ts",
+    "db:generate": "pnpm --filter @agenta/db db:generate",
+    "db:migrate": "pnpm --filter @agenta/db db:migrate",
+    "db:seed": "pnpm --filter @agenta/db db:seed",
+    "image:build": "tsx scripts/image-build.ts",
+    "doctor": "tsx scripts/doctor.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.0",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.6",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  }
+}

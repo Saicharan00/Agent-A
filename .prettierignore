@@ -1,0 +1,10 @@
+node_modules
+.next
+coverage
+playwright-report
+test-results
+data
+pnpm-lock.yaml
+*.md
+apps/web/next-env.d.ts
+.trash-*

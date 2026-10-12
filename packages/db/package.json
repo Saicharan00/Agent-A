@@ -1,0 +1,15 @@
+{
+  "name": "@agenta/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "db:generate": "echo 'db:generate is implemented in F02' && exit 1",
+    "db:migrate": "echo 'db:migrate is implemented in F02' && exit 1",
+    "db:seed": "echo 'db:seed is implemented in F02' && exit 1"
+  }
+}

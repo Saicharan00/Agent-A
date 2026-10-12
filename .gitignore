@@ -9,3 +9,9 @@ data/
 .env*
 !.env.example
 secrets/
+test-results
+dist
+*.tsbuildinfo
+next-env.d.ts
+.trash-*
+.pnpm-store
