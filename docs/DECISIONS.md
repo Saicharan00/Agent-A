@@ -9,7 +9,7 @@ client and its own private Docker daemon (29.8.1). Added in F01:
    registry.npmjs.org, github.com, objects.githubusercontent.com, codeload.github.com, nodejs.org,
    registry-1.docker.io, auth.docker.io, production.cloudflare.docker.com, cdn.playwright.dev,
    playwright.download.prss.microsoft.com, archive.ubuntu.com, security.ubuntu.com.
-   Still needed (HUMAN_TODO): storage.googleapis.com (Playwright browser download), production.cloudfront.docker.com (Docker Hub blobs).
+   Added later: storage.googleapis.com (Playwright's Chrome download), production.cloudfront.docker.com (Docker Hub blobs).
 2. pnpm: `npm i -g pnpm@10` (installs into /usr/local/share/npm-global). Corepack's bundled version (0.24) cannot run
    pnpm 12, so corepack is not used; `packageManager` pins pnpm@10.34.7.
 3. apt: `download.docker.com` is blocked, which makes plain `apt-get update` fail. Workaround that only uses the Ubuntu
@@ -17,7 +17,7 @@ client and its own private Docker daemon (29.8.1). Added in F01:
    `sudo apt-get update -o Dir::Etc::sourceparts=/tmp/aptparts` and
    `sudo apt-get install -y -o Dir::Etc::sourceparts=/tmp/aptparts build-essential sqlite3 iproute2`.
 4. Playwright system libraries: the package list from `pnpm exec playwright install-deps --dry-run chromium`,
-   installed with the same apt workaround. Browser: `pnpm exec playwright install chromium`.
+   installed with the same apt workaround. Browser: `pnpm exec playwright install chromium` (into ~/.cache/ms-playwright).
 
 ## F01 — node_modules and .next live on the VM's Linux disk (bind mounts)
 The project folder is the owner's Windows folder mounted via virtiofs. It forbids symlinks (pnpm's default layout)
