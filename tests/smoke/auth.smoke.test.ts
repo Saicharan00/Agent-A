@@ -38,7 +38,8 @@ describe.runIf(enabled)('smoke: engine auth (real engines)', () => {
     const out = dockerRun(['claude', '-p', PROMPT, '--output-format', 'text'], {
       env: { [CLAUDE_TOKEN_VAR]: token! },
     });
-    expect(out.trim()).toMatch(/^OK\.?$/);
+    // stdout also carries the image entrypoint's banner line; the answer is the last line.
+    expect(out.trim().split('\n').at(-1)).toMatch(/^OK\.?$/);
   });
 
   it.runIf(existsSync(codexShared))('Codex answers with the shared ChatGPT login', async () => {
