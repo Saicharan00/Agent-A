@@ -16,7 +16,7 @@ describe('botsRepo', () => {
       sidebarVisible: true,
       notifications: 'all',
       model: null,
-      settings: { cpus: 2, memoryMb: 4096, idleTimeoutMin: 30, flags: {} },
+      settings: { cpus: 2, memoryMb: 2048, idleTimeoutMin: 30, flags: {} },
     });
     expect(bot.createdAt).toBe(bot.updatedAt);
     expect(new Date(bot.createdAt).toISOString()).toBe(bot.createdAt);
@@ -49,7 +49,7 @@ describe('botsRepo', () => {
     const updated = t.repos.bots.update(bot.id, { role: 'Lead', model: 'opus', settings: { cpus: 4 } });
     expect(updated).toMatchObject({ role: 'Lead', model: 'opus', name: 'Agent A' });
     expect(updated?.settings.cpus).toBe(4);
-    expect(updated?.settings.memoryMb).toBe(4096);
+    expect(updated?.settings.memoryMb).toBe(2048);
     expect(updated!.updatedAt > bot.updatedAt).toBe(true);
     expect(t.repos.bots.update('bot_nope', { role: 'x' })).toBeUndefined();
 

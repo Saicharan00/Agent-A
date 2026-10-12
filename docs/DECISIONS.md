@@ -123,3 +123,30 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Engine versions** default to `latest` at build time (build args `CLAUDE_CODE_VERSION`, `CODEX_VERSION`,
   `PLAYWRIGHT_MCP_VERSION` can pin them); the observed versions are recorded in `docs/engines.md`.
   `DISABLE_AUTOUPDATER=1` so Claude Code doesn't try to update itself inside bots.
+
+## F05 — Container lifecycle manager
+- **Bot homes live on the VM disk.** The workspace (virtiofs) refuses symlinks, also inside containers, which would
+  break npm, Python venvs and git in bots. `data/bots` and `data/shared` keep their PLAN paths but are bind-mounted
+  from `~/.cache/agenta-vm/` by `scripts/vm-mounts.sh` (same mechanism as node_modules). The runner probes both dirs
+  for symlink support before creating a container and fails with `storage_unsupported` otherwise. Trade-off: the
+  owner can't browse bot files from Windows Explorer (F15 Files UI covers that); they persist with the sandbox VM.
+- **`host.docker.internal` → the `agenta-net` gateway IP**, not Docker's `host-gateway` (which resolves to `fe80::1`,
+  unusable, in this VM). F17's MCP server must therefore listen on that gateway IP as well as 127.0.0.1; it is
+  reachable only from bot containers on the bridge, never from outside the VM.
+- **No capabilities at all** (`CapDrop: ALL`, `CapAdd: []`), `no-new-privileges`, PidsLimit 512, swap = memory limit,
+  restart policy `no`, no Docker socket, binds = home + /shared only, 6080 published to `127.0.0.1:<random>`.
+  The image runs as uid 1000 and the runner bootstraps the home itself (Docker would create `work/` as root).
+- **Default bot memory 2 GB** (DTO default lowered from F02's 4096 to match PLAN; the VM has ~7 GB).
+- **Proxy env in containers** (HTTP(S)_PROXY from the runner env; NO_PROXY always adds host.docker.internal/localhost).
+  Exec-time `env` (F06 tokens) is passed per exec and never stored on the container.
+- **`DockerApi` interface** (containers/docker.ts) wraps the dockerode calls the manager needs; unit tests use an
+  in-memory `FakeDocker`. Real-Docker tests live in `apps/runner/test-docker/*.docker.test.ts`, run by
+  `pnpm test:docker` (not part of `pnpm test`).
+- **Lifecycle details:** per-bot promise lock serializes start/stop/reset; containers are found by label
+  `agenta.bot=<id>` (the name `agenta-bot-<slug>` gets an id suffix on conflict); `reset` removes the container and
+  restarts it if it was running; the published port is stored in label `agenta.port` for adopted containers.
+  Bot containers keep running when the runner stops; reconcile (startup + 60 s) adopts them, marks vanished ones
+  stopped, and only *stops* orphans. Idle sweep (60 s) stops computers idle > `idleTimeoutMin` (0 = never); runs and
+  terminals hold leases via `acquire()`/`execTty()`.
+- **Event bus stub:** `apps/runner/src/bus.ts` (EventEmitter, channel → listeners); F11 adds WebSocket fan-out.
+- **New deps:** `dockerode` (stack) + dev `@types/dockerode`.

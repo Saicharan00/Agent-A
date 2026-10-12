@@ -33,7 +33,7 @@ const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'a #rrggbb colour');
 // ---------- bots ----------
 export const botSettingsSchema = z.object({
   cpus: z.number().positive().max(16).default(2),
-  memoryMb: z.number().int().min(256).max(65536).default(4096),
+  memoryMb: z.number().int().min(256).max(65536).default(2048),
   idleTimeoutMin: z.number().int().min(0).max(1440).default(30),
   flags: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });

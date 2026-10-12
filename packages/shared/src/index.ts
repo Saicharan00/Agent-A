@@ -4,3 +4,4 @@ export * from './enums';
 export * from './ids';
 export * from './time';
 export * from './dto';
+export * from './computer';
