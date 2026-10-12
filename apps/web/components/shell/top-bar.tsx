@@ -7,11 +7,27 @@ import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { ENGINES_QUERY_KEY } from '@/components/settings/engines-section';
 import { api } from '@/lib/api';
-import { ENGINE_LABELS, dockerPill, enginePillLabel, engineView } from '@/lib/engines';
+import { dockerPill, enginePillLabel, engineView } from '@/lib/engines';
 import { fetchRunnerStatus } from '@/lib/runner';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
 import { useShell } from './shell-context';
+
+/**
+ * "Claude: ready" → name always shown, ": ready" only when there's room (the dot's colour still tells the state,
+ * and the full text is in the tooltip).
+ */
+function PillText({ label }: { label: string }) {
+  const { computerOpen } = useShell();
+  const i = label.indexOf(':');
+  if (i < 0) return label;
+  return (
+    <span>
+      {label.slice(0, i)}
+      <span className={cn('hidden', computerOpen ? '2xl:inline' : 'lg:inline')}>{label.slice(i)}</span>
+    </span>
+  );
+}
 
 function RunnerPill() {
   const { data } = useQuery({
@@ -24,9 +40,9 @@ function RunnerPill() {
     <StatusPill
       data-testid="runner-status"
       tone={data === undefined ? 'neutral' : data.state === 'ok' ? 'ok' : 'error'}
-      title={data?.state === 'down' ? data.reason : undefined}
+      title={data?.state === 'down' ? `Runner: down (${data.reason})` : `Runner: ${label}`}
     >
-      Runner: {label}
+      <PillText label={`Runner: ${label}`} />
     </StatusPill>
   );
 }
@@ -46,9 +62,9 @@ function EnginePills() {
             key={engine}
             data-testid={`${engine}-status`}
             tone={s ? engineView(s).tone : 'neutral'}
-            title={s ? `${ENGINE_LABELS[engine]}: ${s.detail}` : 'Checking…'}
+            title={s ? `${enginePillLabel(s, engine)}. ${s.detail}` : 'Checking…'}
           >
-            {enginePillLabel(s, engine)}
+            <PillText label={enginePillLabel(s, engine)} />
           </StatusPill>
         );
       })}
@@ -64,8 +80,12 @@ function DockerPill() {
   });
   const pill = dockerPill(data?.state === 'ok' ? data.health.docker : undefined);
   return (
-    <StatusPill data-testid="docker-status" tone={pill.tone} title={pill.title}>
-      {pill.label}
+    <StatusPill
+      data-testid="docker-status"
+      tone={pill.tone}
+      title={pill.title ? `${pill.label} (${pill.title})` : pill.label}
+    >
+      <PillText label={pill.label} />
     </StatusPill>
   );
 }
@@ -88,11 +108,8 @@ export function TopBar() {
 
       <div className="ml-auto flex items-center gap-2">
         {/* Engine pills show auth status (F06); rate-limit state joins them in F10/F28. */}
-        {/* With the Computer panel open the centre column is narrow; keep the search usable. */}
-        <div
-          className={cn('hidden items-center gap-1.5', computerOpen ? '2xl:flex' : 'lg:flex')}
-          aria-label="Engine status"
-        >
+        {/* Narrow windows (or the Computer panel open) shrink pills to dot + name; see PillText. */}
+        <div className="hidden items-center gap-1.5 sm:flex" aria-label="Engine status">
           <EnginePills />
           <DockerPill />
           <RunnerPill />
