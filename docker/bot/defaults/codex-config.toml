@@ -1,0 +1,11 @@
+# Codex config for an Agent A bot. The container is the sandbox, so Codex runs without its own.
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[mcp_servers.playwright]
+command = "playwright-mcp"
+args = ["--config", "/opt/agenta/defaults/playwright-mcp.json"]
+
+[mcp_servers.agenta]
+url = "{{AGENTA_MCP_URL}}"
+bearer_token_env_var = "AGENTA_MCP_TOKEN"

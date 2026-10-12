@@ -100,3 +100,26 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   Pills hide when the Computer panel is open below 2xl so the search stays usable at 1280px.
 - **`useLiveChannel`** is a skeleton (`lib/live-channel.ts`, capped exponential backoff with jitter, subscribe-on-open)
   and defaults to `enabled: false`: no server exists until F11, and failed connection attempts would log console errors.
+
+## F04 — Bot computer image
+- **User `bot` = the base image's `node` user renamed** (it already owns uid/gid 1000). The image runs as `bot`
+  (`USER bot`), so the entrypoint and every `docker exec` are non-root by default; the entrypoint only `mkdir`s.
+- **Proxy CA baked in.** The Docker Sandbox proxy re-signs TLS for some hosts (observed: `api.anthropic.com`,
+  `registry-1.docker.io`) with "Docker Sandboxes Proxy CA". `pnpm image:build` copies
+  `/usr/local/share/ca-certificates/proxy-ca.crt` into `docker/bot/certs/` (git-ignored `*.crt`), the Dockerfile adds it
+  to the system store, and `NODE_EXTRA_CA_CERTS`/`SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE` point at the bundle.
+  Without it the engines inside bots would fail TLS. It is a public CA cert, not a secret.
+- **Proxy at build time:** `docker build` doesn't forward the shell's proxy env, so `image:build` passes
+  `HTTP(S)_PROXY`/`NO_PROXY` as build args (predefined ARGs: not persisted in the image). Runtime proxy env for bot
+  containers is F05's job.
+- **`gh` from the official apt repo (`cli.github.com`).** The release tarball redirects to
+  `release-assets.githubusercontent.com`, which would need an extra domain allow anyway; apt is the documented path.
+- **Playwright version pinned to `@playwright/mcp`'s own dependency** (an alpha build), installed globally as the
+  `playwright` CLI, so `playwright install chromium` fetches the exact browser revision the MCP server launches.
+  Browsers live in `/opt/ms-playwright` (`PLAYWRIGHT_BROWSERS_PATH`), world-readable.
+- **Desktop supervision:** a tiny bash restart loop per daemon (Xvfb, fluxbox, x11vnc, websockify) instead of
+  supervisord: four processes, no extra package. Logs in `/tmp/agenta/*.log`. x11vnc listens on container-local
+  `127.0.0.1:5900` only; websockify serves noVNC on `:6080`, which F05 publishes to `127.0.0.1:<random>`.
+- **Engine versions** default to `latest` at build time (build args `CLAUDE_CODE_VERSION`, `CODEX_VERSION`,
+  `PLAYWRIGHT_MCP_VERSION` can pin them); the observed versions are recorded in `docs/engines.md`.
+  `DISABLE_AUTOUPDATER=1` so Claude Code doesn't try to update itself inside bots.

@@ -15,3 +15,6 @@ dist
 next-env.d.ts
 .trash-*
 .pnpm-store
+
+# Machine-specific CA certs copied in by pnpm image:build
+docker/bot/certs/*.crt

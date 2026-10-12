@@ -1,0 +1,10 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "isolated": false,
+    "userDataDir": "/home/bot/.cache/agenta-browser",
+    "launchOptions": {
+      "headless": false
+    }
+  }
+}
