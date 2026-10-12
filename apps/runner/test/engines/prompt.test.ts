@@ -1,0 +1,140 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { Message } from '@agenta/db';
+import { describe, expect, it } from 'vitest';
+import {
+  type PromptMessage,
+  type PromptTask,
+  type PromptThread,
+  buildPrompt,
+  buildSystemPromptAppend,
+  renderInstructionFiles,
+  toPromptMessages,
+  writeInstructionFiles,
+} from '../../src/engines/prompt';
+
+const bot = { id: 'bot_rev', name: 'Code Reviewer', slug: 'code-reviewer', role: 'Senior reviewer' };
+const dm: PromptThread = { id: 'thr_dm', kind: 'dm', title: 'Code Reviewer', explainMode: false };
+const group: PromptThread = { id: 'thr_grp', kind: 'group', title: 'Launch prep', explainMode: false };
+const msg = (over: Partial<PromptMessage>): PromptMessage => ({
+  authorType: 'user',
+  authorName: 'Charan',
+  contentMd: 'Can you review the login PR?',
+  createdAt: '2026-10-12T14:03:27.123Z',
+  mentions: [],
+  ...over,
+});
+const task: PromptTask = {
+  id: 'tsk_1',
+  title: 'Review login PR #42',
+  status: 'in_progress',
+  priority: 'p1',
+  descriptionMd: 'Check the new OAuth callback handler.',
+  acceptanceMd: '- No secrets logged\n- Tests cover the error path',
+  revisionCount: 1,
+};
+
+describe('buildPrompt', () => {
+  it('plain DM turn = the message itself', () => {
+    expect(buildPrompt({ bot, thread: dm, newMessages: [msg({ contentMd: '  hi there \n' })] })).toBe(
+      'hi there',
+    );
+  });
+
+  it('DM with several messages, task context and explain mode', () => {
+    expect(
+      buildPrompt({
+        bot,
+        thread: { ...dm, explainMode: true },
+        newMessages: [
+          msg({}),
+          msg({ contentMd: 'Focus on error handling.', createdAt: '2026-10-12T14:04:00.000Z' }),
+        ],
+        task,
+      }),
+    ).toMatchSnapshot();
+  });
+
+  it('group thread: messages since last turn, bot authors, mentions', () => {
+    expect(
+      buildPrompt({
+        bot,
+        thread: group,
+        newMessages: [
+          msg({ contentMd: 'Status check, team?' }),
+          msg({
+            authorType: 'bot',
+            authorName: 'Builder',
+            contentMd: 'Login PR is ready. @code-reviewer please look.',
+            mentions: ['bot_rev'],
+          }),
+          msg({ authorType: 'system', authorName: 'System', contentMd: 'Builder finished run run_9.' }),
+        ],
+      }),
+    ).toMatchSnapshot();
+  });
+
+  it('task thread without new messages renders the task alone', () => {
+    expect(
+      buildPrompt({ bot, thread: { ...dm, kind: 'task', title: 'Review' }, newMessages: [], task }),
+    ).toMatchSnapshot();
+  });
+
+  it('explainMode argument overrides the thread flag', () => {
+    const p = buildPrompt({ bot, thread: dm, newMessages: [msg({})], explainMode: true });
+    expect(p).toContain('## Explain mode is on');
+  });
+});
+
+describe('toPromptMessages', () => {
+  it('resolves author names', () => {
+    const base = { threadId: 't', runId: null, mentions: [], createdAt: '2026-10-12T00:00:00.000Z' };
+    const rows = [
+      { ...base, id: 'm1', authorType: 'user', authorBotId: null, contentMd: 'a' },
+      { ...base, id: 'm2', authorType: 'bot', authorBotId: 'bot_b', contentMd: 'b' },
+      { ...base, id: 'm3', authorType: 'bot', authorBotId: 'bot_gone', contentMd: 'c' },
+      { ...base, id: 'm4', authorType: 'system', authorBotId: null, contentMd: 'd' },
+    ] as Message[];
+    expect(
+      toPromptMessages(rows, new Map([['bot_b', { name: 'Builder' }]]), 'Charan').map((m) => m.authorName),
+    ).toEqual(['Charan', 'Builder', 'A former teammate', 'System']);
+  });
+});
+
+describe('system prompt + instruction files', () => {
+  it('system prompt append', () => {
+    expect(buildSystemPromptAppend(bot, group)).toMatchSnapshot();
+  });
+
+  it('CLAUDE.md / AGENTS.md without memory (F22 stub) and with memory', () => {
+    const lead = {
+      name: 'Agent A',
+      role: 'Lead AI Engineer',
+      instructions: 'Plan, delegate, review, teach.',
+      isLead: true,
+    };
+    const empty = renderInstructionFiles({ ...lead, instructions: '  ' });
+    expect(empty['CLAUDE.md']).toBe(empty['AGENTS.md']);
+    expect(empty['CLAUDE.md']).toMatchSnapshot();
+    expect(
+      renderInstructionFiles(lead, [
+        { scope: 'bot', title: 'Owner prefers pnpm', contentMd: 'Use pnpm, never npm.' },
+        { scope: 'shared', title: 'Repo layout', contentMd: 'apps/ and packages/.' },
+      ])['CLAUDE.md'],
+    ).toMatchSnapshot();
+  });
+
+  it('writes both files into the home, replacing placeholders', () => {
+    const home = mkdtempSync(join(tmpdir(), 'agenta-prompt-'));
+    try {
+      const files = renderInstructionFiles({ name: 'X', role: '', instructions: 'Be brief.', isLead: false });
+      writeInstructionFiles(home, files);
+      writeInstructionFiles(home, files);
+      expect(readFileSync(join(home, 'CLAUDE.md'), 'utf8')).toContain('Be brief.');
+      expect(readFileSync(join(home, 'AGENTS.md'), 'utf8')).toBe(files['AGENTS.md']);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});

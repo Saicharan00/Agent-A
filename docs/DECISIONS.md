@@ -170,3 +170,23 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Smoke test** `SMOKE=1 pnpm smoke:auth` (tests/smoke, own vitest config, not in `pnpm test`): one "reply OK" prompt
   per configured engine in a throwaway container.
 - No new dependencies.
+
+## F07 — Engine adapter interface & mock engine (2026-10-12)
+- **`EngineEvent` lives in `packages/shared/src/events.ts`** as a zod discriminated union (PLAN §2 shape, unchanged);
+  run_events rows and WebSocket frames will validate against it. Additive changes only.
+- **Adapter contract:** `run(input, signal)` yields events and always ends with exactly one `run.finished`; an aborted
+  signal ends the run promptly with `cancelled`. Tests assert these invariants for every mock scenario.
+- **Mock engine** is an async generator driven by a per-scenario script that yields delays; time comes from an
+  injectable `MockClock` (`fakeClock()` advances virtual time, so the 20 s `[mock:slow]` test runs instantly).
+  Session id is deterministic (`mock-<botId>-<threadId>`, or the resumed id). `[mock:delegate]` emits
+  `mcp__agenta__*` tool calls; results come from an injectable `platform` (stub text until F17).
+- **`EngineRegistry`** resolves a bot's adapter; `AGENTA_ENGINE_OVERRIDE=mock` makes `effectiveEngine()` return mock
+  for every bot. Claude/Codex adapters register in F08/F09; until then asking for them throws `engine_unavailable`.
+- **JSONL parser:** StringDecoder for split UTF-8, CRLF tolerant, non-JSON lines go to `onNoise` (debug log; they
+  include the image entrypoint banner), oversized lines (default 8 MiB) dropped and reported, parser recovers.
+- **Prompt builder** is pure (plain data in, text out) with snapshot tests. A plain DM turn is sent verbatim; group/
+  task turns get a "messages since your last turn" block (author, minute-precision UTC time, "mentions you"), task
+  context, and the explain-mode instructions. CLAUDE.md and AGENTS.md get identical rendered content (instructions,
+  computer layout, memory + team knowledge; memory empty until F22) and are rewritten atomically before each run.
+- `pnpm mock:run "<prompt>"` prints a scenario's event stream (manual check; Ctrl+C → cancelled).
+- No new dependencies.

@@ -1,4 +1,4 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "test", "test-docker", "vitest.config.ts", "vitest.docker.config.ts"]
+  "include": ["src", "scripts", "test", "test-docker", "vitest.config.ts", "vitest.docker.config.ts"]
 }

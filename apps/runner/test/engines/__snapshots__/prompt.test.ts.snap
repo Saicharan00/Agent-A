@@ -1,0 +1,125 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildPrompt > DM with several messages, task context and explain mode 1`] = `
+"## New messages in this chat since your last turn
+
+**Charan** · 2026-10-12 14:03 UTC:
+Can you review the login PR?
+
+**Charan** · 2026-10-12 14:04 UTC:
+Focus on error handling.
+
+## Task tsk_1: Review login PR #42
+Status: in_progress · Priority: p1 · Revision 1
+
+### Description
+Check the new OAuth callback handler.
+
+### Acceptance criteria
+- No secrets logged
+- Tests cover the error path
+
+## Explain mode is on
+The owner is learning from you. Alongside doing the work:
+- Before acting, say in one or two sentences what you are about to do and why.
+- Name the trade-offs you considered and why you picked this option.
+- Afterwards, list the key takeaways a strong engineer would remember from this turn.
+
+Work on the task above and report what you did."
+`;
+
+exports[`buildPrompt > group thread: messages since last turn, bot authors, mentions 1`] = `
+"## New messages in the group thread "Launch prep" since your last turn
+
+**Charan** · 2026-10-12 14:03 UTC:
+Status check, team?
+
+**Builder (bot)** · 2026-10-12 14:03 UTC (mentions you):
+Login PR is ready. @code-reviewer please look.
+
+**System** · 2026-10-12 14:03 UTC:
+Builder finished run run_9.
+
+Reply as Code Reviewer. Others only see your final message in the thread; mention a teammate with @slug only when you need them."
+`;
+
+exports[`buildPrompt > task thread without new messages renders the task alone 1`] = `
+"## Task tsk_1: Review login PR #42
+Status: in_progress · Priority: p1 · Revision 1
+
+### Description
+Check the new OAuth callback handler.
+
+### Acceptance criteria
+- No secrets logged
+- Tests cover the error path
+
+Work on the task above and report what you did.
+
+Reply as Code Reviewer. Others only see your final message in the thread; mention a teammate with @slug only when you need them."
+`;
+
+exports[`system prompt + instruction files > CLAUDE.md / AGENTS.md without memory (F22 stub) and with memory 1`] = `
+"# Agent A
+
+<!-- Rendered by Agent A before each run from the bot's settings and memory. Edits here are overwritten. -->
+
+**Role:** Lead AI Engineer (team lead)
+
+## Instructions
+
+_No custom instructions._
+
+## Your computer
+
+- \`/home/bot/work\`: your working directory (persists between runs).
+- \`/home/bot/notes\`: your own notes; write down anything worth remembering.
+- \`/shared\`: files shared with the whole team; \`/shared/knowledge\` holds team knowledge.
+- A desktop (DISPLAY=:99) with Chromium is available through the Playwright MCP tools.
+
+## Memory
+
+_Nothing yet._
+
+## Team knowledge
+
+_Nothing yet._
+"
+`;
+
+exports[`system prompt + instruction files > CLAUDE.md / AGENTS.md without memory (F22 stub) and with memory 2`] = `
+"# Agent A
+
+<!-- Rendered by Agent A before each run from the bot's settings and memory. Edits here are overwritten. -->
+
+**Role:** Lead AI Engineer (team lead)
+
+## Instructions
+
+Plan, delegate, review, teach.
+
+## Your computer
+
+- \`/home/bot/work\`: your working directory (persists between runs).
+- \`/home/bot/notes\`: your own notes; write down anything worth remembering.
+- \`/shared\`: files shared with the whole team; \`/shared/knowledge\` holds team knowledge.
+- A desktop (DISPLAY=:99) with Chromium is available through the Playwright MCP tools.
+
+## Memory
+
+### Owner prefers pnpm
+Use pnpm, never npm.
+
+## Team knowledge
+
+### Repo layout
+apps/ and packages/.
+"
+`;
+
+exports[`system prompt + instruction files > system prompt append 1`] = `
+"You are Code Reviewer, Senior reviewer: one of the AI teammates on the owner's Agent A team (handle @code-reviewer).
+You are working in thread thr_grp (group).
+Your computer is a Linux container: work in /home/bot/work, keep notes in /home/bot/notes, team files are in /shared.
+Use the \`agenta\` MCP tools to create tasks, message teammates, record decisions and request approval for risky external actions."
+`;

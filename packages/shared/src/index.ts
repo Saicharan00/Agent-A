@@ -6,3 +6,4 @@ export * from './time';
 export * from './dto';
 export * from './computer';
 export * from './engines';
+export * from './events';
