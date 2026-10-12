@@ -82,3 +82,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   `data/e2e/agenta.db` so e2e runs never touch the owner's data. Unit tests use a fresh temp file per test.
 - **New deps:** `better-sqlite3` + `drizzle-orm` (+ dev `drizzle-kit`, `@types/better-sqlite3`) in packages/db;
   `nanoid` in packages/shared (IDs). `better-sqlite3` added to `onlyBuiltDependencies` for its native build.
+
+## F03 — App shell
+- **New web deps:** `@tanstack/react-query` (stack), `cmdk` (Ctrl+K palette: filtering, keyboard nav, accessible
+  dialog), `sonner` (toasts). Components are hand-written in shadcn style (`components/ui/button.tsx` + cva) rather than
+  pulled with the shadcn CLI, which needs ui.shadcn.com through the sandbox proxy; add more the same way as needed.
+- **Theme without flash:** the theme is saved in localStorage (as specified) *and* mirrored to an `agenta.theme`
+  cookie; the root layout reads the cookie and renders `class="dark"` on `<html>` server-side. An inline `<script>`
+  triggered a React 19 warning, and `next/script beforeInteractive` turned out to run after Next boots (dark flash for
+  light users). Cost: every route is dynamically rendered, irrelevant for a local single-user app.
+- **Shortcuts:** `Ctrl+K` palette, `Ctrl+B` sidebar, `Ctrl+\` Computer panel (`Ctrl+J`/`Ctrl+.` collide with browser or
+  OS bindings), `Ctrl+Enter` reserved for send (F13). `Ctrl` also matches ⌘. Sidebar/panel/tab state persists in localStorage.
+- **Next dev config:** `allowedDevOrigins: ['127.0.0.1','localhost']`: with `AGENTA_WEB_HOST=0.0.0.0`, Next 16 blocks
+  the hot-reload socket for 127.0.0.1 as cross-origin (console errors). `devIndicators: false`: the floating badge
+  covered the sidebar footer. Playwright forces `AGENTA_WEB_HOST=127.0.0.1` so e2e never exposes the server.
+- **Engine pills** (Claude/Codex/Docker) are neutral placeholders; the Runner pill is live (`/api/health` every 15s).
+  Pills hide when the Computer panel is open below 2xl so the search stays usable at 1280px.
+- **`useLiveChannel`** is a skeleton (`lib/live-channel.ts`, capped exponential backoff with jitter, subscribe-on-open)
+  and defaults to `enabled: false`: no server exists until F11, and failed connection attempts would log console errors.

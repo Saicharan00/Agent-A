@@ -16,6 +16,11 @@ export default defineConfig({
     timeout: 120_000,
     // Tests must never reach a real engine.
     // E2E gets its own DB so tests never touch the owner's data/agenta.db.
-    env: { AGENTA_ENGINE_OVERRIDE: 'mock', AGENTA_DB_PATH: 'data/e2e/agenta.db' },
+    // Localhost-only even if .env.local exposes the web server for Windows (shell env wins over .env.local).
+    env: {
+      AGENTA_ENGINE_OVERRIDE: 'mock',
+      AGENTA_DB_PATH: 'data/e2e/agenta.db',
+      AGENTA_WEB_HOST: '127.0.0.1',
+    },
   },
 });

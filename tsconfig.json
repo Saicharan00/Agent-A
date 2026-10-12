@@ -1,4 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
+  // DOM types: Playwright `page.evaluate` callbacks in tests/e2e run in the browser.
+  "compilerOptions": { "lib": ["ES2023", "DOM"] },
   "include": ["playwright.config.ts", "vitest.config.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }
