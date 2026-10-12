@@ -1,0 +1,11 @@
+# Dependencies / build output
+node_modules
+.next
+coverage
+playwright-report
+
+# Runtime data and secrets
+data/
+.env*
+!.env.example
+secrets/
