@@ -365,3 +365,34 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **shiki** (new dep) is loaded on first code block (dynamic import), dual light/dark themes via CSS variables;
   unknown fence languages render as `text`. Plain code shows until highlighting is ready.
 - **Playwright runs with one worker:** specs share the runner's global run cap and the mock engine's limit pause.
+
+## F13 — Direct chat (session 2)
+- **Finished turns render from their stored events, not just the reply message.** `GET /api/runs/events?ids=a,b`
+  (≤ 50 ids) returns each run's timeline compacted (`compactRunEvents`: consecutive `text.delta`s merged, tool output
+  cut at 64 KB); the web batches every visible turn's request made in the same tick into one call
+  (`createRunEventsLoader`) and caches them forever (finished runs don't change). A turn watched live to its
+  `run.finished` keeps its live copy. This also keeps the partial text of stopped runs, which is never stored as a
+  message. The reply message stays the source for copy/prompt history and is the fallback when events are missing.
+- **Timeline model** (`lib/timeline.ts`): text, thinking, tool (call + result by callId), error and system blocks in
+  event order, plus file changes (latest change per path). A `text.final` that matches the streamed deltas (ignoring
+  whitespace) keeps the streamed layout, so text written around tool calls stays interleaved; a differing final
+  replaces the draft; finals with no deltas (Codex) are appended.
+- **Tool labels** (`lib/tools.ts`) cover Claude Code (Bash/Read/Write/Edit/MultiEdit/Glob/Grep/WebFetch/WebSearch/
+  TodoWrite/Task), Codex (`shell`, `apply_patch` with its changed paths, `web_search`), Playwright MCP (`browser_*` →
+  "Opened a page"…), the platform MCP (`mcp__agenta__*` → "Created a task"…, unknown tools humanised) and other MCP
+  servers ("github: Create issue"). Diffs are a small LCS line diff (falls back to removed+added past 400×400 lines);
+  no diff dependency.
+- **Thread prompts go through `buildPrompt`** (F07) instead of the raw text: a plain DM turn is still exactly the
+  typed message, but Explain mode and unseen messages from others are now included. The bot's own replies are left out
+  (they're in its engine session); a bot with no recorded turn gets only the new message, not the whole history.
+- **Retry** = `POST /api/threads/:id/retry {runId}`: only the bot's latest, finished turn; the new run reuses the
+  stored prompt and sets `retry_of_run_id` to the original turn so it renders under the same user message. Side
+  effect: a manual retry that hits a usage limit is not auto-retried again (same rule as limit retries).
+- **Edit and resend posts a new message** (the engine session already contains the old turn, so it can't be rewritten).
+  `splitUserMessage` recovers text and attachments from the stored message so the files don't need re-uploading.
+- **Unread counts are server-side:** migration 0002 adds `threads.last_read_at` (not in PLAN's column list).
+  `POST /api/threads/:id/read` (never moves backwards), `GET /api/threads/unread` counts bot/system messages after it.
+  New messages publish a content-free `thread.activity` on `global`; the sidebar refetches counts. The open chat marks
+  itself read on open, on each new message and when the tab becomes visible.
+- **File chips → Files tab:** shell context gained `openFile(botId, path)` / `computerFilePath`; F15's Files tab opens
+  that path (the placeholder shows it for now). Deleted files' chips are disabled.

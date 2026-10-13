@@ -5,18 +5,26 @@ import {
   type LiveEvent,
   type MessagePage,
   type MessageView,
+  MAX_EVENT_BATCH_RUNS,
+  type RetryTurnRequest,
+  type RunEventItem,
+  type RunEventsBatchResponse,
   type RunView,
   type SendMessageRequest,
+  type ThreadUpdateRequest,
   inboxUploadResponseSchema,
   messagePageSchema,
+  runEventsBatchResponseSchema,
   runViewSchema,
   sendMessageResponseSchema,
   threadViewSchema,
+  unreadCountsSchema,
 } from '@agenta/shared';
 import type { InfiniteData } from '@tanstack/react-query';
 import { z } from 'zod';
 import { apiRequest } from './api';
 import { activeLimit, clockTime } from './engines';
+import { appendEventItem } from './timeline';
 
 /** Runs fetched per thread to annotate the transcript (newest first). */
 export const THREAD_RUNS_LIMIT = 100;
@@ -34,6 +42,13 @@ export const threadsApi = {
     apiRequest(`/threads/${enc(id)}/messages`, sendMessageResponseSchema, { method: 'POST', body }),
   runs: (threadId: string) =>
     apiRequest('/runs', z.array(runViewSchema), { query: { threadId, limit: THREAD_RUNS_LIMIT } }),
+  update: (id: string, body: ThreadUpdateRequest) =>
+    apiRequest(`/threads/${enc(id)}`, threadViewSchema, { method: 'PATCH', body }),
+  retry: (id: string, body: RetryTurnRequest) =>
+    apiRequest(`/threads/${enc(id)}/retry`, runViewSchema, { method: 'POST', body }),
+  markRead: (id: string) =>
+    apiRequest(`/threads/${enc(id)}/read`, z.object({ lastReadAt: z.string() }), { method: 'POST' }),
+  unread: () => apiRequest('/threads/unread', unreadCountsSchema),
   cancelRun: (runId: string) => apiRequest(`/runs/${enc(runId)}/cancel`, runViewSchema, { method: 'POST' }),
   upload: (botId: string, file: File, signal?: AbortSignal) =>
     apiRequest(`/bots/${enc(botId)}/inbox`, inboxUploadResponseSchema, {
@@ -143,40 +158,60 @@ export function buildTranscript(messages: MessageView[], runs: RunView[]): Trans
   return items;
 }
 
-// ---------- live stream of one run ----------
+// ---------- run timelines ----------
 
-export type RunStream = {
-  lastSeq: number;
-  /** Complete assistant messages so far (text.final). */
-  finals: string[];
-  /** Text streamed since the last text.final. */
-  current: string;
-  errors: string[];
-};
+/** The live events of one run so far (consecutive deltas merged), and the last seq seen. */
+export type RunStream = { lastSeq: number; items: RunEventItem[] };
 
-export const EMPTY_STREAM: RunStream = { lastSeq: 0, finals: [], current: '', errors: [] };
+export const EMPTY_STREAM: RunStream = { lastSeq: 0, items: [] };
 
 /** Folds a `run.event` for this run into the stream; other events and repeats (seq ≤ lastSeq) are ignored. */
 export function applyStreamEvent(state: RunStream, runId: string, live: LiveEvent): RunStream {
   if (live.type !== 'run.event' || live.runId !== runId || live.seq <= state.lastSeq) return state;
-  const next = { ...state, lastSeq: live.seq };
-  const e = live.event;
-  switch (e.type) {
-    case 'text.delta':
-      return { ...next, current: next.current + e.text };
-    case 'text.final':
-      return { ...next, finals: e.text.trim() ? [...next.finals, e.text.trim()] : next.finals, current: '' };
-    case 'error':
-      return { ...next, errors: [...next.errors, e.message] };
-    default:
-      return next;
-  }
+  return { lastSeq: live.seq, items: appendEventItem(state.items, { seq: live.seq, event: live.event }) };
 }
 
-/** What the run has said so far, matching how the runner stores the reply (finals joined by a blank line). */
-export function streamText(s: RunStream): string {
-  return [...s.finals, s.current.trim() ? s.current : ''].filter(Boolean).join('\n\n');
+/**
+ * Loads finished runs' timelines in batches: every `load(id)` made in the same tick shares one
+ * GET /api/runs/events request (up to MAX_EVENT_BATCH_RUNS ids each). Unknown runs resolve to [].
+ */
+export function createRunEventsLoader(
+  fetchBatch: (ids: string[]) => Promise<RunEventsBatchResponse> = (ids) =>
+    apiRequest('/runs/events', runEventsBatchResponseSchema, { query: { ids: ids.join(',') } }),
+) {
+  let waiting = new Map<string, { resolve: (v: RunEventItem[]) => void; reject: (e: unknown) => void }[]>();
+  let scheduled = false;
+
+  async function flush() {
+    scheduled = false;
+    const batch = waiting;
+    waiting = new Map();
+    const ids = [...batch.keys()];
+    for (let i = 0; i < ids.length; i += MAX_EVENT_BATCH_RUNS) {
+      const chunk = ids.slice(i, i + MAX_EVENT_BATCH_RUNS);
+      try {
+        const res = await fetchBatch(chunk);
+        for (const id of chunk) for (const w of batch.get(id)!) w.resolve(res.runs[id]?.events ?? []);
+      } catch (err) {
+        for (const id of chunk) for (const w of batch.get(id)!) w.reject(err);
+      }
+    }
+  }
+
+  return {
+    load(id: string): Promise<RunEventItem[]> {
+      return new Promise((resolve, reject) => {
+        waiting.set(id, [...(waiting.get(id) ?? []), { resolve, reject }]);
+        if (!scheduled) {
+          scheduled = true;
+          queueMicrotask(() => void flush());
+        }
+      });
+    },
+  };
 }
+
+export const runEventsLoader = createRunEventsLoader();
 
 // ---------- inline run state ----------
 
@@ -230,4 +265,18 @@ export function runState(
 /** Runs that can still be stopped (the composer's Stop button cancels all of them). */
 export function stoppableRuns(runs: RunView[]): RunView[] {
   return runs.filter(isActiveRun);
+}
+
+/** The bot's latest run in the thread when it can be retried (finished), else null. */
+export function retryableRun(runs: RunView[], botId: string): RunView | null {
+  const latest = runs
+    .filter((r) => r.botId === botId)
+    .reduce<RunView | null>((a, r) => (!a || r.createdAt > a.createdAt ? r : a), null);
+  return latest && !isActiveRun(latest) ? latest : null;
+}
+
+/** The newest user message among the loaded ones (the one Edit applies to). */
+export function lastUserMessage(messages: MessageView[]): MessageView | null {
+  for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.authorType === 'user') return messages[i]!;
+  return null;
 }

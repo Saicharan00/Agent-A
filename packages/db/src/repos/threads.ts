@@ -7,9 +7,9 @@ import {
   threadCreateSchema,
   threadUpdateSchema,
 } from '@agenta/shared';
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Db } from '../client';
-import { type Bot, type Thread, bots, threadMembers, threads } from '../schema';
+import { type Bot, type Thread, bots, messages, threadMembers, threads } from '../schema';
 import { definedOnly } from './util';
 
 export function makeThreadsRepo(db: Db) {
@@ -84,6 +84,37 @@ export function makeThreadsRepo(db: Db) {
     /** Bumps updated_at (e.g. when a message is posted) so lists sort by activity. */
     touch(id: string, at: string = nowIso()): void {
       db.update(threads).set({ updatedAt: at }).where(eq(threads.id, id)).run();
+    },
+
+    /** Records that the owner has seen the thread up to `at` (never moves backwards). */
+    markRead(id: string, at: string = nowIso()): Thread | undefined {
+      return db
+        .update(threads)
+        .set({ lastReadAt: at })
+        .where(and(eq(threads.id, id), or(isNull(threads.lastReadAt), sql`${threads.lastReadAt} < ${at}`)))
+        .returning()
+        .get();
+    },
+
+    /**
+     * Messages the owner hasn't seen, per non-archived thread: everything not written by the owner after the
+     * thread's last read. Threads without unread messages are left out.
+     */
+    unreadCounts(): Record<string, number> {
+      const rows = db
+        .select({ threadId: messages.threadId, n: sql<number>`count(*)` })
+        .from(messages)
+        .innerJoin(threads, eq(threads.id, messages.threadId))
+        .where(
+          and(
+            isNull(threads.archivedAt),
+            ne(messages.authorType, 'user'),
+            or(isNull(threads.lastReadAt), gt(messages.createdAt, threads.lastReadAt)),
+          ),
+        )
+        .groupBy(messages.threadId)
+        .all();
+      return Object.fromEntries(rows.map((r) => [r.threadId, Number(r.n)]));
     },
 
     archive(id: string): Thread | undefined {

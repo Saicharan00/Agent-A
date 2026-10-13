@@ -22,6 +22,10 @@ type ShellState = {
   computerBotId: string | null;
   /** Focuses a bot's computer and opens the panel. */
   openComputer: (botId: string) => void;
+  /** A file the Files tab should show (set by file chips in chat; F15 opens it). */
+  computerFilePath: string | null;
+  /** Opens the bot's computer on the Files tab at `path`. */
+  openFile: (botId: string, path: string) => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
 };
@@ -55,6 +59,7 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
   const [computerTab, setComputerTabState] = useState<ComputerTab>('terminal');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [computerBotId, setComputerBotId] = useState<string | null>(null);
+  const [computerFilePath, setComputerFilePath] = useState<string | null>(null);
 
   useEffect(() => {
     // localStorage wins if the cookie was lost (e.g. cleared): re-apply and re-sync the cookie.
@@ -101,6 +106,15 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
     [setComputerOpen],
   );
 
+  const openFile = useCallback(
+    (botId: string, path: string) => {
+      setComputerFilePath(path);
+      setComputerTab('files');
+      openComputer(botId);
+    },
+    [openComputer, setComputerTab],
+  );
+
   // Global shortcuts.
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
@@ -135,6 +149,8 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
       setComputerTab,
       computerBotId,
       openComputer,
+      computerFilePath,
+      openFile,
       paletteOpen,
       setPaletteOpen,
     }),
@@ -150,6 +166,8 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
       setComputerTab,
       computerBotId,
       openComputer,
+      computerFilePath,
+      openFile,
       paletteOpen,
     ],
   );

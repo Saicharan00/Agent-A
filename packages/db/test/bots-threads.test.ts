@@ -141,3 +141,32 @@ describe('threadsRepo', () => {
     expect(t.repos.threads.listMembers(thr.id)).toEqual([]);
   });
 });
+
+describe('thread read markers', () => {
+  const ctx = useTestDb();
+
+  it('counts messages from bots and the system after the last read, per thread', () => {
+    const { repos } = ctx;
+    {
+      const bot = repos.bots.create({ name: 'R', slug: 'r', engine: 'mock' });
+      const t = repos.threads.create({ kind: 'dm', title: 'R', memberBotIds: [bot.id] });
+      const other = repos.threads.create({ kind: 'dm', title: 'O' });
+      repos.messages.create({ threadId: t.id, authorType: 'user', contentMd: 'hi' });
+      repos.messages.create({ threadId: t.id, authorType: 'bot', authorBotId: bot.id, contentMd: 'a' });
+      repos.messages.create({ threadId: t.id, authorType: 'system', contentMd: 'note' });
+      expect(repos.threads.unreadCounts()).toEqual({ [t.id]: 2 });
+      expect(other.lastReadAt).toBeNull();
+
+      const later = new Date(Date.now() + 1000).toISOString();
+      expect(repos.threads.markRead(t.id, later)?.lastReadAt).toBe(later);
+      expect(repos.threads.unreadCounts()).toEqual({});
+      // Never moves backwards.
+      expect(repos.threads.markRead(t.id, '2000-01-01T00:00:00.000Z')).toBeUndefined();
+      expect(repos.threads.get(t.id)?.lastReadAt).toBe(later);
+
+      repos.threads.archive(t.id);
+      repos.messages.create({ threadId: t.id, authorType: 'bot', authorBotId: bot.id, contentMd: 'b' });
+      expect(repos.threads.unreadCounts()).toEqual({});
+    }
+  });
+});

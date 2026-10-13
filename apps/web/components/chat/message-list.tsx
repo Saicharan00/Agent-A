@@ -1,6 +1,6 @@
 'use client';
 
-import type { BotView, EngineQueueStateResponse } from '@agenta/shared';
+import type { BotView, EngineQueueStateResponse, MessageView } from '@agenta/shared';
 import { Loader2 } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,11 @@ export function MessageList({
   onLoadOlder,
   onStop,
   stopping,
+  editableMessageId,
+  onEdit,
+  retryableRunIds,
+  onRetry,
+  retrying,
   empty,
 }: {
   items: TranscriptItem[];
@@ -33,6 +38,13 @@ export function MessageList({
   onLoadOlder: () => void;
   onStop: (runId: string) => void;
   stopping: boolean;
+  /** The latest user message (Edit and resend). */
+  editableMessageId: string | null;
+  onEdit: (message: MessageView) => void;
+  /** Each bot's latest finished turn (Retry). */
+  retryableRunIds: ReadonlySet<string>;
+  onRetry: (runId: string) => void;
+  retrying: boolean;
   empty: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -118,7 +130,10 @@ export function MessageList({
           <div key={keyOf(item)} className="[contain-intrinsic-size:auto_96px] [content-visibility:auto]">
             {item.kind === 'message' ? (
               item.message.authorType === 'user' ? (
-                <UserMessage message={item.message} />
+                <UserMessage
+                  message={item.message}
+                  onEdit={item.message.id === editableMessageId ? onEdit : undefined}
+                />
               ) : (
                 <PlainMessage
                   message={item.message}
@@ -134,6 +149,8 @@ export function MessageList({
                 retried={retriedRuns.has(item.run.id)}
                 onStop={onStop}
                 stopping={stopping}
+                onRetry={retryableRunIds.has(item.run.id) ? onRetry : undefined}
+                retrying={retrying}
               />
             )}
           </div>

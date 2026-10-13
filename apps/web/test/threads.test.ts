@@ -1,5 +1,6 @@
 import type { EngineQueueStateResponse, LiveEvent, MessageView, RunView } from '@agenta/shared';
 import { describe, expect, it } from 'vitest';
+import { buildTimeline, timelineText } from '@/lib/timeline';
 import {
   EMPTY_STREAM,
   type MessagesData,
@@ -7,7 +8,9 @@ import {
   buildTranscript,
   flattenPages,
   runState,
-  streamText,
+  createRunEventsLoader,
+  lastUserMessage,
+  retryableRun,
   upsertMessage,
 } from '@/lib/threads';
 
@@ -121,17 +124,68 @@ describe('run stream', () => {
       ev(2, { type: 'text.delta', text: 'Hello ' }),
       ev(3, { type: 'text.delta', text: 'there' }),
     ];
+    const text = () => timelineText(buildTimeline(s.items));
     for (const e of events) s = applyStreamEvent(s, 'r1', e);
-    expect(streamText(s)).toBe('Hello there');
+    expect(text()).toBe('Hello there');
+    expect(s.items).toHaveLength(2); // deltas merged
     s = applyStreamEvent(s, 'r1', ev(3, { type: 'text.delta', text: 'there' })); // replayed duplicate
     s = applyStreamEvent(s, 'r1', ev(9, { type: 'text.delta', text: 'X' }, 'r2'));
-    expect(streamText(s)).toBe('Hello there');
+    expect(text()).toBe('Hello there');
     s = applyStreamEvent(s, 'r1', ev(4, { type: 'text.final', text: 'Hello there' }));
     s = applyStreamEvent(s, 'r1', ev(5, { type: 'text.delta', text: 'More' }));
-    expect(streamText(s)).toBe('Hello there\n\nMore');
+    expect(text()).toBe('Hello there\n\nMore');
     s = applyStreamEvent(s, 'r1', ev(6, { type: 'error', message: 'boom' }));
-    expect(s.errors).toEqual(['boom']);
+    expect(buildTimeline(s.items).blocks.at(-1)).toEqual({ kind: 'error', message: 'boom' });
     expect(s.lastSeq).toBe(6);
+  });
+});
+
+describe('run events loader', () => {
+  it('batches loads made in the same tick and resolves unknown runs to []', async () => {
+    const calls: string[][] = [];
+    const loader = createRunEventsLoader(async (ids) => {
+      calls.push(ids);
+      return {
+        runs: {
+          r1: { status: 'succeeded', events: [{ seq: 1, event: { type: 'text.final', text: 'hi' } }] },
+        },
+      };
+    });
+    const [a, b, a2] = await Promise.all([loader.load('r1'), loader.load('r2'), loader.load('r1')]);
+    expect(calls).toEqual([['r1', 'r2']]);
+    expect(a).toHaveLength(1);
+    expect(a2).toBe(a);
+    expect(b).toEqual([]);
+  });
+
+  it('splits big batches and rejects every waiter of a failed request', async () => {
+    const sizes: number[] = [];
+    const loader = createRunEventsLoader(async (ids) => {
+      sizes.push(ids.length);
+      throw new Error('down');
+    });
+    const loads = Array.from({ length: 60 }, (_, i) => loader.load(`r${i}`));
+    const results = await Promise.allSettled(loads);
+    expect(sizes).toEqual([50, 10]);
+    expect(results.every((r) => r.status === 'rejected')).toBe(true);
+  });
+});
+
+describe('last turn helpers', () => {
+  it('finds the retryable turn per bot and the last user message', () => {
+    const older = run('r1', { status: 'failed', botId: 'b1' });
+    const newer = run('r2', { status: 'succeeded', botId: 'b1' });
+    expect(retryableRun([older, newer], 'b1')?.id).toBe('r2');
+    expect(retryableRun([older, run('r3', { status: 'running', botId: 'b1' })], 'b1')).toBeNull();
+    expect(retryableRun([older], 'b2')).toBeNull();
+    const msgs = [
+      msg('u1'),
+      msg('b', { authorType: 'bot', authorBotId: 'b1' }),
+      msg('u2'),
+      msg('c', { authorType: 'bot', authorBotId: 'b1' }),
+    ];
+    expect(lastUserMessage(msgs)?.id).toBe('u2');
+    expect(lastUserMessage([])).toBeNull();
   });
 });
 

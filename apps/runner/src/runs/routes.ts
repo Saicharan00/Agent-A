@@ -2,8 +2,12 @@ import type { Run, RunEvent } from '@agenta/db';
 import {
   ENGINES,
   type EngineQueueStateResponse,
+  type RunEventsBatchResponse,
   apiError,
+  compactRunEvents,
+  engineEventSchema,
   nowIso,
+  runEventsBatchQuerySchema,
   runEventsQuerySchema,
   runListQuerySchema,
 } from '@agenta/shared';
@@ -33,6 +37,26 @@ export function registerRunRoutes(app: FastifyInstance, runs: RunService): void 
     const q = parse(runListQuerySchema, req.query, reply);
     if (!q) return;
     return repos().runs.list(q);
+  });
+
+  // Chat transcripts: several finished runs' timelines in one request, compacted for display. Unknown ids are omitted.
+  app.get('/api/runs/events', async (req, reply): Promise<RunEventsBatchResponse | undefined> => {
+    const q = parse(runEventsBatchQuerySchema, req.query, reply);
+    if (!q) return;
+    const out: RunEventsBatchResponse['runs'] = {};
+    for (const id of q.ids) {
+      const run = repos().runs.get(id);
+      if (!run) continue;
+      const items = repos()
+        .runs.listEvents(id, 0, 10_000)
+        .flatMap((row) => {
+          // Rows written by older code may not match today's schema; skip them rather than fail the transcript.
+          const parsed = engineEventSchema.safeParse(row.payload);
+          return parsed.success ? [{ seq: row.seq, event: parsed.data }] : [];
+        });
+      out[id] = { status: run.status, events: compactRunEvents(items) };
+    }
+    return { runs: out };
   });
 
   app.get<IdParams>('/api/runs/:id', async (req, reply) => {

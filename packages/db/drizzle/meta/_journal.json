@@ -15,6 +15,13 @@
       "when": 1791863662496,
       "tag": "0001_clever_leopardon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791905876923,
+      "tag": "0002_normal_whirlwind",
+      "breakpoints": true
     }
   ]
 }

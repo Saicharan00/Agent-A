@@ -1,8 +1,15 @@
 'use client';
 
-import type { LiveEvent, RunView, SendMessageRequest } from '@agenta/shared';
+import type {
+  LiveEvent,
+  RunView,
+  SendMessageRequest,
+  ThreadUpdateRequest,
+  ThreadView,
+  UnreadCounts,
+} from '@agenta/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import { useLiveChannel } from '@/hooks/use-live-channel';
 import { ApiClientError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -11,9 +18,12 @@ import {
   type MessagesData,
   type RunStream,
   applyStreamEvent,
+  isActiveRun,
+  runEventsLoader,
   threadsApi,
   upsertMessage,
 } from '@/lib/threads';
+import { type Timeline, buildTimeline } from '@/lib/timeline';
 import { toast } from '@/lib/toast';
 
 const notFound = (err: unknown) => err instanceof ApiClientError && err.status === 404;
@@ -47,10 +57,7 @@ export function useEngineState() {
   return useQuery({ queryKey: queryKeys.engineState, queryFn: () => api.engineState() });
 }
 
-/**
- * Live text of one bot turn. While the run is queued or running it follows `run:<id>`, which replays everything
- * from the start first, so a reload mid-run shows the full reply so far.
- */
+/** The live events of a queued/running turn over `run:<id>`, replayed from the start (a reload shows it all). */
 export function useRunStream(runId: string, active: boolean): RunStream {
   const [stream, dispatch] = useReducer(
     (s: RunStream, e: LiveEvent) => applyStreamEvent(s, runId, e),
@@ -58,6 +65,25 @@ export function useRunStream(runId: string, active: boolean): RunStream {
   );
   useLiveChannel(`run:${runId}`, { enabled: active, onEvent: dispatch });
   return stream;
+}
+
+/**
+ * A bot turn's timeline: live while it runs, then the stored events (batched with the other visible turns). A turn
+ * watched to its end keeps its live copy, so nothing is refetched when it finishes.
+ */
+export function useRunTimeline(run: RunView): { timeline: Timeline | null; loading: boolean } {
+  const active = isActiveRun(run);
+  const live = useRunStream(run.id, active);
+  const liveDone = live.items.some((i) => i.event.type === 'run.finished');
+  const stored = useQuery({
+    queryKey: queryKeys.runEvents(run.id),
+    queryFn: () => runEventsLoader.load(run.id),
+    enabled: !active && !liveDone,
+    staleTime: Infinity,
+  });
+  const items = active || liveDone ? live.items : stored.data;
+  const timeline = useMemo(() => (items ? buildTimeline(items) : null), [items]);
+  return { timeline, loading: !items && stored.isPending };
 }
 
 export function useSendMessage(threadId: string) {
@@ -95,4 +121,62 @@ export function useCancelRuns() {
   });
   const stop = useCallback((runIds: string[]) => cancel.mutate(runIds), [cancel]);
   return { stop, pending: cancel.isPending };
+}
+
+/** Rename / Explain mode. */
+export function useUpdateThread(threadId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ThreadUpdateRequest) => threadsApi.update(threadId, body),
+    onSuccess: (thread) => qc.setQueryData<ThreadView>(queryKeys.thread(threadId), thread),
+    onError: (err) =>
+      void toast.error(err instanceof Error ? err.message : 'Could not update the conversation'),
+  });
+}
+
+/** Runs the latest finished turn again. */
+export function useRetryTurn(threadId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => threadsApi.retry(threadId, { runId }),
+    onSuccess: (run) => {
+      qc.setQueryData<RunView[]>(queryKeys.threadRuns(threadId), (list) =>
+        list && !list.some((r) => r.id === run.id) ? [run, ...list] : list,
+      );
+      void qc.invalidateQueries({ queryKey: queryKeys.runs });
+    },
+    onError: (err) => void toast.error(err instanceof Error ? err.message : 'Could not retry'),
+  });
+}
+
+/** Unseen messages per thread (sidebar badges); refreshed on every `thread.activity`. */
+export function useUnreadCounts() {
+  return useQuery({ queryKey: queryKeys.unread, queryFn: () => threadsApi.unread() });
+}
+
+/**
+ * Marks the thread read while it is open and visible: on open, whenever a new message arrives, and when the tab
+ * becomes visible again.
+ */
+export function useMarkRead(threadId: string, latestMessageId: string | undefined, enabled: boolean) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    const mark = () => {
+      if (document.visibilityState !== 'visible') return;
+      qc.setQueryData<UnreadCounts>(queryKeys.unread, (u) => {
+        if (!u?.counts[threadId]) return u;
+        const { [threadId]: _seen, ...counts } = u.counts;
+        return { counts };
+      });
+      // Refetch afterwards: a count fetched while the read was in flight may still include this thread.
+      threadsApi
+        .markRead(threadId)
+        .then(() => qc.invalidateQueries({ queryKey: queryKeys.unread }))
+        .catch(() => undefined); // best effort; the badge just stays
+    };
+    mark();
+    document.addEventListener('visibilitychange', mark);
+    return () => document.removeEventListener('visibilitychange', mark);
+  }, [qc, threadId, latestMessageId, enabled]);
 }

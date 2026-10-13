@@ -1,10 +1,14 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
-import type { Bot, Message, Repos, Run } from '@agenta/db';
+import type { Bot, Message, Repos, Run, Thread } from '@agenta/db';
 import {
   INBOX_DIR,
   type InboxUploadResponse,
   type LiveMessage,
+  type LiveThreadActivity,
+  type RetryTurnRequest,
+  type ThreadUpdateRequest,
+  type UnreadCounts,
   type MessagePage,
   type MessagePageQuery,
   type MessageView,
@@ -17,11 +21,14 @@ import {
   messagePageQuerySchema,
   runViewSchema,
   sanitizeInboxName,
+  nowIso,
   sendMessageRequestSchema,
+  threadUpdateRequestSchema,
 } from '@agenta/shared';
 import type { BotService } from '../bots/service';
 import type { EventBus } from '../bus';
 import { botHomeDir } from '../containers/home';
+import { buildPrompt, toPromptMessages } from '../engines/prompt';
 import type { RunService } from '../runs/service';
 
 type Log = { info(obj: object, msg?: string): void; debug(obj: object, msg?: string): void };
@@ -42,7 +49,7 @@ export type ThreadServiceOptions = {
   log: Log;
   botsDir: string;
   bots: Pick<BotService, 'view'>;
-  runs: Pick<RunService, 'enqueue'>;
+  runs: { enqueue(input: Parameters<RunService['enqueue']>[0]): Run };
 };
 
 export function toMessageView(m: Message): MessageView {
@@ -134,9 +141,11 @@ export class ThreadService {
       authorType: 'user',
       contentMd: composeUserMessage(req.content, req.attachments),
     });
-    const prompt = composeUserPrompt(req.content, req.attachments);
+    // What the bot reads for this message: the text plus the attachments' full paths in its computer.
+    const forBot = { ...message, contentMd: composeUserPrompt(req.content, req.attachments) };
     const runs: Run[] = [];
     for (const bot of recipients) {
+      const prompt = this.promptFor(bot, thread, forBot);
       const run = this.opts.runs.enqueue({ botId: bot.id, threadId: id, trigger: 'user', prompt });
       runs.push(run);
       // The bot has now seen everything up to this message. Keep the stored engine: a session id from the
@@ -153,6 +162,72 @@ export class ThreadService {
     this.publish(stored);
     log.info({ threadId: id, messageId: message.id, runs: runs.map((r) => r.id) }, 'message posted');
     return { message: toMessageView(stored), runs: runs.map(toRunView) };
+  }
+
+  /**
+   * The turn prompt (engines/prompt.ts): a plain DM message as typed, or, with Explain mode on or unseen messages
+   * from others, the messages since the bot's last turn plus the mode's instructions. The bot's own replies are
+   * already in its engine session, so they are left out; a bot with no recorded turn only gets the new message.
+   */
+  private promptFor(bot: Bot, thread: Thread, latest: Message): string {
+    const { repos } = this.opts;
+    const seen = repos.sessions.get(bot.id, thread.id)?.lastSeenMessageId ?? null;
+    const unseen = seen
+      ? repos.messages
+          .listSince(thread.id, seen)
+          .filter((m) => m.id !== latest.id && m.authorBotId !== bot.id)
+      : [];
+    const members = new Map(repos.threads.listMembers(thread.id).map((b) => [b.id, b]));
+    return buildPrompt({ bot, thread, newMessages: toPromptMessages([...unseen, latest], members) });
+  }
+
+  /** Rename, or toggle Explain mode (read by the prompt builder on the bots' next turns). */
+  update(id: string, body: ThreadUpdateRequest): ThreadView {
+    this.thread(id);
+    this.opts.repos.threads.update(id, threadUpdateRequestSchema.parse(body));
+    return this.get(id);
+  }
+
+  /**
+   * Runs a finished turn again with the same prompt. Only the bot's latest turn in the thread can be retried; the
+   * new run links to the original turn (`retry_of_run_id`) so the chat shows it under the same user message.
+   */
+  retry(id: string, body: RetryTurnRequest): RunView {
+    const { repos } = this.opts;
+    const thread = this.thread(id);
+    if (thread.archivedAt) throw new ThreadError('thread_archived', 'This conversation is archived', 409);
+    const run = repos.runs.get(body.runId);
+    if (!run || run.threadId !== id) {
+      throw new ThreadError('run_not_found', `Run ${body.runId} is not in this thread`, 404);
+    }
+    if (run.status === 'queued' || run.status === 'running') {
+      throw new ThreadError('run_active', 'This turn is still in progress', 409);
+    }
+    const latest = repos.runs.list({ threadId: id, botId: run.botId, limit: 1 })[0];
+    if (latest?.id !== run.id) {
+      throw new ThreadError('not_last_turn', 'Only the latest turn can be retried', 409);
+    }
+    const retry = this.opts.runs.enqueue({
+      botId: run.botId,
+      threadId: id,
+      trigger: run.trigger,
+      prompt: run.prompt,
+      retryOfRunId: run.retryOfRunId ?? run.id,
+    });
+    this.opts.log.info({ threadId: id, runId: retry.id, of: run.id }, 'turn retried');
+    return toRunView(retry);
+  }
+
+  /** The owner has seen the thread up to now. */
+  markRead(id: string): { lastReadAt: string } {
+    const thread = this.thread(id);
+    const at = nowIso();
+    const updated = this.opts.repos.threads.markRead(id, at);
+    return { lastReadAt: updated?.lastReadAt ?? thread.lastReadAt ?? at };
+  }
+
+  unread(): UnreadCounts {
+    return { counts: this.opts.repos.threads.unreadCounts() };
   }
 
   /** Saves an attachment into the bot's inbox under a safe, unused name. */
@@ -193,5 +268,12 @@ export class ThreadService {
       createdAt: msg.createdAt,
     };
     this.opts.bus.publish(`thread:${msg.threadId}`, live);
+    const activity: LiveThreadActivity = {
+      type: 'thread.activity',
+      threadId: msg.threadId,
+      messageId: msg.id,
+      authorType: msg.authorType,
+    };
+    this.opts.bus.publish('global', activity);
   }
 }

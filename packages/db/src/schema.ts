@@ -74,6 +74,8 @@ export const threads = sqliteTable(
     updatedAt: updatedAt(),
     explainMode: bool('explain_mode').notNull().default(false),
     archivedAt: text('archived_at'),
+    /** When the owner last viewed the thread (F13 unread counts). Not in PLAN's column list. */
+    lastReadAt: text('last_read_at'),
   },
   (t) => [index('threads_updated_idx').on(t.updatedAt)],
 );

@@ -119,6 +119,9 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
       void cache.invalidateQueries({ queryKey: key });
       return;
     }
+    case 'thread.activity':
+      void cache.invalidateQueries({ queryKey: queryKeys.unread });
+      return;
     case 'run.event':
       return;
   }

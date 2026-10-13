@@ -9,6 +9,7 @@ import { BotAvatar } from '@/components/bot-avatar';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { Button } from '@/components/ui/button';
 import { useBots } from '@/hooks/use-bots';
+import { useUnreadCounts } from '@/hooks/use-thread';
 import { isActivePath, NAV_ITEMS } from '@/lib/nav';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
@@ -79,12 +80,16 @@ function BotLink({
   subtitle,
   collapsed,
   active,
+  unread = 0,
 }: {
   bot: BotView;
   subtitle?: string;
   collapsed: boolean;
   active: boolean;
+  /** Unseen messages in its DM (hidden while that chat is open). */
+  unread?: number;
 }) {
+  const badge = active ? 0 : unread;
   return (
     <Link
       href={botHref(bot)}
@@ -97,25 +102,41 @@ function BotLink({
         collapsed && 'justify-center px-0',
       )}
     >
-      <BotAvatar
-        name={bot.name}
-        color={bot.avatarColor}
-        shape={bot.avatarShape}
-        status={bot.status}
-        size="sm"
-      />
+      <span className="relative">
+        <BotAvatar
+          name={bot.name}
+          color={bot.avatarColor}
+          shape={bot.avatarShape}
+          status={bot.status}
+          size="sm"
+        />
+        {collapsed && badge > 0 && (
+          <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary" />
+        )}
+      </span>
       {!collapsed && (
-        <span className="min-w-0">
+        <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{bot.name}</span>
           {subtitle && <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>}
         </span>
       )}
+      {!collapsed && badge > 0 && (
+        <span
+          className="ml-auto rounded-full bg-primary px-1.5 text-[10px] leading-4 font-semibold text-primary-foreground"
+          data-testid="unread-badge"
+        >
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+      {badge > 0 && <span className="sr-only">{`${badge} unread`}</span>}
     </Link>
   );
 }
 
 function SidebarBots({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
   const { data: bots, isPending } = useBots();
+  const { data: unread } = useUnreadCounts();
+  const unreadOf = (bot: BotView) => (bot.dmThreadId ? (unread?.counts[bot.dmThreadId] ?? 0) : 0);
   const lead = bots?.find((b) => b.isLead);
   const others = (bots ?? []).filter((b) => !b.isLead && b.sidebarVisible);
   const isActive = (bot: BotView) =>
@@ -126,7 +147,13 @@ function SidebarBots({ collapsed, pathname }: { collapsed: boolean; pathname: st
       {/* Agent A is always pinned at the top (seeded with the team in F21; a placeholder until then). */}
       <Section title="Lead" collapsed={collapsed}>
         {lead ? (
-          <BotLink bot={lead} subtitle={lead.role} collapsed={collapsed} active={isActive(lead)} />
+          <BotLink
+            bot={lead}
+            subtitle={lead.role}
+            collapsed={collapsed}
+            active={isActive(lead)}
+            unread={unreadOf(lead)}
+          />
         ) : (
           <Link
             href="/bots"
@@ -163,7 +190,7 @@ function SidebarBots({ collapsed, pathname }: { collapsed: boolean; pathname: st
         <ul aria-label="Bots" className="space-y-0.5">
           {others.map((bot) => (
             <li key={bot.id}>
-              <BotLink bot={bot} collapsed={collapsed} active={isActive(bot)} />
+              <BotLink bot={bot} collapsed={collapsed} active={isActive(bot)} unread={unreadOf(bot)} />
             </li>
           ))}
         </ul>

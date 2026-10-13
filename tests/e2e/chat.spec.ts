@@ -101,6 +101,10 @@ test.describe('direct chat', () => {
     await expect(again).toHaveAttribute('data-run-status', 'cancelled', { timeout: 15_000 });
     await expect(again.getByTestId('run-state')).toHaveText('Stopped');
     await expect(page.getByTestId('composer-stop')).toHaveCount(0);
+    // The partial reply of a stopped turn is never stored as a message, but its timeline is: it survives a reload.
+    await page.reload();
+    await expect(lastTurn(page)).toContainText('Working slowly...');
+    await expect(lastTurn(page).getByTestId('run-state')).toHaveText('Stopped');
     const runs = (await (await request.get(`/api/runs?threadId=${bot.dmThreadId}`)).json()) as {
       status: string;
     }[];
@@ -173,5 +177,123 @@ test.describe('direct chat', () => {
     await block.getByRole('button', { name: 'Copy code' }).click();
     await expect(block.getByRole('button', { name: 'Copy code' })).toContainText('Copied');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('const answer = 42;');
+  });
+
+  test('[mock:tools] renders tool cards, a diff, file chips and a footer; all survive a reload', async ({
+    page,
+    request,
+  }) => {
+    const bot = await createBot(request);
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    await send(page, '[mock:tools] tidy up');
+    const turn = lastTurn(page);
+    await expect(turn).toHaveAttribute('data-run-status', 'succeeded');
+
+    for (const pass of ['live', 'stored']) {
+      const cards = turn.getByTestId('tool-card');
+      await expect(cards, pass).toHaveCount(2);
+      await expect(cards.nth(0)).toContainText('Ran a command');
+      await expect(cards.nth(0)).toContainText('ls -la /home/bot/work');
+      await expect(cards.nth(1)).toContainText('Wrote a file');
+      await expect(turn.getByTestId('thinking')).toContainText('Thinking');
+      // Text before and after the tools, in order.
+      const texts = turn.getByTestId('turn-text');
+      await expect(texts.first()).toContainText('Let me check the workspace first.');
+      await expect(texts.last()).toContainText('created hello.txt');
+      await expect(turn.getByTestId('run-footer')).toContainText(/Mock · \d+ (ms|s) · \d+ in · \d+ out/);
+
+      await cards.nth(0).locator('summary').click();
+      await expect(cards.nth(0).getByTestId('tool-output')).toContainText('drwxr-xr-x');
+      await cards.nth(1).locator('summary').click();
+      await expect(cards.nth(1).getByTestId('tool-diff')).toContainText('hello from mock');
+
+      const chip = turn.getByTestId('file-chip');
+      await expect(chip).toHaveText('hello.txt');
+      await expect(chip).toHaveAttribute('data-change', 'created');
+      if (pass === 'live') await page.reload();
+    }
+
+    // A file chip opens the bot's computer on the Files tab at that path.
+    await lastTurn(page).getByTestId('file-chip').click();
+    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('computer-file-path')).toHaveText('/home/bot/work/hello.txt');
+    await expect(page.getByTestId('computer-bot')).toContainText(bot.name);
+  });
+
+  test('retry the last turn, copy a reply, edit and resend the last message', async ({
+    page,
+    request,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const bot = await createBot(request);
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    await send(page, '[mock:error] break');
+    const turns = page.getByTestId('bot-turn');
+    await expect(turns.first()).toHaveAttribute('data-run-status', 'failed');
+    await expect(turns.first().getByTestId('turn-error')).toContainText('Mock engine failure');
+    await expect(turns.first().getByTestId('run-state')).toHaveText('Failed');
+
+    await turns.first().getByTestId('retry-turn').click();
+    await expect(turns).toHaveCount(2);
+    await expect(turns.nth(1)).toHaveAttribute('data-run-status', 'failed');
+    // Only the latest turn offers Retry.
+    await expect(turns.first().getByTestId('retry-turn')).toHaveCount(0);
+    await expect(turns.nth(1).getByTestId('retry-turn')).toBeVisible();
+    // Both turns sit under the one user message.
+    await expect(page.getByTestId('message-user')).toHaveCount(1);
+
+    await send(page, 'first draft');
+    const reply = lastTurn(page);
+    await expect(reply).toContainText('You said: first draft');
+    await reply.hover();
+    await reply.getByTestId('copy-message').click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('You said: first draft');
+
+    const lastUser = page.getByTestId('message-user').last();
+    await lastUser.hover();
+    await lastUser.getByRole('button', { name: 'Edit and resend' }).click();
+    const box = page.getByRole('textbox', { name: /^Message / });
+    await expect(page.getByTestId('editing-banner')).toBeVisible();
+    await expect(box).toHaveValue('first draft');
+    await box.fill('second draft');
+    await box.press('Control+Enter');
+    await expect(page.getByTestId('editing-banner')).toHaveCount(0);
+    await expect(lastTurn(page)).toContainText('You said: second draft');
+    // The older message can no longer be edited.
+    await expect(page.getByRole('button', { name: 'Edit and resend' })).toHaveCount(1);
+  });
+
+  test('Explain mode is stored on the thread and reaches the bot', async ({ page, request }) => {
+    const bot = await createBot(request);
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    const toggle = page.getByRole('button', { name: 'Explain' });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Explain' })).toHaveAttribute('aria-pressed', 'true');
+    // The mock echoes its prompt: the explain instructions are in it.
+    await send(page, 'teach me');
+    await expect(lastTurn(page)).toContainText('Explain mode is on');
+  });
+
+  test('unread replies show a sidebar badge until the chat is opened', async ({ page, request }) => {
+    const bot = await createBot(request);
+    await page.goto('/bots');
+    const link = page.getByRole('list', { name: 'Bots' }).getByRole('link', { name: bot.name });
+    await expect(link).toBeVisible();
+    const res = await request.post(`/api/threads/${bot.dmThreadId}/messages`, {
+      data: { content: '[mock:hello] ping' },
+    });
+    expect(res.status()).toBe(201);
+    await expect(link.getByTestId('unread-badge')).toHaveText('1', { timeout: 10_000 });
+
+    await link.click();
+    await expect(lastTurn(page)).toContainText('Hello!');
+    await expect(link.getByTestId('unread-badge')).toHaveCount(0);
+    await page.goto('/bots');
+    await expect(link).toBeVisible();
+    await expect(link.getByTestId('unread-badge')).toHaveCount(0);
   });
 });

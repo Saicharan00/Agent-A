@@ -2,8 +2,9 @@
 // chat shows inline.
 import { z } from 'zod';
 import { botViewSchema } from './bots';
-import { runUsageSchema } from './dto';
+import { runUsageSchema, threadUpdateSchema } from './dto';
 import { AUTHOR_TYPES, ENGINES, RUN_STATUSES, RUN_TRIGGERS, THREAD_KINDS } from './enums';
+import { type EngineEvent, engineEventSchema } from './events';
 
 /** Where chat attachments land inside the bot's computer (bind-mounted from data/bots/<id>/home/work/inbox). */
 export const INBOX_DIR = '/home/bot/work/inbox';
@@ -65,6 +66,8 @@ export const threadViewSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),
+  /** When the owner last viewed it (unread counts). */
+  lastReadAt: z.string().nullable(),
   members: z.array(botViewSchema),
 });
 export type ThreadView = z.infer<typeof threadViewSchema>;
@@ -146,4 +149,86 @@ export function composeUserMessage(content: string, attachments: string[]): stri
   if (attachments.length === 0) return text;
   const list = attachments.map((n) => `\`inbox/${n}\``).join(' · ');
   return `${text}${text ? '\n\n' : ''}📎 ${list}`;
+}
+
+// ---------- session 2: thread settings, retry, unread, run timelines ----------
+
+/** PATCH /api/threads/:id — rename or toggle Explain mode (used by the prompt builder on the next turn). */
+export const threadUpdateRequestSchema = threadUpdateSchema
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, { message: 'nothing to update' });
+export type ThreadUpdateRequest = z.input<typeof threadUpdateRequestSchema>;
+
+/** POST /api/threads/:id/retry — run the thread's last finished turn again with the same prompt. */
+export const retryTurnRequestSchema = z.object({ runId: z.string().min(1) }).strict();
+export type RetryTurnRequest = z.input<typeof retryTurnRequestSchema>;
+
+/** GET /api/threads/unread — unseen bot/system messages per thread (threads with none are omitted). */
+export const unreadCountsSchema = z.object({ counts: z.record(z.string(), z.number().int().nonnegative()) });
+export type UnreadCounts = z.infer<typeof unreadCountsSchema>;
+
+/** A thread got a new message. Channel: `global` (sidebars refresh unread counts; no content). */
+export const liveThreadActivitySchema = z.object({
+  type: z.literal('thread.activity'),
+  threadId: z.string(),
+  messageId: z.string(),
+  authorType: z.enum(AUTHOR_TYPES),
+});
+export type LiveThreadActivity = z.infer<typeof liveThreadActivitySchema>;
+
+export const runEventItemSchema = z.object({ seq: z.number().int().positive(), event: engineEventSchema });
+export type RunEventItem = z.infer<typeof runEventItemSchema>;
+
+export const MAX_EVENT_BATCH_RUNS = 50;
+const RUN_ID_RE = /^run_[A-Za-z0-9]{1,64}$/;
+
+/** GET /api/runs/events?ids=a,b — the timelines of several runs at once (chat transcripts). */
+export const runEventsBatchQuerySchema = z.object({
+  ids: z
+    .string()
+    .transform((v) => [...new Set(v.split(',').filter(Boolean))])
+    .pipe(z.array(z.string().regex(RUN_ID_RE, 'not a run id')).min(1).max(MAX_EVENT_BATCH_RUNS)),
+});
+
+export const runEventsBatchResponseSchema = z.object({
+  runs: z.record(z.string(), z.object({ status: z.enum(RUN_STATUSES), events: z.array(runEventItemSchema) })),
+});
+export type RunEventsBatchResponse = z.infer<typeof runEventsBatchResponseSchema>;
+
+/** Tool output kept per result in a batched timeline; the rest is replaced by a note. */
+export const MAX_TOOL_OUTPUT_CHARS = 64 * 1024;
+
+/**
+ * Shrinks a stored timeline for display: consecutive `text.delta`s merge into one (keeping the last seq) and huge
+ * tool outputs are cut. Order and the meaning of every other event are unchanged.
+ */
+export function compactRunEvents(items: RunEventItem[]): RunEventItem[] {
+  const out: RunEventItem[] = [];
+  for (const item of items) {
+    const prev = out[out.length - 1];
+    const e: EngineEvent = item.event;
+    if (e.type === 'text.delta' && prev?.event.type === 'text.delta') {
+      out[out.length - 1] = { seq: item.seq, event: { type: 'text.delta', text: prev.event.text + e.text } };
+    } else if (e.type === 'tool.result' && e.output.length > MAX_TOOL_OUTPUT_CHARS) {
+      const cut = e.output.length - MAX_TOOL_OUTPUT_CHARS;
+      out.push({
+        seq: item.seq,
+        event: {
+          ...e,
+          output: `${e.output.slice(0, MAX_TOOL_OUTPUT_CHARS)}\n… (${cut} more characters not shown)`,
+        },
+      });
+    } else {
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+/** The inverse of composeUserMessage: the typed text and the attachment names (for edit-and-resend). */
+export function splitUserMessage(contentMd: string): { content: string; attachments: string[] } {
+  const m = /(?:^|\n\n)📎 ((?:`inbox\/[^`]+`(?: · )?)+)$/u.exec(contentMd);
+  if (!m) return { content: contentMd, attachments: [] };
+  const attachments = [...m[1]!.matchAll(/`inbox\/([^`]+)`/g)].map((x) => x[1]!);
+  return { content: contentMd.slice(0, m.index), attachments };
 }

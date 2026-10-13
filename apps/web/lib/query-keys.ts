@@ -14,5 +14,8 @@ export const queryKeys = {
   /** Prefix of every run list (refetched on run.updated). */
   runs: ['runs', 'list'] as const,
   threadRuns: (threadId: string) => ['runs', 'list', { threadId }] as const,
+  /** A finished run's timeline (immutable once finished). */
+  runEvents: (id: string) => ['runs', 'events', id] as const,
+  unread: ['threads', 'unread'] as const,
   run: (id: string) => ['runs', 'detail', id] as const,
 };

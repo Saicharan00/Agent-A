@@ -17,7 +17,8 @@ const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal
 };
 
 export function ComputerPanel() {
-  const { computerOpen, setComputerOpen, computerTab, setComputerTab, computerBotId } = useShell();
+  const { computerOpen, setComputerOpen, computerTab, setComputerTab, computerBotId, computerFilePath } =
+    useShell();
   // From the (live) bot list, so a bot deleted elsewhere simply drops out of focus.
   const { data: bots } = useBots();
   const bot = bots?.find((b) => b.id === computerBotId);
@@ -93,6 +94,11 @@ export function ComputerPanel() {
             />
             <span className="truncate text-sm font-medium">{bot.name}</span>
           </div>
+        )}
+        {computerTab === 'files' && computerFilePath && (
+          <p className="truncate font-mono text-xs text-muted-foreground" data-testid="computer-file-path">
+            {computerFilePath}
+          </p>
         )}
         <EmptyState
           icon={meta.icon}

@@ -13,11 +13,17 @@ import { cn } from '@/lib/utils';
 
 type Attachment = {
   key: string;
-  file: File;
+  /** Shown name (the browser's until the upload returns the stored one). */
+  label: string;
+  /** Unknown for files already in the inbox (edit and resend). */
+  size?: number;
   state: 'uploading' | 'done' | 'error';
   name?: string;
   error?: string;
 };
+
+/** Text and inbox files to put back in the composer (Edit on the last message). `key` changes per request. */
+export type ComposerDraft = { key: number; content: string; attachments: string[] };
 
 let nextKey = 0;
 
@@ -39,6 +45,8 @@ export function Composer({
   activeRunIds,
   onStop,
   stopping,
+  draft,
+  onDraftDone,
 }: {
   threadId: string;
   /** Where attachments go (the DM's bot); null disables attaching. */
@@ -48,6 +56,9 @@ export function Composer({
   activeRunIds: string[];
   onStop: (runIds: string[]) => void;
   stopping: boolean;
+  draft: ComposerDraft | null;
+  /** The draft was sent or dismissed. */
+  onDraftDone: () => void;
 }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
@@ -55,6 +66,23 @@ export function Composer({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const send = useSendMessage(threadId);
+
+  // Edit and resend: load the draft once per request.
+  const draftKey = draft?.key;
+  useEffect(() => {
+    if (!draft) return;
+    setText(draft.content);
+    setFiles(
+      draft.attachments.map((name) => ({
+        key: String(++nextKey),
+        label: name,
+        name,
+        state: 'done' as const,
+      })),
+    );
+    inputRef.current?.focus();
+    // Only a new draft (key) reloads it; edits to the text afterwards are the user's.
+  }, [draftKey]);
 
   // Grow with the text up to ~10 lines.
   useEffect(() => {
@@ -80,7 +108,7 @@ export function Composer({
         toast.error(`${file.name} is larger than ${formatBytes(MAX_ATTACHMENT_BYTES)}`);
         continue;
       }
-      setFiles((fs) => [...fs, { key, file, state: 'uploading' }]);
+      setFiles((fs) => [...fs, { key, label: file.name, size: file.size, state: 'uploading' }]);
       threadsApi
         .upload(botId, file)
         .then((res) =>
@@ -102,6 +130,7 @@ export function Composer({
         onSuccess: () => {
           setText('');
           setFiles([]);
+          if (draft) onDraftDone();
           inputRef.current?.focus();
         },
         onError: (err) => void toast.error(err instanceof Error ? err.message : 'Could not send'),
@@ -136,6 +165,25 @@ export function Composer({
           addFiles(e.dataTransfer.files);
         }}
       >
+        {draft && (
+          <div
+            className="flex items-center gap-2 border-b px-4 py-2 text-xs text-muted-foreground"
+            data-testid="editing-banner"
+          >
+            <span className="flex-1">Editing your last message: sending posts it again as a new turn.</span>
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => {
+                setText('');
+                setFiles([]);
+                onDraftDone();
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {files.length > 0 && (
           <ul className="flex flex-wrap gap-2 px-3 pt-3" aria-label="Attachments">
             {files.map((f) => (
@@ -154,11 +202,11 @@ export function Composer({
                 ) : (
                   <Paperclip className="size-3" aria-hidden />
                 )}
-                <span className="truncate">{f.name ?? f.file.name}</span>
-                <span className="text-muted-foreground">{formatBytes(f.file.size)}</span>
+                <span className="truncate">{f.name ?? f.label}</span>
+                {f.size !== undefined && <span className="text-muted-foreground">{formatBytes(f.size)}</span>}
                 <button
                   type="button"
-                  aria-label={`Remove ${f.file.name}`}
+                  aria-label={`Remove ${f.label}`}
                   onClick={() => setFiles((fs) => fs.filter((x) => x.key !== f.key))}
                   className="rounded hover:bg-accent"
                 >

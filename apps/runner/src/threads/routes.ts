@@ -3,7 +3,9 @@ import {
   apiError,
   inboxUploadQuerySchema,
   messagePageQuerySchema,
+  retryTurnRequestSchema,
   sendMessageRequestSchema,
+  threadUpdateRequestSchema,
 } from '@agenta/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { z } from 'zod';
@@ -39,10 +41,30 @@ async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise
 }
 
 /**
- * GET /api/threads/:id, GET/POST /api/threads/:id/messages, and POST /api/bots/:id/inbox?name= (raw file bytes,
+ * GET/PATCH /api/threads/:id, GET /api/threads/unread, POST /api/threads/:id/{read,retry},
+ * GET/POST /api/threads/:id/messages, and POST /api/bots/:id/inbox?name= (raw file bytes,
  * application/octet-stream) for chat attachments.
  */
 export async function registerThreadRoutes(app: FastifyInstance, threads: ThreadService): Promise<void> {
+  app.get('/api/threads/unread', async () => threads.unread());
+
+  app.patch<IdParams>('/api/threads/:id', async (req, reply) => {
+    const body = parse(threadUpdateRequestSchema, req.body, reply, 'invalid_body');
+    if (!body) return;
+    return handle(reply, () => threads.update(req.params.id, body));
+  });
+
+  app.post<IdParams>('/api/threads/:id/read', async (req, reply) =>
+    handle(reply, () => threads.markRead(req.params.id)),
+  );
+
+  app.post<IdParams>('/api/threads/:id/retry', async (req, reply) => {
+    const body = parse(retryTurnRequestSchema, req.body, reply, 'invalid_body');
+    if (!body) return;
+    const res = await handle(reply, () => threads.retry(req.params.id, body));
+    if (res) return reply.code(201).send(res);
+  });
+
   app.get<IdParams>('/api/threads/:id', async (req, reply) =>
     handle(reply, () => threads.get(req.params.id)),
   );

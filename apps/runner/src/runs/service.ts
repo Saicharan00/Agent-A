@@ -5,6 +5,7 @@ import type {
   LiveEngineState,
   LiveMessage,
   LiveRunUpdated,
+  LiveThreadActivity,
   RunFinishStatus,
   RunTrigger,
   RunUsage,
@@ -584,6 +585,15 @@ export class RunService {
       createdAt: msg.createdAt,
     };
     this.opts.bus.publish(`thread:${msg.threadId}`, live);
+    if (created) {
+      const activity: LiveThreadActivity = {
+        type: 'thread.activity',
+        threadId: msg.threadId,
+        messageId: msg.id,
+        authorType: msg.authorType,
+      };
+      this.opts.bus.publish('global', activity);
+    }
   }
 
   private saveSession(run: Run, sessionId: string | undefined): void {
