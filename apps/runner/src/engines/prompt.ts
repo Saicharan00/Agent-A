@@ -108,13 +108,15 @@ export function buildPrompt(input: BuildPromptInput): string {
 }
 
 /** Short identity + platform rules appended to the engine's system prompt. */
-export function buildSystemPromptAppend(bot: PromptBot, thread: PromptThread): string {
+export function buildSystemPromptAppend(bot: PromptBot, thread: PromptThread | null): string {
   return [
     `You are ${bot.name}${bot.role ? `, ${bot.role}` : ''}: one of the AI teammates on the owner's Agent A team (handle @${bot.slug}).`,
-    `You are working in thread ${thread.id} (${thread.kind}).`,
+    thread ? `You are working in thread ${thread.id} (${thread.kind}).` : '',
     'Your computer is a Linux container: work in /home/bot/work, keep notes in /home/bot/notes, team files are in /shared.',
     'Use the `agenta` MCP tools to create tasks, message teammates, record decisions and request approval for risky external actions.',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export type InstructionMemory = { title: string; contentMd: string; scope: 'bot' | 'shared' };

@@ -90,6 +90,25 @@ describe('runsRepo', () => {
     expect(t.repos.runs.listEvents(r1.id)).toEqual([]);
     expect(t.repos.runs.get(r2.id)?.parentRunId).toBeNull();
   });
+
+  it('appends event batches after the last seq, counts events and lists the queue FIFO', () => {
+    const b = bot();
+    const r = t.repos.runs.create({ botId: b.id, trigger: 'user', engine: 'mock', prompt: 'x' });
+    expect(t.repos.runs.appendEvents(r.id, [])).toEqual([]);
+    t.repos.runs.appendEvent(r.id, 'run.started', { type: 'run.started', engine: 'mock' });
+    const rows = t.repos.runs.appendEvents(r.id, [
+      { type: 'text.delta', payload: { type: 'text.delta', text: 'a' } },
+      { type: 'limit.hit', payload: { type: 'limit.hit', engine: 'mock', raw: 'x' } },
+    ]);
+    expect(rows.map((e) => e.seq)).toEqual([2, 3]);
+    expect(t.repos.runs.countEvents(r.id, 'limit.hit')).toBe(1);
+    expect(t.repos.runs.countEvents(r.id, 'error')).toBe(0);
+
+    const r2 = t.repos.runs.create({ botId: b.id, trigger: 'user', engine: 'mock', prompt: 'y' });
+    const r3 = t.repos.runs.create({ botId: b.id, trigger: 'user', engine: 'mock', prompt: 'z' });
+    t.repos.runs.markRunning(r2.id);
+    expect(t.repos.runs.listQueued().map((q) => q.id)).toEqual([r.id, r3.id]);
+  });
 });
 
 describe('tasksRepo', () => {

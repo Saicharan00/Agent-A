@@ -94,6 +94,21 @@ export function makeMessagesRepo(db: Db) {
         .get();
     },
 
+    /** Replaces a message's text (a bot reply growing while its run streams). */
+    updateContent(id: string, contentMd: string): Message | undefined {
+      return db.update(messages).set({ contentMd }).where(eq(messages.id, id)).returning().get();
+    },
+
+    /** The bot reply created by a run, if any. */
+    getByRun(runId: string): Message | undefined {
+      return db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.runId, runId), eq(messages.authorType, 'bot')))
+        .orderBy(asc(messages.createdAt), asc(rowid))
+        .get();
+    },
+
     setRunId(id: string, runId: string): Message | undefined {
       return db.update(messages).set({ runId }).where(eq(messages.id, id)).returning().get();
     },

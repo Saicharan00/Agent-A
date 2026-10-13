@@ -6,6 +6,13 @@ import { createDockerApi } from './containers/docker';
 import { ContainerManager } from './containers/manager';
 import { proxyEnv } from './containers/spec';
 import { EngineAuth } from './engines/auth';
+import { ClaudeEngine } from './engines/claude';
+import { CodexEngine } from './engines/codex';
+import { MockEngine } from './engines/mock';
+import { ContainerLauncher } from './engines/process';
+import { EngineRegistry } from './engines/registry';
+import { computerPreparer } from './runs/prepare';
+import { RunService } from './runs/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
@@ -40,8 +47,34 @@ const engineAuth: EngineAuth = new EngineAuth({
   exec: containers && ((botId, opts) => containers.exec(botId, opts)),
   log: rootLog.child({ module: 'engine-auth' }),
 });
+const engineAdapters: ConstructorParameters<typeof EngineRegistry>[0] = [new MockEngine()];
+if (containers) {
+  const launcher = new ContainerLauncher((id, o) => containers.exec(id, o), config.botsDir);
+  engineAdapters.push(
+    new ClaudeEngine({
+      launcher,
+      env: () => engineAuth.execEnv('claude'),
+      log: rootLog.child({ module: 'engine-claude' }),
+    }),
+    new CodexEngine({
+      launcher,
+      env: () => ({}),
+      log: rootLog.child({ module: 'engine-codex' }),
+      beforeRun: (id) => engineAuth.beforeCodexRun(id),
+      afterRun: (id) => engineAuth.afterCodexRun(id),
+    }),
+  );
+}
+const runs = new RunService({
+  repos,
+  bus,
+  engines: new EngineRegistry(engineAdapters, config.engineOverride),
+  log: rootLog.child({ module: 'runs' }),
+  prepare: computerPreparer({ containers, botsDir: config.botsDir }),
+});
 const app = await buildServer(config, { repos, containers, engineAuth });
 app.addHook('onClose', async () => {
+  runs.stop();
   // Bot containers keep running across runner restarts; the reconcile loop adopts them on start.
   containers?.stopLoops();
   closeDb(db);
@@ -73,4 +106,5 @@ if (containers) {
   else app.log.warn({ error: docker.error }, 'docker unreachable: bot computers unavailable');
   containers.startLoops();
 }
+runs.start();
 if (config.engineOverride) app.log.warn({ engine: config.engineOverride }, 'engine override active');

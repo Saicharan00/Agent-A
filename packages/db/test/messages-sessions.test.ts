@@ -31,6 +31,35 @@ describe('messagesRepo', () => {
     expect(t.repos.messages.get(r.id)?.authorBotId).toBe(bot.id);
   });
 
+  it("finds a run's bot reply and updates its text", () => {
+    const { bot, thread } = setup();
+    const run = t.repos.runs.create({
+      botId: bot.id,
+      threadId: thread.id,
+      trigger: 'user',
+      engine: 'mock',
+      prompt: 'x',
+    });
+    const ask = t.repos.messages.create({
+      threadId: thread.id,
+      authorType: 'user',
+      contentMd: 'x',
+      runId: run.id,
+    });
+    expect(t.repos.messages.getByRun(run.id)).toBeUndefined();
+    const reply = t.repos.messages.create({
+      threadId: thread.id,
+      authorType: 'bot',
+      authorBotId: bot.id,
+      contentMd: 'part 1',
+      runId: run.id,
+    });
+    expect(t.repos.messages.getByRun(run.id)?.id).toBe(reply.id);
+    expect(t.repos.messages.updateContent(reply.id, 'part 1\n\npart 2')?.contentMd).toBe('part 1\n\npart 2');
+    expect(t.repos.messages.get(ask.id)?.contentMd).toBe('x');
+    expect(t.repos.messages.updateContent('msg_missing', 'y')).toBeUndefined();
+  });
+
   it('validates author consistency', () => {
     const { bot, thread } = setup();
     expect(() =>

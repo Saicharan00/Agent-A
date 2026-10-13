@@ -68,6 +68,17 @@ export function makeRunsRepo(db: Db) {
         .get();
     },
 
+    /** Queued runs, oldest first (the scheduler's FIFO). */
+    listQueued(limit = 200): Run[] {
+      return db
+        .select()
+        .from(runs)
+        .where(eq(runs.status, 'queued'))
+        .orderBy(asc(runs.createdAt), asc(rowidOf(runs)))
+        .limit(pageSize(limit, 200, 1000))
+        .all();
+    },
+
     countByStatus(status: RunStatus, engine?: Engine): number {
       return (
         db
@@ -138,6 +149,38 @@ export function makeRunsRepo(db: Db) {
           .returning()
           .get();
       });
+    },
+
+    /** Appends several events in one transaction, numbered after the run's last `seq`. */
+    appendEvents(runId: string, items: { type: string; payload: unknown }[]): RunEvent[] {
+      if (items.length === 0) return [];
+      return db.transaction((tx) => {
+        const last = tx
+          .select({ seq: max(runEvents.seq) })
+          .from(runEvents)
+          .where(eq(runEvents.runId, runId))
+          .get();
+        const base = last?.seq ?? 0;
+        const createdAt = nowIso();
+        return tx
+          .insert(runEvents)
+          .values(
+            items.map((e, i) => ({ runId, seq: base + i + 1, type: e.type, payload: e.payload, createdAt })),
+          )
+          .returning()
+          .all();
+      });
+    },
+
+    /** How many events of `type` a run has (e.g. limit hits, to retry a limited turn only once). */
+    countEvents(runId: string, type: string): number {
+      return (
+        db
+          .select({ n: sql<number>`count(*)` })
+          .from(runEvents)
+          .where(and(eq(runEvents.runId, runId), eq(runEvents.type, type)))
+          .get()?.n ?? 0
+      );
     },
 
     /** Events after `afterSeq` (exclusive) in order — used for WebSocket replay. */

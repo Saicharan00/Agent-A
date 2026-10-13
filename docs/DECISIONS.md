@@ -232,3 +232,28 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   output = output + reasoning tokens; no cost (Codex doesn't report one).
 - Reset-time parser learned Codex's "try again at 3:05 PM" / "at Oct 14th, 2026 9:05 AM" wording.
 - No new dependencies.
+
+## F10 — Run orchestrator (2026-10-13)
+- **One in-process scheduler** (`runs/service.ts`, `RunService`). `tick()` is synchronous: it walks queued runs FIFO
+  and starts each one unless the global cap (`settings.maxConcurrentRuns`, default 2, counts every engine incl. mock),
+  the bot's one-run-at-a-time rule, or a paused engine (`engine_state.limited_until > now`) holds it back. A later
+  run of another bot may overtake a blocked one (per-bot FIFO, not global head-of-line blocking). Wake-ups on
+  enqueue/finish are coalesced with `setImmediate`; a 5 s poll covers limits expiring.
+- **The run's engine is fixed at enqueue** (`EngineRegistry.effectiveEngine`, so the mock override is recorded on the
+  row) and that is the engine whose limit state gates it.
+- **Events are written in small batches** (50 ms window; `text.final`, tool events and `run.finished` flush at once)
+  and published on `run:<id>` only *after* the batch committed, so the DB is never behind the bus: F11 can subscribe,
+  then replay `afterSeq`, and de-duplicate by `seq`.
+- **The orchestrator owns `run.finished`.** The adapter's `run.finished` is not stored; the service writes exactly one
+  with the final status (which can differ: timeout → failed). The adapter's status and session id are kept.
+- **Bot reply = one message per run**, created on the first `text.final` and extended by later ones (joined with a blank
+  line; Codex and Claude emit several complete messages per turn). Published as `message.created/updated` on
+  `thread:<id>`. Deltas are not written to the message (the UI streams them from `run:<id>`).
+- **Session id** is saved to `bot_thread_sessions` at `run.started` (so a crash mid-run can still resume) and at the end.
+  A stored session from another engine is not resumed. `last_seen_message_id` is left to the callers that build group
+  prompts (F13/F18).
+- **Computer preparation** (`runs/prepare.ts`): real engines start the container on demand, hold a container lease for
+  the whole run (idle sweep can't stop it between execs), bootstrap the home and render CLAUDE.md/AGENTS.md. The mock
+  engine skips all of it, so tests and e2e need no Docker. The MCP config is written in F17.
+- Live event shapes live in `packages/shared/src/live.ts` (`run.event`, `run.updated`, `message.*`, `engine.state`).
+- No new dependencies.
