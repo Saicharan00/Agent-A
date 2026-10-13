@@ -396,3 +396,24 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   itself read on open, on each new message and when the tab becomes visible.
 - **File chips → Files tab:** shell context gained `openFile(botId, path)` / `computerFilePath`; F15's Files tab opens
   that path (the placeholder shows it for now). Deleted files' chips are disabled.
+
+## F14 — Live terminal
+- **Deps:** `@xterm/xterm@6`, `@xterm/addon-fit`, `@xterm/addon-web-links` (web). xterm 6 because the current fit /
+  web-links addons target it. Loaded with dynamic `import()` in an effect (xterm touches `window`).
+- **Docker keeps a TTY exec running after the client hangs up** (verified: `bash -l` and a background `sleep` survived
+  destroying the attach stream). So every terminal exec gets `AGENTA_TERMINAL=<trm_id>` in its environment and, on
+  disconnect, `ContainerManager.killTerminal` runs `sh` as `bot` that HUPs then (1 s later) KILLs every process whose
+  `/proc/<pid>/environ` holds that marker: the shell and everything it started. It never starts a stopped computer.
+- **Protocol:** `/ws/terminal/:botId?cols=&rows=`; output = binary frames, everything else = JSON text frames
+  (`input`, `resize` / `starting`, `ready`, `exit`, `error`), zod schemas in `packages/shared/src/terminal.ts`.
+  Same Origin allow-list as `/ws`. Max 8 terminals per bot. Output pauses while >1 MiB waits in the socket buffer.
+  `@fastify/websocket` is now registered once in `buildServer` for both `/ws` and `/ws/terminal`.
+- **No automatic reconnect:** a new connection is always a new shell (PLAN), so silently reconnecting would swap the
+  shell under the owner. A dropped/exited terminal shows "New shell" instead, in the same xterm (history kept).
+- **Terminals are opened explicitly** ("Open terminal" button, `+` for more tabs) rather than on showing the tab,
+  because opening one starts the bot's computer. All shells stay mounted (hidden) across computer-tab and bot switches
+  while the panel is open; closing a tab or the panel ends them.
+- **`USER`/`LOGNAME=bot` are set on the exec:** Docker sets `HOME` for the exec user but not `USER`.
+- **Terminal theme is always dark** (CLI colour schemes assume it), in both app themes.
+- **e2e bot homes on the VM disk:** `scripts/vm-mounts.sh` also bind-mounts `data/e2e/bots` and `data/e2e/shared`
+  (the virtiofs project mount has no symlinks, which bot homes require), so e2e can start real bot computers.

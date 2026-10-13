@@ -229,6 +229,25 @@ export class ContainerManager {
     }
   }
 
+  /**
+   * Ends every process of a terminal (its shell and whatever it started). Docker keeps a TTY exec alive after the
+   * client hangs up, so the terminal's processes carry `AGENTA_TERMINAL=<id>` in their environment and this
+   * HUPs (then, a second later, KILLs) each of them. Never starts a stopped computer: nothing to kill there.
+   */
+  async killTerminal(botId: string, terminalId: string): Promise<void> {
+    if (!/^[\w-]+$/.test(terminalId)) throw new Error(`Bad terminal id ${terminalId}`);
+    const bot = this.opts.repos.bots.get(botId);
+    const c = bot && (await this.findContainer(bot));
+    if (!c || c.state !== 'running') return;
+    const script =
+      'k(){ for d in /proc/[0-9]*; do grep -qxzF "AGENTA_TERMINAL=$1" "$d/environ" 2>/dev/null' +
+      ' && kill -"$2" "${d#/proc/}" 2>/dev/null; done; }; k "$0" HUP; sleep 1; k "$0" KILL; exit 0';
+    const h = await this.docker.exec(c.id, { user: 'bot', cmd: ['sh', '-c', script, terminalId] });
+    h.stdout.resume();
+    h.stderr.resume();
+    await h.wait();
+  }
+
   // ---------- activity & idle auto-stop ----------
 
   /** Marks the bot busy (run in progress, terminal attached). Call the returned function when done. */

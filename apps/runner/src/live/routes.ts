@@ -1,4 +1,3 @@
-import websocket from '@fastify/websocket';
 import { apiError } from '@agenta/shared';
 import type { FastifyInstance } from 'fastify';
 import type { LiveHub, LiveSocket } from './hub';
@@ -16,14 +15,9 @@ export function allowedOrigins(webOrigin: string): Set<string> {
   return out;
 }
 
-/** GET /ws: the live event socket (subscribe/unsubscribe to channels; see packages/shared/src/live.ts). */
-export async function registerLiveRoutes(
-  app: FastifyInstance,
-  hub: LiveHub,
-  opts: { webOrigin: string },
-): Promise<void> {
+/** GET /ws: the live event socket (subscribe/unsubscribe to channels; see packages/shared/src/live.ts). Needs @fastify/websocket registered. */
+export function registerLiveRoutes(app: FastifyInstance, hub: LiveHub, opts: { webOrigin: string }): void {
   const origins = allowedOrigins(opts.webOrigin);
-  await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
   app.addHook('onClose', async () => hub.close());
   app.get(
     '/ws',

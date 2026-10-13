@@ -3,6 +3,7 @@
 import { FolderTree, ListChecks, MonitorPlay, SquareTerminal, X } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
+import { TerminalPanel } from '@/components/computer/terminal-panel';
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
 import { useBots } from '@/hooks/use-bots';
@@ -10,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { COMPUTER_TABS, type ComputerTab, useShell } from './shell-context';
 
 const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal; feature: string }> = {
-  terminal: { label: 'Terminal', icon: SquareTerminal, feature: 'F14' },
+  terminal: { label: 'Terminal', icon: SquareTerminal, feature: 'F14' }, // TerminalPanel
   desktop: { label: 'Desktop', icon: MonitorPlay, feature: 'F16' },
   files: { label: 'Files', icon: FolderTree, feature: 'F15' },
   runs: { label: 'Runs', icon: ListChecks, feature: 'F10' },
@@ -81,10 +82,10 @@ export function ComputerPanel() {
         id="computer-tabpanel"
         role="tabpanel"
         aria-labelledby={`computer-tab-${computerTab}`}
-        className="flex flex-1 flex-col gap-3 overflow-auto p-4"
+        className="flex min-h-0 flex-1 flex-col"
       >
         {bot && (
-          <div className="flex items-center gap-2" data-testid="computer-bot">
+          <div className="flex items-center gap-2 px-4 py-2" data-testid="computer-bot">
             <BotAvatar
               name={bot.name}
               color={bot.avatarColor}
@@ -95,20 +96,29 @@ export function ComputerPanel() {
             <span className="truncate text-sm font-medium">{bot.name}</span>
           </div>
         )}
-        {computerTab === 'files' && computerFilePath && (
-          <p className="truncate font-mono text-xs text-muted-foreground" data-testid="computer-file-path">
-            {computerFilePath}
-          </p>
+        {/* Always mounted while the panel is open, so shells survive switching tabs and bots. */}
+        <TerminalPanel bot={bot} bots={bots} visible={computerTab === 'terminal'} />
+        {computerTab !== 'terminal' && (
+          <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
+            {computerTab === 'files' && computerFilePath && (
+              <p
+                className="truncate font-mono text-xs text-muted-foreground"
+                data-testid="computer-file-path"
+              >
+                {computerFilePath}
+              </p>
+            )}
+            <EmptyState
+              icon={meta.icon}
+              title={`${meta.label} not connected`}
+              description={
+                bot
+                  ? `${bot.name}'s ${meta.label.toLowerCase()} arrives in ${meta.feature}.`
+                  : `Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`
+              }
+            />
+          </div>
         )}
-        <EmptyState
-          icon={meta.icon}
-          title={`${meta.label} not connected`}
-          description={
-            bot
-              ? `${bot.name}'s ${meta.label.toLowerCase()} arrives in ${meta.feature}.`
-              : `Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`
-          }
-        />
       </div>
     </aside>
   );

@@ -1,4 +1,5 @@
 import cors from '@fastify/cors';
+import websocket from '@fastify/websocket';
 import { apiError, type HealthResponse } from '@agenta/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pkg from '../package.json' with { type: 'json' };
@@ -14,6 +15,8 @@ import type { LiveHub } from './live/hub';
 import { registerLiveRoutes } from './live/routes';
 import { registerEngineStateRoute, registerRunRoutes } from './runs/routes';
 import type { RunService } from './runs/service';
+import { registerTerminalRoutes } from './terminal/routes';
+import type { TerminalService } from './terminal/service';
 import { registerThreadRoutes } from './threads/routes';
 import type { ThreadService } from './threads/service';
 
@@ -38,6 +41,8 @@ export type ServerDeps = {
   bots?: BotService;
   /** Direct chat (F13): thread view, message history, sending, inbox uploads. */
   threads?: ThreadService;
+  /** Live terminal (F14): GET /ws/terminal/:botId. */
+  terminals?: TerminalService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -87,7 +92,12 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);
   if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
   if (deps.threads) await registerThreadRoutes(app, deps.threads);
-  if (deps.live) await registerLiveRoutes(app, deps.live, { webOrigin: config.webOrigin });
+  if (deps.live || deps.terminals) {
+    // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
+    await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
+    if (deps.live) registerLiveRoutes(app, deps.live, { webOrigin: config.webOrigin });
+    if (deps.terminals) registerTerminalRoutes(app, deps.terminals, { webOrigin: config.webOrigin });
+  }
 
   return app;
 }

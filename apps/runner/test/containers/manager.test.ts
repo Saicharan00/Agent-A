@@ -211,6 +211,21 @@ describe('ContainerManager (fake docker)', () => {
       await new Promise((r) => setImmediate(r));
       expect(manager.isBusy(botId)).toBe(false);
     });
+
+    it('killTerminal signals the terminal processes as bot, and never starts a stopped computer', async () => {
+      await manager.killTerminal(botId, 'trm_abc');
+      expect(docker.execs).toHaveLength(0);
+      expect(docker.calls.some((c) => c.startsWith('start:'))).toBe(false);
+
+      await manager.start(botId);
+      await manager.killTerminal(botId, 'trm_abc');
+      const exec = docker.execs.at(-1)!;
+      expect(exec.opts.user).toBe('bot');
+      expect(exec.opts.cmd.slice(0, 2)).toEqual(['sh', '-c']);
+      expect(exec.opts.cmd[2]).toContain('AGENTA_TERMINAL=$1');
+      expect(exec.opts.cmd[3]).toBe('trm_abc');
+      await expect(manager.killTerminal(botId, 'x; rm -rf /')).rejects.toThrow(/Bad terminal id/);
+    });
   });
 
   describe('reconcile', () => {

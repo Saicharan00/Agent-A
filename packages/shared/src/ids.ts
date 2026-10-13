@@ -16,6 +16,7 @@ export const ID_PREFIXES = {
   notification: 'ntf',
   connector: 'con',
   guardTerm: 'grd',
+  terminal: 'trm',
 } as const;
 export type IdKind = keyof typeof ID_PREFIXES;
 

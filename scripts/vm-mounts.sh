@@ -4,12 +4,14 @@
 # rename-based installs (see docs/DECISIONS.md). Idempotent and silent; safe to run often.
 # data/bots and data/shared are bot homes / team share: bind-mounted into bot containers, and they
 # need symlinks too (npm, Python venvs, git). They live on the VM disk, NOT on the Windows folder.
+# data/e2e/{bots,shared} are the same for e2e runs that start real bot computers (playwright.config.ts).
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 STORE="${AGENTA_VM_CACHE:-$HOME/.cache/agenta-vm}"
 for rel in node_modules apps/web/node_modules apps/web/.next apps/runner/node_modules \
-           packages/shared/node_modules packages/db/node_modules data/bots data/shared; do
+           packages/shared/node_modules packages/db/node_modules data/bots data/shared \
+           data/e2e/bots data/e2e/shared; do
   target="$REPO/$rel"
-  case "$rel" in data/*) mkdir -p "$REPO/data" 2>/dev/null ;; esac
+  case "$rel" in data/*) mkdir -p "$(dirname "$target")" 2>/dev/null ;; esac
   [ -d "$(dirname "$target")" ] || continue
   if mountpoint -q "$target" 2>/dev/null; then continue; fi
   src="$STORE/$(echo "$rel" | tr / _)"

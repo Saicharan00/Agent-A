@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
     return [
       { source: '/api/:path*', destination: `${runnerUrl}/api/:path*` },
       { source: '/ws', destination: `${runnerUrl}/ws` },
+      // Bot terminals (F14).
+      { source: '/ws/terminal/:botId', destination: `${runnerUrl}/ws/terminal/:botId` },
     ];
   },
 };
