@@ -486,3 +486,14 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Mock engine uses the same `PlatformTools` in-process** (`MockPlatform.call(name, input, botId)`), so
   `[mock:delegate]` exercises the real tools without HTTP.
 
+## F17 — Platform MCP server (session 2)
+- **Task permissions:** a specialist's `create_task` defaults to itself and may not name another assignee; sub-tasks
+  only under tasks assigned to it. The lead may create unassigned tasks or assign anyone. `update_task` (assignee,
+  creator or lead) can only set todo / in_progress / blocked: `in_review` comes from `submit_task_result` (assignee or
+  lead) and done / changes_requested only from `review_task` (lead, task must be in_review). Done tasks are frozen.
+- **task_events** written by the tools: created, status (from/to), note, submitted (summary, artifacts, run),
+  reviewed (verdict, feedback), decision. Actor = bot id.
+- **Reviews and approvals don't start runs.** Re-triggering the assignee after review is the delegation loop (F20);
+  bots poll `check_approval`. `request_approval` and `notify_owner` create notification rows (live delivery: F27).
+- **add_lesson source:** `task` with a task id, else `run` with the calling run, else `manual`.
+

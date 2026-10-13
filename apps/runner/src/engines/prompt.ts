@@ -152,6 +152,15 @@ export function renderInstructionFiles(
       '- `/shared`: files shared with the whole team; `/shared/knowledge` holds team knowledge.',
       '- A desktop (DISPLAY=:99) with Chromium. Use the Playwright MCP browser for web tasks; the owner can watch it live. Your browser profile (`/home/bot/.browser-profile`) keeps sign-ins between runs.',
     ].join('\n'),
+    '## Your team',
+    [
+      'The `agenta` MCP tools connect you to the team and the owner: `whoami`, `list_bots`, `ask_bot` (a teammate',
+      'starts working; follow up with `get_run_status`), threads, tasks (`create_task`, `update_task`,',
+      '`submit_task_result`), memory, decisions, lessons, `request_approval` before risky actions, `notify_owner`.',
+      bot.isLead
+        ? 'As the lead you assign tasks to others and review handed-in work with `review_task`.'
+        : 'Only the lead assigns work to others; ask teammates for help with `ask_bot`.',
+    ].join(' '),
     '## Memory',
     mem(own),
     '## Team knowledge',

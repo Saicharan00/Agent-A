@@ -120,20 +120,31 @@ describe('Platform MCP server (F17)', () => {
     expect((await post(auth(a.id))).status).toBe(200);
   });
 
-  it('lists the session-1 tools; whoami, list_bots and list_threads answer for the calling bot', async () => {
+  it('lists every platform tool; whoami, list_bots and list_threads answer for the calling bot', async () => {
     const writer = bots.create({ name: 'Writer', engine: 'mock', role: 'Writes docs' });
     bots.create({ name: 'Coder', engine: 'mock' });
     const c = await connect(tokenOf(writer.id));
     expect((await c.listTools()).tools.map((t) => t.name).sort()).toEqual(
       [
+        'add_lesson',
         'ask_bot',
+        'check_approval',
+        'create_task',
         'get_run_status',
+        'get_task',
         'list_bots',
+        'list_tasks',
         'list_threads',
+        'notify_owner',
         'post_message',
         'read_thread',
+        'record_decision',
+        'request_approval',
+        'review_task',
         'save_memory',
         'search_memory',
+        'submit_task_result',
+        'update_task',
         'whoami',
       ].sort(),
     );
@@ -272,8 +283,17 @@ describe('Platform MCP server (F17)', () => {
       .listEvents(run.id)
       .filter((e) => e.type === 'tool.result')
       .map((e) => e.payload as { output: string; isError?: boolean });
-    expect(results[0]).toMatchObject({ isError: true, output: expect.stringMatching(/Unknown tool/) }); // create_task: session 2
-    expect(results[1]?.isError).toBeUndefined();
+    expect(results.map((r) => r.isError)).toEqual([undefined, undefined]);
+    const created = JSON.parse(results[0]!.output) as { id: string };
+    expect(h.repos.tasks.get(created.id)).toMatchObject({
+      title: 'Mock subtask',
+      assigneeBotId: worker.id,
+      createdBy: worker.id,
+      originThreadId: run.threadId,
+    });
+    expect(h.repos.tasks.listEvents(created.id).map((e) => [e.kind, e.payload.runId])).toEqual([
+      ['created', run.id],
+    ]);
     const asked = JSON.parse(results[1]!.output) as { run_id: string };
     expect(h.repos.runs.get(asked.run_id)).toMatchObject({
       botId: lead.id,
@@ -281,6 +301,171 @@ describe('Platform MCP server (F17)', () => {
       parentRunId: run.id,
       hopCount: 1,
       status: 'succeeded',
+    });
+  });
+
+  describe('tasks, decisions, lessons, approvals and notifications (session 2)', () => {
+    let lead: { id: string };
+    let dev: { id: string };
+    let qa: { id: string };
+    let cl: Client;
+    let cd: Client;
+    let cq: Client;
+    beforeEach(async () => {
+      lead = bots.create({ name: 'Lead', engine: 'mock' });
+      h.repos.bots.update(lead.id, { isLead: true });
+      dev = bots.create({ name: 'Dev', engine: 'mock' });
+      qa = bots.create({ name: 'QA', engine: 'mock' });
+      cl = await connect(tokenOf(lead.id));
+      cd = await connect(tokenOf(dev.id));
+      cq = await connect(tokenOf(qa.id));
+    });
+
+    it('enforces who may create and assign tasks', async () => {
+      // A specialist's task is its own by default; it can't assign others or sub-task someone else's task.
+      const own = await call(cd, 'create_task', { title: 'Write parser' });
+      expect(own).toMatchObject({ assignee: 'dev', created_by: 'dev', status: 'todo', priority: 'p2' });
+      expect(await call(cd, 'create_task', { title: 'Test it', assignee: 'qa' })).toEqual({
+        error: expect.stringMatching(/Only the lead/),
+      });
+      expect(await call(cd, 'create_task', { title: 'Sub', parent_task_id: own.id })).toMatchObject({
+        parent_task_id: own.id,
+      });
+      const leadTask = await call(cl, 'create_task', { title: 'Plan', priority: 'p0' });
+      expect(leadTask).toMatchObject({ assignee: null, created_by: 'lead' });
+      expect(await call(cq, 'create_task', { title: 'Sub', parent_task_id: own.id })).toEqual({
+        error: expect.stringMatching(/assigned to you/),
+      });
+      expect(
+        await call(cl, 'create_task', { title: 'Test it', assignee: '@qa', parent_task_id: own.id }),
+      ).toMatchObject({
+        assignee: 'qa',
+      });
+      bots.archive(qa.id);
+      expect(await call(cl, 'create_task', { title: 'x', assignee: 'qa' })).toEqual({
+        error: 'QA is archived',
+      });
+
+      const mine = (await call(cd, 'list_tasks', { assignee: 'self' })) as unknown as { title: string }[];
+      expect(mine.map((t) => t.title).sort()).toEqual(['Sub', 'Write parser']);
+      const subs = (await call(cd, 'list_tasks', {
+        status: ['todo'],
+        parent_task_id: own.id,
+      })) as unknown as unknown[];
+      expect(subs).toHaveLength(2);
+    });
+
+    it('runs a task through update, submit and lead review, with a task_events timeline', async () => {
+      const t = await call(cl, 'create_task', {
+        title: 'Build API',
+        assignee: 'dev',
+        acceptance: 'Tests pass',
+      });
+      const id = t.id as string;
+      expect(await call(cq, 'update_task', { id, status: 'in_progress' })).toEqual({
+        error: expect.stringMatching(/assignee, its creator or the lead/),
+      });
+      expect(await call(cd, 'update_task', { id })).toEqual({ error: 'Give a status or a note' });
+      expect(await call(cd, 'update_task', { id, status: 'in_progress', note: 'Started' })).toMatchObject({
+        status: 'in_progress',
+      });
+      expect(await call(cd, 'update_task', { id, status: 'done' })).toEqual({
+        error: expect.stringMatching(/Invalid/),
+      });
+      expect(await call(cl, 'review_task', { id, verdict: 'approve', feedback: 'ok' })).toEqual({
+        error: expect.stringMatching(/not in_review/),
+      });
+      expect(await call(cq, 'submit_task_result', { id, summary: 'mine' })).toEqual({
+        error: 'Only the assignee can hand in this task',
+      });
+      expect(
+        await call(cd, 'submit_task_result', {
+          id,
+          summary: 'Done; 12 tests',
+          artifacts: ['/shared/api.ts'],
+        }),
+      ).toMatchObject({ status: 'in_review' });
+      expect(await call(cd, 'review_task', { id, verdict: 'approve', feedback: 'self-approve' })).toEqual({
+        error: 'Only the lead reviews tasks',
+      });
+      expect(
+        await call(cl, 'review_task', { id, verdict: 'request_changes', feedback: 'Add error cases' }),
+      ).toMatchObject({ status: 'changes_requested', revision_count: 1 });
+      await call(cd, 'submit_task_result', { id, summary: 'Error cases added' });
+      expect(await call(cl, 'review_task', { id, verdict: 'approve', feedback: 'Good' })).toMatchObject({
+        status: 'done',
+      });
+      expect(await call(cd, 'update_task', { id, status: 'in_progress' })).toEqual({
+        error: 'This task is done',
+      });
+
+      const full = await call(cq, 'get_task', { id });
+      expect(full).toMatchObject({
+        acceptance: 'Tests pass',
+        result_summary: 'Error cases added',
+        artifacts: [],
+        subtasks: [],
+      });
+      const timeline = full.timeline as { kind: string; by: string }[];
+      expect(timeline.map((e) => `${e.kind}:${e.by}`)).toEqual([
+        'created:lead',
+        'status:dev',
+        'note:dev',
+        'submitted:dev',
+        'reviewed:lead',
+        'submitted:dev',
+        'reviewed:lead',
+      ]);
+      expect(await call(cq, 'get_task', { id: 'tsk_nope' })).toEqual({ error: 'Task tsk_nope not found' });
+    });
+
+    it('records decisions and lessons', async () => {
+      const t = await call(cl, 'create_task', { title: 'Pick a DB', assignee: 'dev' });
+      const d = await call(cd, 'record_decision', {
+        title: 'Use SQLite',
+        options: '- SQLite\n- Postgres',
+        decision: 'SQLite: single user, one file',
+        task_id: t.id,
+      });
+      expect(h.repos.decisions.get(d.id as string)).toMatchObject({
+        createdBy: dev.id,
+        taskId: t.id,
+        status: 'proposed',
+        decisionMd: 'SQLite: single user, one file',
+      });
+      expect(h.repos.tasks.listEvents(t.id as string).map((e) => e.kind)).toEqual(['created', 'decision']);
+      const l = await call(cd, 'add_lesson', { topic: 'Databases', lesson: 'Start simple.', task_id: t.id });
+      expect(h.repos.lessons.get(l.id as string)).toMatchObject({ source: 'task', sourceId: t.id });
+      const m = await call(cd, 'add_lesson', { topic: 'Testing', lesson: 'Test edges.' });
+      expect(h.repos.lessons.get(m.id as string)).toMatchObject({ source: 'manual', sourceId: null });
+      expect(await call(cd, 'record_decision', { title: 'x', decision: 'y', task_id: 'tsk_no' })).toEqual({
+        error: 'Task tsk_no not found',
+      });
+    });
+
+    it('request_approval is non-blocking; check_approval only sees your own; notify_owner notifies', async () => {
+      const req = await call(cd, 'request_approval', {
+        action: 'Push to main',
+        details: 'Merges #4',
+        risk: 'high',
+      });
+      expect(req).toMatchObject({ status: 'pending' });
+      const aid = req.approval_id as string;
+      expect(h.repos.approvals.get(aid)).toMatchObject({ botId: dev.id, risk: 'high', runId: null });
+      expect(await call(cd, 'check_approval', { approval_id: aid })).toMatchObject({ status: 'pending' });
+      expect(await call(cq, 'check_approval', { approval_id: aid })).toEqual({
+        error: expect.stringMatching(/No approval/),
+      });
+      h.repos.approvals.decide(aid, { status: 'approved' });
+      expect(await call(cd, 'check_approval', { approval_id: aid })).toMatchObject({ status: 'approved' });
+
+      await call(cd, 'notify_owner', { title: 'Build is green', body: 'All 40 tests pass.' });
+      expect(h.repos.notifications.list().map((n) => [n.kind, n.title])).toEqual(
+        expect.arrayContaining([
+          ['approval.requested', 'Dev asks to: Push to main'],
+          ['bot.notice', 'Dev: Build is green'],
+        ]),
+      );
     });
   });
 });

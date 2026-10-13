@@ -1,4 +1,4 @@
-import type { Bot, Memory, Repos, Run } from '@agenta/db';
+import type { Bot, Memory, Repos, Run, Task } from '@agenta/db';
 import {
   PLATFORM_TOOL_PREFIX,
   type PlatformToolInput,
@@ -34,6 +34,23 @@ export const PLATFORM_TOOL_DESCRIPTIONS: Record<PlatformToolName, string> = {
     'Save something worth remembering: scope "bot" is only for you, "shared" is for the whole team. ' +
     'Never save secrets.',
   search_memory: 'Search your memories and the team’s shared memories by keywords.',
+  create_task:
+    'Create a task on the team board. Specialists create tasks (and sub-tasks of their own tasks) for ' +
+    'themselves; only the lead assigns work to others.',
+  list_tasks: 'Tasks on the board, most recently updated first, filtered by status, assignee or parent task.',
+  get_task: 'A task with its sub-tasks and timeline.',
+  update_task: 'Move your task to todo, in_progress or blocked, and/or add a progress note.',
+  submit_task_result: 'Hand in your work on a task for review (status becomes in_review).',
+  review_task:
+    'Lead only: approve a task in review (done) or request changes (changes_requested) with feedback.',
+  record_decision:
+    'Record a design decision (context, options, decision, consequences) for the team and the owner.',
+  add_lesson: 'Add a lesson for the owner to learn from: what happened and why it matters.',
+  request_approval:
+    'Ask the owner before a risky action (pushing, deleting, spending, contacting people). Returns at once ' +
+    'with an approval id; do not act until check_approval says approved.',
+  check_approval: 'The status of one of your approval requests: pending, approved, denied or expired.',
+  notify_owner: 'Send the owner a notification (keep it for things they should see soon).',
 };
 
 const MAX_REPLY_CHARS = 20_000;
@@ -78,6 +95,42 @@ export class PlatformTools {
     const bot = bots.getBySlug(ref.replace(/^@/, '').toLowerCase()) ?? bots.get(ref);
     if (!bot) throw new ToolError('bot_not_found', `No teammate called ${ref}; see list_bots`);
     return bot;
+  }
+
+  /** "self" or a handle/id; archived bots can't take work. */
+  private assignee(caller: Bot, ref: string): Bot {
+    const bot = ref === 'self' ? caller : this.bot(ref);
+    if (bot.archivedAt) throw new ToolError('bot_archived', `${bot.name} is archived`);
+    return bot;
+  }
+
+  private task(id: string): Task {
+    const task = this.opts.repos.tasks.get(id);
+    if (!task) throw new ToolError('task_not_found', `Task ${id} not found`);
+    return task;
+  }
+
+  /** Assignee, creator or lead: who may move a task or add notes to it. */
+  private mayWorkOn(bot: Bot, task: Task): boolean {
+    return bot.isLead || task.assigneeBotId === bot.id || task.createdBy === bot.id;
+  }
+
+  private taskView(t: Task) {
+    return {
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      assignee: t.assigneeBotId ? this.handle(t.assigneeBotId) : null,
+      created_by: t.createdBy === 'user' ? 'owner' : this.handle(t.createdBy),
+      parent_task_id: t.parentTaskId,
+      revision_count: t.revisionCount,
+      updated_at: t.updatedAt,
+    };
+  }
+
+  private event(task: Task, bot: Bot, kind: string, payload: Record<string, unknown> = {}): void {
+    this.opts.repos.tasks.addEvent({ taskId: task.id, kind, actor: bot.id, payload });
   }
 
   private handle(botId: string | null): string {
@@ -208,6 +261,178 @@ export class PlatformTools {
           tags: m.tags,
           updated_at: m.updatedAt,
         }));
+    },
+
+    create_task: (bot, input) => {
+      const { repos } = this.opts;
+      const assignee =
+        input.assignee !== undefined ? this.assignee(bot, input.assignee) : bot.isLead ? null : bot;
+      if (!bot.isLead && assignee?.id !== bot.id) {
+        throw new ToolError(
+          'lead_only',
+          'Only the lead assigns tasks to others; ask_bot your teammate instead',
+        );
+      }
+      if (input.parent_task_id) {
+        const parent = this.task(input.parent_task_id);
+        if (!bot.isLead && parent.assigneeBotId !== bot.id) {
+          throw new ToolError('forbidden', 'You can only add sub-tasks to tasks assigned to you');
+        }
+      }
+      const run = this.currentRun(bot.id);
+      const task = repos.tasks.create({
+        title: input.title,
+        descriptionMd: input.description,
+        acceptanceMd: input.acceptance,
+        priority: input.priority,
+        assigneeBotId: assignee?.id ?? null,
+        createdBy: bot.id,
+        parentTaskId: input.parent_task_id ?? null,
+        originThreadId: run?.threadId ?? null,
+      });
+      this.event(task, bot, 'created', { assignee: task.assigneeBotId, runId: run?.id ?? null });
+      return this.taskView(task);
+    },
+
+    list_tasks: (bot, { status, assignee, parent_task_id, limit }) =>
+      this.opts.repos.tasks
+        .list({
+          status,
+          assigneeBotId: assignee ? this.assignee(bot, assignee).id : undefined,
+          parentTaskId: parent_task_id,
+        })
+        .slice(0, limit)
+        .map((t) => this.taskView(t)),
+
+    get_task: (_bot, { id }) => {
+      const { repos } = this.opts;
+      const task = this.task(id);
+      return {
+        ...this.taskView(task),
+        description: task.descriptionMd,
+        acceptance: task.acceptanceMd,
+        result_summary: task.resultSummaryMd,
+        artifacts: task.artifacts,
+        subtasks: repos.tasks.list({ parentTaskId: task.id }).map((t) => this.taskView(t)),
+        timeline: repos.tasks.listEvents(task.id).map((e) => ({
+          kind: e.kind,
+          by: e.actor === 'user' ? 'owner' : this.handle(e.actor),
+          at: e.createdAt,
+          ...e.payload,
+        })),
+      };
+    },
+
+    update_task: (bot, { id, status, note }) => {
+      const task = this.task(id);
+      if (!this.mayWorkOn(bot, task)) {
+        throw new ToolError('forbidden', 'Only its assignee, its creator or the lead can update this task');
+      }
+      if (status === undefined && note === undefined)
+        throw new ToolError('invalid_input', 'Give a status or a note');
+      if (status && task.status === 'done') throw new ToolError('task_done', 'This task is done');
+      const updated = status ? this.opts.repos.tasks.update(id, { status })! : task;
+      if (status && status !== task.status)
+        this.event(task, bot, 'status', { from: task.status, to: status });
+      if (note) this.event(task, bot, 'note', { note });
+      return this.taskView(updated);
+    },
+
+    submit_task_result: (bot, { id, summary, artifacts }) => {
+      const task = this.task(id);
+      if (task.assigneeBotId !== bot.id && !bot.isLead) {
+        throw new ToolError('forbidden', 'Only the assignee can hand in this task');
+      }
+      if (task.status === 'done') throw new ToolError('task_done', 'This task is done');
+      const updated = this.opts.repos.tasks.update(id, {
+        status: 'in_review',
+        resultSummaryMd: summary,
+        artifacts,
+      })!;
+      this.event(task, bot, 'submitted', { summary, artifacts, runId: this.currentRun(bot.id)?.id ?? null });
+      return this.taskView(updated);
+    },
+
+    review_task: (bot, { id, verdict, feedback }) => {
+      if (!bot.isLead) throw new ToolError('lead_only', 'Only the lead reviews tasks');
+      const task = this.task(id);
+      if (task.status !== 'in_review') {
+        throw new ToolError('not_in_review', `Task ${id} is ${task.status}, not in_review`);
+      }
+      const updated = this.opts.repos.tasks.update(
+        id,
+        verdict === 'approve'
+          ? { status: 'done' }
+          : { status: 'changes_requested', revisionCount: task.revisionCount + 1 },
+      )!;
+      this.event(task, bot, 'reviewed', { verdict, feedback });
+      return this.taskView(updated);
+    },
+
+    record_decision: (bot, input) => {
+      if (input.task_id) this.task(input.task_id);
+      const d = this.opts.repos.decisions.create({
+        title: input.title,
+        contextMd: input.context,
+        optionsMd: input.options,
+        decisionMd: input.decision,
+        consequencesMd: input.consequences,
+        status: input.status,
+        taskId: input.task_id ?? null,
+        threadId: this.currentRun(bot.id)?.threadId ?? null,
+        createdBy: bot.id,
+      });
+      if (input.task_id)
+        this.event(this.task(input.task_id), bot, 'decision', { decisionId: d.id, title: d.title });
+      return { id: d.id, title: d.title, status: d.status };
+    },
+
+    add_lesson: (bot, input) => {
+      if (input.task_id) this.task(input.task_id);
+      const runId = this.currentRun(bot.id)?.id ?? null;
+      const l = this.opts.repos.lessons.create({
+        topic: input.topic,
+        lessonMd: input.lesson,
+        whyItMattersMd: input.why_it_matters,
+        source: input.task_id ? 'task' : runId ? 'run' : 'manual',
+        sourceId: input.task_id ?? runId,
+      });
+      return { id: l.id, topic: l.topic };
+    },
+
+    request_approval: (bot, { action, details, risk }) => {
+      const { repos } = this.opts;
+      const a = repos.approvals.create({
+        botId: bot.id,
+        runId: this.currentRun(bot.id)?.id ?? null,
+        action,
+        detailsMd: details,
+        risk,
+      });
+      repos.notifications.create({
+        kind: 'approval.requested',
+        title: `${bot.name} asks to: ${action}`,
+        body: `Risk: ${risk}. ${details}`.slice(0, 2_000),
+        link: '/',
+      });
+      return { approval_id: a.id, status: a.status };
+    },
+
+    check_approval: (bot, { approval_id }) => {
+      const a = this.opts.repos.approvals.get(approval_id);
+      if (!a || a.botId !== bot.id)
+        throw new ToolError('approval_not_found', `No approval ${approval_id} of yours`);
+      return { approval_id: a.id, action: a.action, status: a.status, decided_at: a.decidedAt };
+    },
+
+    notify_owner: (bot, { title, body }) => {
+      const n = this.opts.repos.notifications.create({
+        kind: 'bot.notice',
+        title: `${bot.name}: ${title}`,
+        body,
+        link: `/bots/${bot.id}`,
+      });
+      return { notification_id: n.id };
     },
   };
 }
