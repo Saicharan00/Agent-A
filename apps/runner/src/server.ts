@@ -17,6 +17,8 @@ import type { LiveHub } from './live/hub';
 import { registerLiveRoutes } from './live/routes';
 import { registerEngineStateRoute, registerRunRoutes } from './runs/routes';
 import type { RunService } from './runs/service';
+import { registerDesktopRoutes } from './desktop/routes';
+import type { DesktopService } from './desktop/service';
 import { registerTerminalRoutes } from './terminal/routes';
 import type { TerminalService } from './terminal/service';
 import { registerThreadRoutes } from './threads/routes';
@@ -45,6 +47,8 @@ export type ServerDeps = {
   threads?: ThreadService;
   /** Live terminal (F14): GET /ws/terminal/:botId. */
   terminals?: TerminalService;
+  /** Live desktop (F16): GET /ws/desktop/:botId. */
+  desktops?: DesktopService;
   /** Files & shared workspace (F15): /api/bots/:id/files*. */
   files?: FilesService;
 };
@@ -97,11 +101,12 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
   if (deps.threads) await registerThreadRoutes(app, deps.threads);
   if (deps.files) await registerFileRoutes(app, deps.files);
-  if (deps.live || deps.terminals) {
+  if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
     if (deps.live) registerLiveRoutes(app, deps.live, { webOrigin: config.webOrigin });
     if (deps.terminals) registerTerminalRoutes(app, deps.terminals, { webOrigin: config.webOrigin });
+    if (deps.desktops) registerDesktopRoutes(app, deps.desktops, { webOrigin: config.webOrigin });
   }
 
   return app;

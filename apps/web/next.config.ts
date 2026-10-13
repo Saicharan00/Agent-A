@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
       { source: '/ws', destination: `${runnerUrl}/ws` },
       // Bot terminals (F14).
       { source: '/ws/terminal/:botId', destination: `${runnerUrl}/ws/terminal/:botId` },
+      // Bot desktops (F16, noVNC).
+      { source: '/ws/desktop/:botId', destination: `${runnerUrl}/ws/desktop/:botId` },
     ];
   },
 };

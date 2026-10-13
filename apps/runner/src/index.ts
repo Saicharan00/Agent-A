@@ -19,6 +19,7 @@ import { LiveHub } from './live/hub';
 import { computerPreparer } from './runs/prepare';
 import { RunService } from './runs/service';
 import { TerminalService } from './terminal/service';
+import { DesktopService } from './desktop/service';
 import { ThreadService } from './threads/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
@@ -109,6 +110,7 @@ const files = new FilesService({
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const terminals =
   containers && new TerminalService({ containers, log: rootLog.child({ module: 'terminal' }) });
+const desktops = containers && new DesktopService({ containers, log: rootLog.child({ module: 'desktop' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
 const app = await buildServer(config, {
   repos,
@@ -119,6 +121,7 @@ const app = await buildServer(config, {
   bots,
   threads,
   terminals,
+  desktops,
   files,
 });
 app.addHook('onClose', async () => {

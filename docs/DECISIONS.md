@@ -442,3 +442,13 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   flagged by the runner and hidden behind a toggle (persisted in localStorage). Other dotfiles stay visible.
 - **Files tab mounts on first visit and stays mounted** while the panel is open, so an unsaved edit survives tab
   switches. `/shared/{knowledge,decisions,handoff,projects}` are created at runner start and before a container starts.
+
+## F16 — Browser & live desktop (session 1)
+- **Desktop proxy is a plain WS-to-WS bridge** to the container's websockify (published on 127.0.0.1 in the VM), using
+  Node 22's global `WebSocket` client, so no new runner dependency. The browser never sees the container port.
+  View-only is enforced by the noVNC client only (parsing RFB in the runner to drop input is not worth it for a
+  single-user, localhost app); the socket has the same origin check as the terminal.
+- **New web dependency `@novnc/novnc@1.7.0`** (the RFB client the plan names). 1.7.0, not 1.6.0: 1.6.0's CommonJS
+  `lib/` contains top-level await and does not bundle. Types are a small local `types/novnc.d.ts`.
+- **Desktop mounts only while its tab is shown.** A watched desktop holds a container lease (no idle stop); leaving the
+  tab disconnects so an unwatched computer can still idle-stop.

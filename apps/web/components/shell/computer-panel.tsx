@@ -3,6 +3,7 @@
 import { FolderTree, ListChecks, MonitorPlay, SquareTerminal, X } from 'lucide-react';
 import { type KeyboardEvent, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
+import { DesktopView } from '@/components/computer/desktop-view';
 import { FilesPanel } from '@/components/computer/files-panel';
 import { TerminalPanel } from '@/components/computer/terminal-panel';
 import { EmptyState } from '@/components/empty-state';
@@ -13,7 +14,7 @@ import { COMPUTER_TABS, type ComputerTab, useShell } from './shell-context';
 
 const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal; feature: string }> = {
   terminal: { label: 'Terminal', icon: SquareTerminal, feature: 'F14' }, // TerminalPanel
-  desktop: { label: 'Desktop', icon: MonitorPlay, feature: 'F16' },
+  desktop: { label: 'Desktop', icon: MonitorPlay, feature: 'F16' }, // DesktopView
   files: { label: 'Files', icon: FolderTree, feature: 'F15' }, // FilesPanel
   runs: { label: 'Runs', icon: ListChecks, feature: 'F10' },
 };
@@ -103,13 +104,21 @@ export function ComputerPanel() {
         {/* Always mounted while the panel is open, so shells survive switching tabs and bots. */}
         <TerminalPanel bot={bot} bots={bots} visible={computerTab === 'terminal'} />
         {bot && filesMounted && <FilesPanel key={bot.id} bot={bot} visible={computerTab === 'files'} />}
-        {computerTab !== 'terminal' && !(computerTab === 'files' && bot) && (
+        {/* Mounted only while shown: a watched desktop keeps the computer awake. */}
+        {bot && computerTab === 'desktop' && <DesktopView key={bot.id} bot={bot} />}
+        {computerTab !== 'terminal' && !((computerTab === 'files' || computerTab === 'desktop') && bot) && (
           <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
             {computerTab === 'files' ? (
               <EmptyState
                 icon={meta.icon}
                 title="No bot selected"
                 description="Pick a bot (its Computer button) to browse its files and the team share."
+              />
+            ) : computerTab === 'desktop' ? (
+              <EmptyState
+                icon={meta.icon}
+                title="No bot selected"
+                description="Pick a bot (its Computer button) to watch its screen."
               />
             ) : (
               <EmptyState

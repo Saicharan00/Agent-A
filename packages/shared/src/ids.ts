@@ -17,6 +17,7 @@ export const ID_PREFIXES = {
   connector: 'con',
   guardTerm: 'grd',
   terminal: 'trm',
+  desktop: 'dsk',
 } as const;
 export type IdKind = keyof typeof ID_PREFIXES;
 
