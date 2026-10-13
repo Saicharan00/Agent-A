@@ -49,6 +49,8 @@ export interface CliStreamMapper {
 }
 
 const MAX_STDERR = 64 * 1024;
+/** Error code for a CLI that could not be started (setup or exec failed before it produced output). */
+export const EXEC_FAILED = 'exec_failed';
 const RUN_FILES = '.agenta/runs';
 
 type Attempt = { status: RunFinishStatus; sessionId?: string; resumeMissing: boolean };
@@ -126,7 +128,11 @@ export abstract class CliEngine implements EngineAdapter {
       }
     } catch (err) {
       if (!signal.aborted)
-        yield { type: 'error', message: `Could not run ${this.label}: ${(err as Error).message}` };
+        yield {
+          type: 'error',
+          message: `Could not run ${this.label}: ${(err as Error).message}`,
+          code: EXEC_FAILED,
+        };
       result = { status: signal.aborted ? 'cancelled' : 'failed', sessionId, resumeMissing: false };
     } finally {
       try {

@@ -149,6 +149,10 @@ export const runs = sqliteTable(
     usage: text('usage_json', { mode: 'json' }).$type<RunUsage>(),
     parentRunId: text('parent_run_id').references((): AnySQLiteColumn => runs.id, { onDelete: 'set null' }),
     hopCount: integer('hop_count').notNull().default(0),
+    /** The usage-limited run this one retries (F10: a limited turn is re-run once after the reset). */
+    retryOfRunId: text('retry_of_run_id').references((): AnySQLiteColumn => runs.id, {
+      onDelete: 'set null',
+    }),
   },
   (t) => [
     index('runs_status_created_idx').on(t.status, t.createdAt),

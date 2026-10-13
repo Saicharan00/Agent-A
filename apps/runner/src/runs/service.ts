@@ -2,6 +2,7 @@ import type { Bot, Repos, Run } from '@agenta/db';
 import type {
   Engine,
   EngineEvent,
+  LiveEngineState,
   LiveMessage,
   LiveRunUpdated,
   RunFinishStatus,
@@ -9,7 +10,7 @@ import type {
   RunUsage,
 } from '@agenta/shared';
 import type { EventBus } from '../bus';
-import type { Log } from '../engines/cli';
+import { EXEC_FAILED, type Log } from '../engines/cli';
 import { CONTAINER_HOME } from '../engines/process';
 import { buildSystemPromptAppend } from '../engines/prompt';
 import type { EngineRegistry } from '../engines/registry';
@@ -23,8 +24,14 @@ import { RunEventWriter } from './events';
 export const DEFAULT_MAX_CONCURRENT_RUNS = 2;
 /** settings key for the global concurrency cap (a positive integer). */
 export const MAX_CONCURRENT_SETTING = 'maxConcurrentRuns';
+export const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
+/** How long an engine stays paused when a limit message has no (usable) reset time. */
+export const DEFAULT_LIMIT_PAUSE_MS = 30 * 60_000;
 export const MCP_CONFIG_PATH = `${CONTAINER_HOME}/.agenta/mcp.json`;
 export const WORK_DIR = `${CONTAINER_HOME}/work`;
+
+export const RUNNER_RESTARTED = 'runner restarted';
+export const RUNNER_STOPPED = 'runner stopped';
 
 export class RunError extends Error {
   constructor(
@@ -63,11 +70,19 @@ export type RunServiceOptions = {
   flushMs?: number;
   /** Safety-net scheduler tick (limits expiring, missed wake-ups). Default 5 s. */
   pollMs?: number;
+  /** Run time limit when the bot sets none (settings.runTimeoutMin). Default 30 min. */
+  defaultTimeoutMs?: number;
+  /** Pause before retrying a transient Docker/exec failure. Default 2 s. */
+  retryDelayMs?: number;
+  /** How long POST /runs/:id/cancel waits for a running engine to stop. Default 15 s. */
+  cancelWaitMs?: number;
 };
 
-type Active = { run: Run; controller: AbortController; done: Promise<void> };
+type StopReason = 'cancel' | 'timeout' | 'shutdown';
 
-/** Per-attempt bookkeeping while an engine streams. */
+type Active = { run: Run; controller: AbortController; reason?: StopReason; done: Promise<void> };
+
+/** Bookkeeping while a run executes (across its attempts). */
 type Turn = {
   texts: string[];
   messageId?: string;
@@ -76,7 +91,36 @@ type Turn = {
   lastError?: string;
   sessionId?: string;
   engineStatus?: RunFinishStatus;
+  limit?: Extract<EngineEvent, { type: 'limit.hit' }>;
 };
+
+const OUTPUT_EVENTS = new Set<EngineEvent['type']>([
+  'text.delta',
+  'text.final',
+  'thinking',
+  'tool.call',
+  'tool.result',
+  'file.changed',
+]);
+
+/** Error codes worth one retry: the computer or the Docker connection hiccuped, not a permanent setup problem. */
+const TRANSIENT_CODES = new Set([
+  'start_failed',
+  'start_timeout',
+  'container_missing',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+]);
+
+export function isTransientError(err: unknown): boolean {
+  const e = err as { code?: unknown; statusCode?: unknown } | null;
+  if (typeof e?.code === 'string' && TRANSIENT_CODES.has(e.code)) return true;
+  // Docker API errors (docker-modem) carry the HTTP status: 5xx is the daemon failing, not a bad request.
+  return typeof e?.statusCode === 'number' && e.statusCode >= 500 && e.code === undefined;
+}
 
 export class RunService {
   private readonly active = new Map<string, Active>();
@@ -92,7 +136,7 @@ export class RunService {
   // ---------- queue ----------
 
   /** Creates a `queued` run for the bot's effective engine and wakes the scheduler. */
-  enqueue(input: EnqueueInput): Run {
+  enqueue(input: EnqueueInput & { retryOfRunId?: string | null }): Run {
     const { repos, engines } = this.opts;
     const bot = repos.bots.get(input.botId);
     if (!bot) throw new RunError('bot_not_found', `Bot ${input.botId} not found`, 404);
@@ -102,6 +146,32 @@ export class RunService {
     this.publishRun(run);
     this.schedule();
     return run;
+  }
+
+  /**
+   * Cancels a queued run at once, or stops a running one (the engine gets SIGINT, then SIGKILL) and waits up to
+   * `cancelWaitMs` for it to finish. Returns the run as it is afterwards.
+   */
+  async cancel(runId: string): Promise<Run> {
+    const { repos } = this.opts;
+    const run = repos.runs.get(runId);
+    if (!run) throw new RunError('run_not_found', `Run ${runId} not found`, 404);
+    const active = this.active.get(runId);
+    if (active) {
+      this.stopActive(active, 'cancel');
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        active.done,
+        new Promise<void>((r) => (timer = setTimeout(r, this.opts.cancelWaitMs ?? 15_000))),
+      ]);
+      clearTimeout(timer);
+      return repos.runs.get(runId) ?? run;
+    }
+    if (run.status !== 'queued' && run.status !== 'running') {
+      throw new RunError('run_finished', `Run ${runId} already finished (${run.status})`, 409);
+    }
+    // Queued, or `running` in the DB without an engine in this process (cannot normally happen after recovery).
+    return this.finishWithoutEngine(run, 'cancelled', null) ?? repos.runs.get(runId)!;
   }
 
   /** Runs currently executing in this process. */
@@ -124,21 +194,55 @@ export class RunService {
     }
   }
 
-  // ---------- scheduler ----------
+  // ---------- lifecycle ----------
 
+  /**
+   * Crash recovery, then scheduling. Runs left `running` by a previous process can't be resumed (their engine
+   * process died with the exec connection): they fail with "runner restarted". Queued runs simply start.
+   */
   start(): void {
+    this.recover();
     this.stopped = false;
     this.poll ??= setInterval(() => this.tick(), this.opts.pollMs ?? 5000);
     this.poll.unref();
     this.schedule();
   }
 
-  /** Stops scheduling. Runs still executing are left alone (see shutdown in session 2). */
+  recover(): string[] {
+    const { repos, log } = this.opts;
+    const recovered: string[] = [];
+    let stale: Run[];
+    do {
+      stale = repos.runs.list({ status: 'running', limit: 500 }).filter((r) => !this.active.has(r.id));
+      for (const run of stale) {
+        if (this.finishWithoutEngine(run, 'failed', RUNNER_RESTARTED)) recovered.push(run.id);
+      }
+    } while (stale.length === 500);
+    if (recovered.length) log.warn({ runs: recovered }, 'runs interrupted by a runner restart marked failed');
+    return recovered;
+  }
+
+  /** Stops scheduling new runs. Executing runs continue (see shutdown). */
   stop(): void {
     this.stopped = true;
     clearInterval(this.poll);
     this.poll = undefined;
   }
+
+  /** Graceful shutdown: stop scheduling, stop every running engine and wait (bounded) for the outcomes to be saved. */
+  async shutdown(timeoutMs = 8000): Promise<void> {
+    this.stop();
+    const running = [...this.active.values()];
+    for (const a of running) this.stopActive(a, 'shutdown');
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([
+      Promise.all(running.map((a) => a.done)),
+      new Promise<void>((r) => (timer = setTimeout(r, timeoutMs))),
+    ]);
+    clearTimeout(timer);
+  }
+
+  // ---------- scheduler ----------
 
   /** Coalesces wake-ups (enqueue, finish) into one tick on the next turn of the event loop. */
   schedule(): void {
@@ -162,10 +266,11 @@ export class RunService {
   tick(): void {
     if (this.stopped) return;
     const { repos } = this.opts;
+    const nowIso = this.now().toISOString();
+    this.clearExpiredLimits(nowIso);
     const max = this.maxConcurrent();
     if (this.active.size >= max) return;
     const busyBots = new Set([...this.active.values()].map((a) => a.run.botId));
-    const nowIso = this.now().toISOString();
     const limited = new Map<Engine, boolean>();
     const isLimited = (e: Engine) => {
       if (!limited.has(e)) limited.set(e, repos.engineState.isLimited(e, nowIso));
@@ -177,11 +282,10 @@ export class RunService {
       const run = repos.runs.markRunning(queued.id);
       if (!run) continue; // cancelled meanwhile
       busyBots.add(run.botId);
-      const controller = new AbortController();
-      const active: Active = { run, controller, done: Promise.resolve() };
+      const active: Active = { run, controller: new AbortController(), done: Promise.resolve() };
       this.active.set(run.id, active);
       this.publishRun(run);
-      active.done = this.execute(run, controller.signal)
+      active.done = this.execute(active)
         .catch((err: unknown) => {
           // Only reachable if recording the outcome itself failed (e.g. the run row was deleted).
           this.opts.log.error({ runId: run.id, err: (err as Error).message }, 'could not record run outcome');
@@ -193,21 +297,46 @@ export class RunService {
     }
   }
 
+  /** Limits whose time has passed: clear them and tell the UI the engine is available again. */
+  private clearExpiredLimits(nowIso: string): void {
+    const { repos } = this.opts;
+    for (const row of repos.engineState.list()) {
+      if (!row.limitedUntil || row.limitedUntil > nowIso) continue;
+      repos.engineState.clearLimit(row.engine);
+      this.opts.log.info({ engine: row.engine }, 'engine usage limit reset');
+      this.publishEngineState(row.engine, null);
+    }
+  }
+
+  private stopActive(active: Active, reason: StopReason): void {
+    if (active.controller.signal.aborted) return;
+    active.reason = reason;
+    active.controller.abort();
+  }
+
   // ---------- execution ----------
 
-  private async execute(run: Run, signal: AbortSignal): Promise<void> {
+  private async execute(active: Active): Promise<void> {
+    const { run, controller } = active;
+    const signal = controller.signal;
     const { repos, log } = this.opts;
     const writer = new RunEventWriter(repos.runs, this.opts.bus, run.id, this.opts.flushMs);
     const turn: Turn = { texts: [], usage: {}, hasUsage: false };
-    let release: (() => void) | undefined;
     log.info({ runId: run.id, botId: run.botId, engine: run.engine }, 'run started');
+
+    const bot = repos.bots.get(run.botId);
+    const timeoutMs = this.timeoutFor(bot);
+    const timer = setTimeout(() => this.stopActive(active, 'timeout'), timeoutMs);
     try {
-      const bot = repos.bots.get(run.botId);
       if (!bot) throw new Error('The bot was deleted');
-      release = await this.opts.prepare?.(bot, run.engine);
-      const adapter = this.opts.engines.get({ engine: run.engine });
-      for await (const event of adapter.run(this.buildInput(run, bot), signal)) {
-        this.onEvent(run, event, turn, writer);
+      for (let attempt = 1; ; attempt++) {
+        const retry = await this.attempt(run, bot, signal, turn, writer);
+        if (!retry || attempt >= 2 || signal.aborted) break;
+        log.warn({ runId: run.id, err: turn.lastError }, 'transient failure; retrying the run once');
+        writer.push({ type: 'system', message: `Transient error (${turn.lastError}); retrying once.` });
+        turn.engineStatus = undefined;
+        turn.lastError = undefined;
+        await abortableDelay(this.opts.retryDelayMs ?? 2000, signal);
       }
     } catch (err) {
       const message = (err as Error).message;
@@ -217,15 +346,32 @@ export class RunService {
         writer.push({ type: 'error', message });
       }
     } finally {
-      release?.();
+      clearTimeout(timer);
     }
 
-    const status = turn.engineStatus ?? (signal.aborted ? 'cancelled' : 'failed');
-    const error =
-      status === 'failed'
-        ? (turn.lastError ??
-          (turn.engineStatus ? 'The engine reported a failure' : 'The engine ended without a result'))
-        : null;
+    let status: RunFinishStatus;
+    let error: string | null = null;
+    if (active.reason === 'timeout') {
+      status = 'failed';
+      error = `Timed out after ${formatMinutes(timeoutMs)}`;
+      writer.push({ type: 'error', message: `${error}; the run was stopped.` });
+    } else if (active.reason === 'shutdown') {
+      status = 'failed';
+      error = RUNNER_STOPPED;
+      writer.push({ type: 'error', message: 'The runner stopped while this run was in progress.' });
+    } else if (active.reason === 'cancel') {
+      status = 'cancelled';
+    } else {
+      status = turn.engineStatus ?? 'failed';
+      if (turn.limit && status === 'failed') status = 'limited';
+      if (status === 'failed') {
+        error =
+          turn.lastError ??
+          (turn.engineStatus ? 'The engine reported a failure' : 'The engine ended without a result');
+      }
+    }
+    if (status === 'limited') error = this.onLimited(run, turn, writer);
+
     writer.push({ type: 'run.finished', status, ...(turn.sessionId ? { sessionId: turn.sessionId } : {}) });
     writer.flush();
     this.saveSession(run, turn.sessionId);
@@ -236,6 +382,129 @@ export class RunService {
     });
     log.info({ runId: run.id, status, error }, 'run finished');
     if (finished) this.publishRun(finished);
+  }
+
+  /** One try at the turn. Returns true when it failed transiently before producing any output (worth a retry). */
+  private async attempt(
+    run: Run,
+    bot: Bot,
+    signal: AbortSignal,
+    turn: Turn,
+    writer: RunEventWriter,
+  ): Promise<boolean> {
+    let release: (() => void) | undefined;
+    let output = false;
+    let execFailed = false;
+    try {
+      try {
+        release = await this.opts.prepare?.(bot, run.engine);
+      } catch (err) {
+        if (signal.aborted) return false;
+        turn.lastError = (err as Error).message;
+        writer.push({ type: 'error', message: turn.lastError });
+        return isTransientError(err);
+      }
+      const adapter = this.opts.engines.get({ engine: run.engine });
+      for await (const event of adapter.run(this.buildInput(run, bot), signal)) {
+        if (OUTPUT_EVENTS.has(event.type)) output = true;
+        if (event.type === 'error' && event.code === EXEC_FAILED) execFailed = true;
+        this.onEvent(run, event, turn, writer);
+      }
+      return !output && !signal.aborted && turn.engineStatus === 'failed' && execFailed;
+    } catch (err) {
+      if (signal.aborted) return false;
+      turn.lastError = (err as Error).message;
+      writer.push({ type: 'error', message: turn.lastError });
+      return !output && isTransientError(err);
+    } finally {
+      release?.();
+    }
+  }
+
+  /**
+   * A usage limit: pause the engine until its reset (or 30 min), notify the owner, and re-run the same turn once
+   * as a new queued run that starts when the engine is available again. Returns the run's error text.
+   */
+  private onLimited(run: Run, turn: Turn, writer: RunEventWriter): string {
+    const { repos, log } = this.opts;
+    const now = this.now();
+    const parsed = turn.limit?.resetsAt ? Date.parse(turn.limit.resetsAt) : NaN;
+    const until = new Date(
+      Number.isFinite(parsed) && parsed > now.getTime() ? parsed : now.getTime() + DEFAULT_LIMIT_PAUSE_MS,
+    ).toISOString();
+    const current = repos.engineState.get(run.engine)?.limitedUntil;
+    // Several runs can hit the limit together: keep the latest reset time.
+    const limitedUntil = current && current > until ? current : until;
+    repos.engineState.upsert(run.engine, {
+      limitedUntil,
+      lastError: (turn.limit?.raw ?? turn.lastError ?? 'usage limit reached').slice(0, 2000),
+    });
+    this.publishEngineState(run.engine, limitedUntil);
+    log.warn({ runId: run.id, engine: run.engine, limitedUntil }, 'engine usage limit hit; queue paused');
+
+    let retry: Run | undefined;
+    if (!run.retryOfRunId) {
+      try {
+        retry = this.enqueue({
+          botId: run.botId,
+          threadId: run.threadId,
+          taskId: run.taskId,
+          trigger: run.trigger,
+          prompt: run.prompt,
+          parentRunId: run.parentRunId,
+          hopCount: run.hopCount,
+          retryOfRunId: run.id,
+        });
+        writer.push({
+          type: 'system',
+          message: `Usage limit reached. This turn will run again automatically (${retry.id}) after ${limitedUntil}.`,
+        });
+      } catch (err) {
+        log.warn(
+          { runId: run.id, err: (err as Error).message },
+          'could not queue the retry of a limited run',
+        );
+      }
+    }
+    const bot = repos.bots.get(run.botId);
+    const engineName = ENGINE_LABELS[run.engine];
+    repos.notifications.create({
+      kind: 'engine.limited',
+      title: `${engineName} usage limit reached`,
+      body: [
+        `${engineName} runs are paused until ${limitedUntil} (UTC).`,
+        retry
+          ? `${bot?.name ?? 'The bot'}'s turn will run again automatically then.`
+          : `${bot?.name ?? 'The bot'}'s turn already hit the limit once before, so it will not be retried.`,
+      ].join(' '),
+      link: '/usage',
+    });
+    return `Usage limit reached; ${run.engine} paused until ${limitedUntil}`;
+  }
+
+  /** Ends a run that has no engine executing in this process (queued, or orphaned by a restart). */
+  private finishWithoutEngine(
+    run: Run,
+    status: 'cancelled' | 'failed',
+    error: string | null,
+  ): Run | undefined {
+    const { repos } = this.opts;
+    const writer = new RunEventWriter(repos.runs, this.opts.bus, run.id, 0);
+    if (status === 'failed' && error === RUNNER_RESTARTED) {
+      writer.push({ type: 'error', message: 'The runner restarted while this run was in progress.' });
+    }
+    writer.push({ type: 'run.finished', status });
+    const finished = repos.runs.finish(run.id, { status, error });
+    if (finished) this.publishRun(finished);
+    this.schedule();
+    return finished;
+  }
+
+  private timeoutFor(bot: Bot | undefined): number {
+    const min = bot?.settings.runTimeoutMin;
+    return typeof min === 'number' && min > 0
+      ? min * 60_000
+      : (this.opts.defaultTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS);
   }
 
   private buildInput(run: Run, bot: Bot): EngineRunInput {
@@ -277,6 +546,9 @@ export class RunService {
         break;
       case 'error':
         turn.lastError = event.message;
+        break;
+      case 'limit.hit':
+        turn.limit = event;
         break;
     }
     writer.push(event);
@@ -337,4 +609,29 @@ export class RunService {
     bus.publish(`bot:${run.botId}`, live);
     if (run.threadId) bus.publish(`thread:${run.threadId}`, live);
   }
+
+  private publishEngineState(engine: Engine, limitedUntil: string | null): void {
+    const live: LiveEngineState = { type: 'engine.state', engine, limitedUntil };
+    this.opts.bus.publish('global', live);
+  }
+}
+
+const ENGINE_LABELS: Record<Engine, string> = { claude: 'Claude Code', codex: 'Codex', mock: 'Mock engine' };
+
+function formatMinutes(ms: number): string {
+  const min = ms / 60_000;
+  return min >= 1 ? `${Math.round(min * 10) / 10} min` : `${Math.round(ms / 1000)} s`;
+}
+
+function abortableDelay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const t = setTimeout(done, ms);
+    function done() {
+      clearTimeout(t);
+      signal.removeEventListener('abort', done);
+      resolve();
+    }
+    signal.addEventListener('abort', done, { once: true });
+  });
 }

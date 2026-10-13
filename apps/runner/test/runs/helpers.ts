@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { type Db, type Repos, closeDb, createRepos, openDb } from '@agenta/db';
 import type { Engine, EngineEvent, LiveEvent } from '@agenta/shared';
 import { EventBus } from '../../src/bus';
-import { MockEngine, fakeClock } from '../../src/engines/mock';
+import { type MockClock, MockEngine, fakeClock } from '../../src/engines/mock';
 import { EngineRegistry } from '../../src/engines/registry';
 import type { EngineAdapter, EngineRunInput } from '../../src/engines/types';
 import { RunService, type RunServiceOptions } from '../../src/runs/service';
@@ -64,6 +64,20 @@ export class GateEngine implements EngineAdapter {
       sessionId: input.resumeSessionId ?? `s-${input.prompt}`,
     };
   }
+}
+
+/** One virtual clock shared by the service (limit checks) and the mock engine (reset times); sleeps are instant. */
+export function sharedClock(start = '2026-10-13T10:00:00.000Z') {
+  let t = Date.parse(start);
+  const now = () => new Date(t);
+  const mock: MockClock = {
+    now,
+    sleep: async (_ms, signal) => {
+      await Promise.resolve();
+      if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    },
+  };
+  return { now, mock, advance: (ms: number) => void (t += ms) };
 }
 
 export type Harness = {

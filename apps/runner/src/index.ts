@@ -72,9 +72,10 @@ const runs = new RunService({
   log: rootLog.child({ module: 'runs' }),
   prepare: computerPreparer({ containers, botsDir: config.botsDir }),
 });
-const app = await buildServer(config, { repos, containers, engineAuth });
+const app = await buildServer(config, { repos, containers, engineAuth, runs });
 app.addHook('onClose', async () => {
-  runs.stop();
+  // Stops running engines and records them as failed ("runner stopped") before the DB closes.
+  await runs.shutdown();
   // Bot containers keep running across runner restarts; the reconcile loop adopts them on start.
   containers?.stopLoops();
   closeDb(db);
@@ -99,6 +100,8 @@ async function shutdown(signal: string): Promise<void> {
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
+// Recover runs a previous process left `running`, then start scheduling queued work.
+runs.start();
 await app.listen({ host: config.host, port: config.port });
 if (containers) {
   const docker = await containers.dockerHealth();
@@ -106,5 +109,4 @@ if (containers) {
   else app.log.warn({ error: docker.error }, 'docker unreachable: bot computers unavailable');
   containers.startLoops();
 }
-runs.start();
 if (config.engineOverride) app.log.warn({ engine: config.engineOverride }, 'engine override active');

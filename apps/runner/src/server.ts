@@ -8,6 +8,8 @@ import type { ContainerManager } from './containers/manager';
 import { registerComputerRoutes } from './containers/routes';
 import type { EngineAuth } from './engines/auth';
 import { registerEngineRoutes } from './engines/routes';
+import { registerRunRoutes } from './runs/routes';
+import type { RunService } from './runs/service';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -22,6 +24,8 @@ export type ServerDeps = {
   containers?: ContainerManager;
   /** Engine credentials (F06): GET /api/settings/engines. */
   engineAuth?: EngineAuth;
+  /** Run orchestrator (F10): /api/runs routes. Needs `repos`. */
+  runs?: RunService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -67,6 +71,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
 
   if (deps.containers) registerComputerRoutes(app, deps.containers);
   if (deps.engineAuth) registerEngineRoutes(app, deps.engineAuth);
+  if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);
 
   return app;
 }

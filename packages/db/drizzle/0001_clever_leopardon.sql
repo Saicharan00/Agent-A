@@ -1,0 +1,1 @@
+ALTER TABLE `runs` ADD `retry_of_run_id` text REFERENCES runs(id) ON DELETE set null;

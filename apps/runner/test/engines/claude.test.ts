@@ -346,7 +346,10 @@ describe('ClaudeEngine', () => {
     const { engine, launcher } = engineWith([]);
     const events = await collect(engine, runInput());
     expect(types(events)).toEqual(['run.started', 'error', 'run.finished']);
-    expect(events[1]).toMatchObject({ message: 'Could not run Claude Code: container is not running' });
+    expect(events[1]).toMatchObject({
+      message: 'Could not run Claude Code: container is not running',
+      code: 'exec_failed',
+    });
     expect(launcher.files.size).toBe(0);
   });
 

@@ -35,6 +35,8 @@ export const botSettingsSchema = z.object({
   cpus: z.number().positive().max(16).default(2),
   memoryMb: z.number().int().min(256).max(65536).default(2048),
   idleTimeoutMin: z.number().int().min(0).max(1440).default(30),
+  /** Per-run time limit in minutes (F10). Unset: the runner default (30). Optional so older rows still parse. */
+  runTimeoutMin: z.number().int().min(1).max(1440).optional(),
   flags: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });
 export type BotSettings = z.infer<typeof botSettingsSchema>;
@@ -123,6 +125,7 @@ export const runCreateSchema = z.object({
   prompt: z.string(),
   parentRunId: z.string().nullable().default(null),
   hopCount: z.number().int().min(0).default(0),
+  retryOfRunId: z.string().nullable().default(null),
 });
 export type RunCreateInput = z.input<typeof runCreateSchema>;
 
@@ -134,6 +137,32 @@ export const runUsageSchema = z.object({
 export type RunUsage = z.infer<typeof runUsageSchema>;
 
 export const runStatusSchema = z.enum(RUN_STATUSES);
+
+/** GET /api/runs query. `status` may repeat or be comma-separated. */
+export const runListQuerySchema = z.object({
+  botId: z.string().min(1).optional(),
+  threadId: z.string().min(1).optional(),
+  taskId: z.string().min(1).optional(),
+  status: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) =>
+      [v]
+        .flat()
+        .flatMap((s) => s.split(','))
+        .filter(Boolean),
+    )
+    .pipe(z.array(runStatusSchema))
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+export type RunListQuery = z.input<typeof runListQuerySchema>;
+
+/** GET /api/runs/:id/events query: events with seq > afterSeq, oldest first. */
+export const runEventsQuerySchema = z.object({
+  afterSeq: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(10_000).default(1000),
+});
+export type RunEventsQuery = z.input<typeof runEventsQuerySchema>;
 
 // ---------- tasks ----------
 export const taskCreateSchema = z.object({

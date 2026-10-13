@@ -34,7 +34,13 @@ export const engineEventSchema = z.discriminatedUnion('type', [
     resetsAt: z.string().optional(),
     raw: z.string(),
   }),
-  z.object({ type: z.literal('error'), message: z.string(), raw: z.string().optional() }),
+  z.object({
+    type: z.literal('error'),
+    message: z.string(),
+    raw: z.string().optional(),
+    /** `exec_failed`: the engine could not be started in the computer (the orchestrator retries once). */
+    code: z.string().optional(),
+  }),
   /** A note from the platform about the run itself (e.g. "previous session not found, started a new one"). */
   z.object({ type: z.literal('system'), message: z.string() }),
   z.object({

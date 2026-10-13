@@ -396,7 +396,11 @@ describe('CodexEngine', () => {
     });
     const events = await collectEvents(engine, runInput());
     expect(launcher.procs).toHaveLength(0);
-    expect(events[1]).toEqual({ type: 'error', message: 'Could not run Codex: auth.json is locked' });
+    expect(events[1]).toEqual({
+      type: 'error',
+      message: 'Could not run Codex: auth.json is locked',
+      code: 'exec_failed',
+    });
     expect(events.at(-1)).toEqual({ type: 'run.finished', status: 'failed' });
     expect(calls).toEqual(['before:bot_1']);
   });

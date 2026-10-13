@@ -257,3 +257,23 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   engine skips all of it, so tests and e2e need no Docker. The MCP config is written in F17.
 - Live event shapes live in `packages/shared/src/live.ts` (`run.event`, `run.updated`, `message.*`, `engine.state`).
 - No new dependencies.
+- **Usage-limit retry is a new run**, not a re-queue of the limited one: the limited run keeps its status, events and
+  single `run.finished`; the retry is a queued copy with the new column `runs.retry_of_run_id` (migration 0001) and
+  simply waits in the queue until the engine's pause expires. A retry that hits the limit again is not retried. The
+  pause is the parsed reset time when it is in the future, else now + 30 min; concurrent hits keep the later time.
+  Expired pauses are cleared by the scheduler, which publishes `engine.state` on `global`. Notification kind
+  `engine.limited`, link `/usage`.
+- **drizzle-kit dropped `ON DELETE set null` from the ALTER TABLE**; 0001 was edited by hand to keep it (verified with
+  `PRAGMA foreign_key_list(runs)` and a delete).
+- **Transient-failure retry (once per run):** computer preparation errors with codes `start_failed`, `start_timeout`,
+  `container_missing`, network errno codes, or Docker 5xx; and engine attempts that produced no output and reported an
+  `error` with the new optional `code: "exec_failed"` (CliEngine sets it when setup/spawn fails). Permanent problems
+  (image missing, storage unsupported, engine/API errors) fail at once. Both attempts' events stay in the run's stream,
+  separated by a `system` "retrying once" event.
+- **Timeout** (default 30 min, `bot.settings.runTimeoutMin` optional) aborts the engine like a cancel but the run ends
+  `failed` with "Timed out after N min". **Graceful shutdown** aborts running engines and records them `failed`
+  ("runner stopped", bounded 8 s wait); after a crash, start-up recovery marks leftovers `failed` ("runner restarted").
+  Neither re-queues: replaying a half-done turn could repeat its side effects.
+- Runs API: `GET /api/runs?botId=&threadId=&taskId=&status=a,b&limit=`, `GET /api/runs/:id`,
+  `GET /api/runs/:id/events?afterSeq=&limit=` (`{ runId, status, events }`), `POST /api/runs/:id/cancel` (404 unknown,
+  409 already finished; waits up to 15 s for a running engine to stop).
