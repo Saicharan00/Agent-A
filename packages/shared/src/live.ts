@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { LiveBotsChanged } from './bots';
 import type { BotStatusEvent } from './computer';
-import { ENGINES, RUN_STATUSES } from './enums';
+import { AUTHOR_TYPES, ENGINES, RUN_STATUSES } from './enums';
 import { engineEventSchema } from './events';
 
 // What the runner publishes on the event bus for runs (F10). F11 fans these out over WebSocket on the
@@ -29,7 +29,10 @@ export const liveRunUpdatedSchema = z.object({
 });
 export type LiveRunUpdated = z.infer<typeof liveRunUpdatedSchema>;
 
-/** A bot reply was created or grew (on every `text.final` of its run). */
+/**
+ * A message was posted (user or bot), or a bot reply grew (on every `text.final` of its run). `authorType` and
+ * `createdAt` (F13) let clients add the message to their cache without a refetch.
+ */
 export const liveMessageSchema = z.object({
   type: z.enum(['message.created', 'message.updated']),
   threadId: z.string(),
@@ -37,6 +40,8 @@ export const liveMessageSchema = z.object({
   runId: z.string().nullable(),
   authorBotId: z.string().nullable(),
   contentMd: z.string(),
+  authorType: z.enum(AUTHOR_TYPES).optional(),
+  createdAt: z.string().optional(),
 });
 export type LiveMessage = z.infer<typeof liveMessageSchema>;
 

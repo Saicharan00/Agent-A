@@ -339,3 +339,29 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **New dependencies:** `react-markdown` + `remark-gfm` (planned stack; no raw HTML rendering). shiki arrives with F13.
 - **E2E bot homes live in `data/e2e/bots`** (`AGENTA_BOTS_DIR`/`AGENTA_SHARED_DIR` in playwright.config.ts) so bots
   created by tests never land in the owner's `data/bots`.
+
+## F13 — Direct chat (session 1)
+- **Thread API:** `GET /api/threads/:id` (thread + member `BotView`s), `GET /api/threads/:id/messages?before=&limit=`
+  (chronological page + `hasMore`, fetched as limit+1), `POST /api/threads/:id/messages` → user message, one `user`
+  run per addressed bot (DM: its bot), `{ message, runs }`. The user message's `run_id` points at the run it started;
+  it is published (`message.created`) only after that link is set. Group threads store the message but start no runs
+  until F18's @mention routing. `last_seen_message_id` is recorded keeping the session's stored engine (a session id
+  must never be resumed by another engine).
+- **Attachments are uploaded first, then referenced by name.** `POST /api/bots/:id/inbox?name=` takes raw bytes
+  (`application/octet-stream`, scoped parser, 10 MB limit; Next's rewrite proxy passes 9.5 MB fine) into
+  `data/bots/<id>/home/work/inbox/`, sanitising the name (last segment, no control chars, no leading dots) and never
+  overwriting (`notes-1.txt`, exclusive create). No multipart dependency. The stored message ends with
+  `📎 \`inbox/<name>\``; the prompt lists `/home/bot/work/inbox/<name>`. Sending validates the names still exist.
+- **Live messages carry `authorType` + `createdAt`** (additive, optional) so the web inserts them into the cached
+  pages without refetching every page of the infinite query.
+- **Transcript = messages + runs.** The web fetches the thread's recent runs (`GET /api/runs?threadId=`, 100) and
+  shows each run right after the user message that started it (a limit retry after its original), owning its reply.
+  Active runs follow `run:<id>` (replayed from seq 0, so a reload mid-run shows everything streamed so far) and
+  render deltas until finished; then the stored reply is shown. Inline states: Queued / Limited — resumes at HH:MM
+  (queued + engine paused) / Working… / Stopped / Failed: … / Usage limit reached.
+- **Virtualisation via `content-visibility: auto`** instead of a virtual list library: chat rows have dynamic,
+  streaming heights and the list pages upward; the browser skips off-screen layout/paint without a dependency and
+  without breaking scroll anchoring. Older pages load at the top with the scroll position restored.
+- **shiki** (new dep) is loaded on first code block (dynamic import), dual light/dark themes via CSS variables;
+  unknown fence languages render as `text`. Plain code shows until highlighting is ready.
+- **Playwright runs with one worker:** specs share the runner's global run cap and the mock engine's limit pause.

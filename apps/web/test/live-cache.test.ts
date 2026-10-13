@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyLiveEvent } from '@/lib/live-cache';
 import { queryKeys } from '@/lib/query-keys';
+import { type MessagesData, flattenPages } from '@/lib/threads';
 import type { RunnerStatus } from '@/lib/runner';
 
 describe('applyLiveEvent', () => {
@@ -102,15 +103,77 @@ describe('applyLiveEvent', () => {
     expect(stale(queryKeys.run('r1'))).toBe(false);
   });
 
-  it('grows a cached message in place, and refetches a thread on new messages', () => {
+  it('patches the status of a run in every cached run list', () => {
+    qc.setQueryData(queryKeys.threadRuns('t1'), [
+      { id: 'r1', status: 'running', error: null },
+      { id: 'r0', status: 'succeeded', error: null },
+    ]);
+    applyLiveEvent(qc, {
+      type: 'run.updated',
+      runId: 'r1',
+      botId: 'b1',
+      threadId: 't1',
+      taskId: null,
+      status: 'cancelled',
+      error: null,
+    });
+    expect(qc.getQueryData(queryKeys.threadRuns('t1'))).toEqual([
+      { id: 'r1', status: 'cancelled', error: null },
+      { id: 'r0', status: 'succeeded', error: null },
+    ]);
+  });
+
+  it('grows a cached message in place and appends new ones to the newest page', () => {
     const key = queryKeys.threadMessages('t1');
-    qc.setQueryData(key, [{ id: 'm1', contentMd: 'Hel' }]);
+    const msg = (id: string, contentMd: string) => ({
+      id,
+      threadId: 't1',
+      authorType: 'bot' as const,
+      authorBotId: 'b1',
+      contentMd,
+      runId: 'r1',
+      mentions: [],
+      createdAt: '2026-10-13T10:00:00.000Z',
+    });
+    qc.setQueryData<MessagesData>(key, {
+      pages: [
+        { messages: [msg('m1', 'Hel')], hasMore: true },
+        { messages: [msg('m0', 'old')], hasMore: false },
+      ],
+      pageParams: [undefined, 'm1'],
+    });
     const base = { threadId: 't1', runId: 'r1', authorBotId: 'b1' };
     applyLiveEvent(qc, { type: 'message.updated', messageId: 'm1', contentMd: 'Hello', ...base });
-    expect(qc.getQueryData(key)).toEqual([{ id: 'm1', contentMd: 'Hello' }]);
+    expect(flattenPages(qc.getQueryData(key)).map((m) => m.contentMd)).toEqual(['old', 'Hello']);
     expect(stale(key)).toBe(false);
 
-    applyLiveEvent(qc, { type: 'message.created', messageId: 'm2', contentMd: 'Hi', ...base });
+    const created = {
+      type: 'message.created' as const,
+      messageId: 'm2',
+      contentMd: 'Hi',
+      authorType: 'user' as const,
+      createdAt: '2026-10-13T10:01:00.000Z',
+      ...base,
+    };
+    applyLiveEvent(qc, created);
+    applyLiveEvent(qc, created); // repeats are idempotent
+    expect(flattenPages(qc.getQueryData(key)).map((m) => m.id)).toEqual(['m0', 'm1', 'm2']);
+    expect(stale(key)).toBe(false);
+
+    // An event without the full message (older runner) refetches instead.
+    applyLiveEvent(qc, { type: 'message.created', messageId: 'm3', contentMd: 'x', ...base });
     expect(stale(key)).toBe(true);
+  });
+
+  it('ignores messages for threads nobody has loaded', () => {
+    applyLiveEvent(qc, {
+      type: 'message.created',
+      threadId: 't9',
+      messageId: 'm1',
+      runId: null,
+      authorBotId: null,
+      contentMd: 'x',
+    });
+    expect(qc.getQueryData(queryKeys.threadMessages('t9'))).toBeUndefined();
   });
 });

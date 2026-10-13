@@ -580,6 +580,8 @@ export class RunService {
       runId: msg.runId,
       authorBotId: msg.authorBotId,
       contentMd: msg.contentMd,
+      authorType: msg.authorType,
+      createdAt: msg.createdAt,
     };
     this.opts.bus.publish(`thread:${msg.threadId}`, live);
   }

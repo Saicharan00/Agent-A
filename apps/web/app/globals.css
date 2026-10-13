@@ -117,3 +117,16 @@
     @apply bg-background font-sans text-foreground;
   }
 }
+
+/* shiki dual-theme code blocks (lib/highlight.ts): colours come from CSS variables, the block keeps our background. */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark);
+}
+.shiki {
+  background-color: transparent !important;
+}

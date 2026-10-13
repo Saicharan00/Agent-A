@@ -8,7 +8,11 @@ export const queryKeys = {
   bots: ['bots', 'list'] as const,
   botList: (archived: 'exclude' | 'include' | 'only' = 'exclude') => ['bots', 'list', archived] as const,
   bot: (id: string) => ['bots', 'detail', id] as const,
+  thread: (threadId: string) => ['threads', threadId, 'detail'] as const,
+  /** Infinite query: pages of MessagePage, newest page first. */
   threadMessages: (threadId: string) => ['threads', threadId, 'messages'] as const,
+  /** Prefix of every run list (refetched on run.updated). */
   runs: ['runs', 'list'] as const,
+  threadRuns: (threadId: string) => ['runs', 'list', { threadId }] as const,
   run: (id: string) => ['runs', 'detail', id] as const,
 };

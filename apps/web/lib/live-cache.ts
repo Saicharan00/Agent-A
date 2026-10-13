@@ -2,6 +2,7 @@ import type { EngineQueueStateResponse, LiveEvent } from '@agenta/shared';
 import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from './query-keys';
 import type { RunnerStatus } from './runner';
+import { type MessagesData, patchMessageContent, upsertMessage } from './threads';
 
 type Cache = Pick<QueryClient, 'getQueryData' | 'setQueryData' | 'setQueriesData' | 'invalidateQueries'>;
 
@@ -75,25 +76,49 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
       // Only that bot's detail, and not once deleted (a refetch would just 404; the entry ages out).
       if (event.change !== 'deleted') void cache.invalidateQueries({ queryKey: queryKeys.bot(event.botId) });
       return;
-    case 'run.updated':
+    case 'run.updated': {
       patchCached(cache, queryKeys.run(event.runId), event.runId, {
         status: event.status,
         error: event.error,
       });
+      // Patch cached lists right away (chat states), then refetch them for timings and new runs.
+      cache.setQueriesData<WithId[]>({ queryKey: queryKeys.runs }, (list) =>
+        Array.isArray(list)
+          ? list.map((r) => (r.id === event.runId ? { ...r, status: event.status, error: event.error } : r))
+          : list,
+      );
       void cache.invalidateQueries({ queryKey: queryKeys.runs });
       return;
+    }
     case 'message.updated':
-      if (
-        patchCached(cache, queryKeys.threadMessages(event.threadId), event.messageId, {
-          contentMd: event.contentMd,
-        })
-      )
+    case 'message.created': {
+      const key = queryKeys.threadMessages(event.threadId);
+      const data = cache.getQueryData<MessagesData>(key);
+      if (!data) return; // nobody is showing this thread
+      const patched = patchMessageContent(data, event.messageId, event.contentMd);
+      if (patched) {
+        cache.setQueryData<MessagesData>(key, patched);
         return;
-      void cache.invalidateQueries({ queryKey: queryKeys.threadMessages(event.threadId) });
+      }
+      if (event.authorType && event.createdAt) {
+        cache.setQueryData<MessagesData>(
+          key,
+          upsertMessage(data, {
+            id: event.messageId,
+            threadId: event.threadId,
+            authorType: event.authorType,
+            authorBotId: event.authorBotId,
+            contentMd: event.contentMd,
+            runId: event.runId,
+            mentions: [],
+            createdAt: event.createdAt,
+          }),
+        );
+        return;
+      }
+      void cache.invalidateQueries({ queryKey: key });
       return;
-    case 'message.created':
-      void cache.invalidateQueries({ queryKey: queryKeys.threadMessages(event.threadId) });
-      return;
+    }
     case 'run.event':
       return;
   }

@@ -13,9 +13,10 @@ export function useBots(archived: 'exclude' | 'include' | 'only' = 'exclude') {
   return useQuery({ queryKey: queryKeys.botList(archived), queryFn: () => botsApi.list(archived) });
 }
 
-export function useBot(id: string) {
+export function useBot(id: string, opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.bot(id),
+    enabled: opts.enabled ?? true,
     queryFn: () => botsApi.get(id),
     retry: (n, err) => !(err instanceof ApiClientError && err.status === 404) && n < 2,
   });

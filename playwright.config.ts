@@ -5,6 +5,8 @@ const baseURL = 'http://127.0.0.1:3000';
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: false,
+  // One worker: specs share the runner's global run cap and the mock engine's usage-limit pause.
+  workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL, trace: 'retain-on-failure' },

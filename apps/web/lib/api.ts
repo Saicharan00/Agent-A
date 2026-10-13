@@ -22,6 +22,8 @@ export class ApiClientError extends Error {
 export type ApiRequest = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
+  /** Raw bytes (file uploads), sent as application/octet-stream instead of a JSON `body`. */
+  raw?: Blob;
   query?: Record<string, string | number | boolean | undefined | null>;
   signal?: AbortSignal;
 };
@@ -51,8 +53,12 @@ export async function apiRequest<S extends z.ZodType>(
   try {
     res = await fetchImpl(buildApiUrl(path, req.query), {
       method: req.method ?? 'GET',
-      headers: req.body === undefined ? undefined : { 'content-type': 'application/json' },
-      body: req.body === undefined ? undefined : JSON.stringify(req.body),
+      headers: req.raw
+        ? { 'content-type': 'application/octet-stream' }
+        : req.body === undefined
+          ? undefined
+          : { 'content-type': 'application/json' },
+      body: req.raw ?? (req.body === undefined ? undefined : JSON.stringify(req.body)),
       cache: 'no-store',
       signal: req.signal,
     });

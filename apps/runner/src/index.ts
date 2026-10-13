@@ -17,6 +17,7 @@ import { DockerMonitor } from './live/docker-monitor';
 import { LiveHub } from './live/hub';
 import { computerPreparer } from './runs/prepare';
 import { RunService } from './runs/service';
+import { ThreadService } from './threads/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
@@ -88,9 +89,17 @@ const bots = new BotService({
   containers,
   runs,
 });
+const threads = new ThreadService({
+  repos,
+  bus,
+  log: rootLog.child({ module: 'threads' }),
+  botsDir: config.botsDir,
+  bots,
+  runs,
+});
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
-const app = await buildServer(config, { repos, containers, engineAuth, runs, live, bots });
+const app = await buildServer(config, { repos, containers, engineAuth, runs, live, bots, threads });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
   // Stops running engines and records them as failed ("runner stopped") before the DB closes.

@@ -14,6 +14,8 @@ import type { LiveHub } from './live/hub';
 import { registerLiveRoutes } from './live/routes';
 import { registerEngineStateRoute, registerRunRoutes } from './runs/routes';
 import type { RunService } from './runs/service';
+import { registerThreadRoutes } from './threads/routes';
+import type { ThreadService } from './threads/service';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -34,6 +36,8 @@ export type ServerDeps = {
   live?: LiveHub;
   /** Bot management (F12): /api/bots CRUD, archive, restore, duplicate. */
   bots?: BotService;
+  /** Direct chat (F13): thread view, message history, sending, inbox uploads. */
+  threads?: ThreadService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -82,6 +86,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.engineAuth) registerEngineRoutes(app, deps.engineAuth);
   if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);
   if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
+  if (deps.threads) await registerThreadRoutes(app, deps.threads);
   if (deps.live) await registerLiveRoutes(app, deps.live, { webOrigin: config.webOrigin });
 
   return app;
