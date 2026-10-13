@@ -68,6 +68,10 @@ export const threadViewSchema = z.object({
   archivedAt: z.string().nullable(),
   /** When the owner last viewed it (unread counts). */
   lastReadAt: z.string().nullable(),
+  /** Group chats: what the group is for. */
+  purpose: z.string(),
+  /** Group chats: the configured moderator (null = default: Agent A if a member, else the first member). */
+  moderatorBotId: z.string().nullable(),
   members: z.array(botViewSchema),
 });
 export type ThreadView = z.infer<typeof threadViewSchema>;
@@ -231,4 +235,48 @@ export function splitUserMessage(contentMd: string): { content: string; attachme
   if (!m) return { content: contentMd, attachments: [] };
   const attachments = [...m[1]!.matchAll(/`inbox\/([^`]+)`/g)].map((x) => x[1]!);
   return { content: contentMd.slice(0, m.index), attachments };
+}
+
+// ---------- group chats (F18) ----------
+
+/** POST /api/threads — a group chat with at least one member. */
+export const groupCreateRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    purpose: z.string().trim().max(2000).default(''),
+    memberBotIds: z.array(z.string().min(1)).min(1, 'pick at least one bot').max(50),
+    moderatorBotId: z.string().min(1).nullable().default(null),
+  })
+  .strict();
+export type GroupCreateRequest = z.input<typeof groupCreateRequestSchema>;
+
+/** GET /api/threads?kind=group */
+export const threadListQuerySchema = z.object({ kind: z.enum(THREAD_KINDS).optional() });
+
+/** POST /api/threads/:id/members */
+export const addMemberRequestSchema = z.object({ botId: z.string().min(1) }).strict();
+export type AddMemberRequest = z.input<typeof addMemberRequestSchema>;
+
+/** The text with fenced code blocks, inline code and quoted lines blanked out (mentions there don't count). */
+function mentionableText(text: string): string {
+  return text
+    .replace(/```[\s\S]*?(```|$)/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+    .split('\n')
+    .filter((line) => !/^\s*>/.test(line))
+    .join('\n');
+}
+
+/**
+ * The bots a message @mentions, in order of first mention: `@slug` (case-insensitive) for any of `bots`, not inside
+ * code or a quote (quoting a message must not summon its mentions again).
+ */
+export function parseMentions(text: string, bots: { id: string; slug: string }[]): string[] {
+  const bySlug = new Map(bots.map((b) => [b.slug.toLowerCase(), b.id]));
+  const ids: string[] = [];
+  for (const m of mentionableText(text).matchAll(/(^|[^\w@])@([a-z0-9][a-z0-9-]*)/gi)) {
+    const id = bySlug.get(m[2]!.toLowerCase()) ?? bySlug.get(m[2]!.toLowerCase().replace(/-+$/, ''));
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }

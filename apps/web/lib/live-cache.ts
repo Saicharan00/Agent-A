@@ -121,6 +121,11 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
     }
     case 'thread.activity':
       void cache.invalidateQueries({ queryKey: queryKeys.unread });
+      // Members joining or leaving a group are announced by a system message.
+      if (event.authorType === 'system') {
+        void cache.invalidateQueries({ queryKey: queryKeys.thread(event.threadId) });
+        void cache.invalidateQueries({ queryKey: queryKeys.groups });
+      }
       return;
     case 'run.event':
       return;

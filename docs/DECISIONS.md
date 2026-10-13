@@ -497,3 +497,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   bots poll `check_approval`. `request_approval` and `notify_owner` create notification rows (live delivery: F27).
 - **add_lesson source:** `task` with a task id, else `run` with the calling run, else `manual`.
 
+
+## F18 — Group chats & @mentions (session 1)
+- **Thread columns:** `purpose` (text, default '') and `moderator_bot_id` (nullable, no FK) added to `threads`
+  (migration 0003). A stale or removed moderator falls back to the default: Agent A (lead) if a member, else the
+  first member. Removing the moderator from the group resets it to the default.
+- **Mention syntax:** `@slug`, case-insensitive, at a word start; mentions inside code (inline or fenced) and on quoted
+  (`>`) lines are ignored, so quoting a message never re-summons its mentions. One parser (`parseMentions` in
+  `packages/shared`) is used for owner messages, bot replies and `post_message`.
+- **Bot-to-bot routing:** a finished, succeeded reply is routed through `RunService.onReply` (a property set in
+  `index.ts`, avoiding a constructor cycle with ThreadService); `post_message` routes too. Trigger `mention`,
+  `hop_count` = parent + 1, never the author itself. A plain `MAX_HOPS = 6` cutoff is in place already (no runs past
+  it); the system message, debounce and pause are session 2.
+- **Mock echo quotes multi-line prompts** (`> ` per line) so a group turn's echo doesn't @mention everyone again.
+  `[mock:moderate]` hands the message to the first other member via `ask_bot` (only when the prompt says the bot
+  moderates); its reply text has no `@`, so it doesn't start a second turn.
+- **Group attachments:** not offered in groups (the composer's paperclip is DM-only); attachments go to one bot's inbox.
+- **Member changes** post a system message ("X joined/left the group."); the web invalidates the thread and group list
+  on system-message activity, so other tabs see new members without a new live event type.

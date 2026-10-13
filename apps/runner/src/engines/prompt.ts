@@ -21,6 +21,13 @@ export type PromptTask = Pick<
   'id' | 'title' | 'status' | 'priority' | 'descriptionMd' | 'acceptanceMd' | 'revisionCount'
 >;
 
+export type PromptGroup = {
+  purpose: string;
+  members: Pick<Bot, 'id' | 'name' | 'slug' | 'role' | 'isLead'>[];
+  /** Who answers messages that mention nobody. */
+  moderatorId: string | null;
+};
+
 export type BuildPromptInput = {
   bot: PromptBot;
   thread: PromptThread;
@@ -29,7 +36,34 @@ export type BuildPromptInput = {
   task?: PromptTask | null;
   /** Defaults to the thread's explain-mode flag. */
   explainMode?: boolean;
+  /** Group chats: purpose and members (F18). */
+  group?: PromptGroup | null;
 };
+
+function renderGroup(g: PromptGroup, thread: PromptThread, bot: PromptBot): string {
+  const lines = [`## About #${thread.title}`];
+  if (g.purpose.trim()) lines.push(`Purpose: ${g.purpose.trim()}`);
+  lines.push(
+    'Members:',
+    ...g.members.map((m) => {
+      const tags = [
+        m.isLead ? 'lead' : '',
+        m.id === g.moderatorId ? 'moderator' : '',
+        m.id === bot.id ? 'you' : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
+      return `- ${m.name} (@${m.slug})${m.role ? `: ${m.role}` : ''}${tags ? ` [${tags}]` : ''}`;
+    }),
+  );
+  if (g.moderatorId === bot.id) {
+    lines.push(
+      '',
+      'You moderate this group: messages that mention nobody come to you. Answer them yourself, or bring in the right teammates by @mentioning them in your reply or with `ask_bot`.',
+    );
+  }
+  return lines.join('\n');
+}
 
 /** Maps DB messages to prompt messages, resolving author names. */
 export function toPromptMessages(
@@ -89,8 +123,14 @@ export function buildPrompt(input: BuildPromptInput): string {
   if (simple) return newMessages[0]!.contentMd.trim();
 
   const parts: string[] = [];
+  if (input.group) parts.push(renderGroup(input.group, thread, bot));
   if (newMessages.length > 0) {
-    const where = thread.kind === 'dm' ? 'this chat' : `the ${thread.kind} thread "${thread.title}"`;
+    const where =
+      thread.kind === 'dm'
+        ? 'this chat'
+        : thread.kind === 'group'
+          ? `#${thread.title}`
+          : `the ${thread.kind} thread "${thread.title}"`;
     parts.push(
       `## New messages in ${where} since your last turn`,
       newMessages.map((m) => renderMessage(m, bot)).join('\n\n'),

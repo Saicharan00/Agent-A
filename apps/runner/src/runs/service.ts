@@ -1,4 +1,4 @@
-import type { Bot, Repos, Run } from '@agenta/db';
+import type { Bot, Message, Repos, Run } from '@agenta/db';
 import type {
   Engine,
   EngineEvent,
@@ -125,6 +125,8 @@ export function isTransientError(err: unknown): boolean {
 }
 
 export class RunService {
+  /** Called with a finished turn's reply (group @mention routing, F18; set after construction to avoid a cycle). */
+  onReply?: (run: Run, reply: Message) => void;
   private readonly active = new Map<string, Active>();
   private readonly now: () => Date;
   private scheduled = false;
@@ -384,6 +386,14 @@ export class RunService {
     });
     log.info({ runId: run.id, status, error }, 'run finished');
     if (finished) this.publishRun(finished);
+    if (finished && status === 'succeeded' && turn.messageId) {
+      const reply = repos.messages.get(turn.messageId);
+      try {
+        if (reply) this.onReply?.(finished, reply);
+      } catch (err) {
+        log.error({ runId: run.id, err: (err as Error).message }, 'reply routing failed');
+      }
+    }
   }
 
   /** One try at the turn. Returns true when it failed transiently before producing any output (worth a retry). */

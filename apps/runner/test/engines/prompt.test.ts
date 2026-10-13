@@ -71,6 +71,14 @@ describe('buildPrompt', () => {
           }),
           msg({ authorType: 'system', authorName: 'System', contentMd: 'Builder finished run run_9.' }),
         ],
+        group: {
+          purpose: 'Get v1 out the door.',
+          members: [
+            { id: 'bot_lead', name: 'Agent A', slug: 'agent-a', role: 'Lead AI Engineer', isLead: true },
+            { id: bot.id, name: bot.name, slug: bot.slug, role: bot.role, isLead: false },
+          ],
+          moderatorId: bot.id,
+        },
       }),
     ).toMatchSnapshot();
   });

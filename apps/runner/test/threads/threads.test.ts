@@ -146,8 +146,8 @@ describe('threads API', () => {
     expect(h.repos.messages.listByThread(dm)).toHaveLength(0);
   });
 
-  it('stores a group message without starting runs (routing arrives with group chats)', async () => {
-    const g = h.repos.threads.create({ kind: 'group', title: 'Team', memberBotIds: [botId] });
+  it('stores a message in a task thread without starting runs (group routing: groups.test.ts)', async () => {
+    const g = h.repos.threads.create({ kind: 'task', title: 'Team', memberBotIds: [botId] });
     const res = await send(g.id, { content: 'hello team' });
     expect(res.statusCode).toBe(201);
     expect(res.json<SendMessageResponse>()).toMatchObject({ runs: [], message: { runId: null } });

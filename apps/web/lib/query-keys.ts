@@ -17,5 +17,7 @@ export const queryKeys = {
   /** A finished run's timeline (immutable once finished). */
   runEvents: (id: string) => ['runs', 'events', id] as const,
   unread: ['threads', 'unread'] as const,
+  /** Group chats (sidebar). */
+  groups: ['threads', 'groups'] as const,
   run: (id: string) => ['runs', 'detail', id] as const,
 };

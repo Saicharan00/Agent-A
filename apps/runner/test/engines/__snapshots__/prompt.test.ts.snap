@@ -29,7 +29,15 @@ Work on the task above and report what you did."
 `;
 
 exports[`buildPrompt > group thread: messages since last turn, bot authors, mentions 1`] = `
-"## New messages in the group thread "Launch prep" since your last turn
+"## About #Launch prep
+Purpose: Get v1 out the door.
+Members:
+- Agent A (@agent-a): Lead AI Engineer [lead]
+- Code Reviewer (@code-reviewer): Senior reviewer [moderator, you]
+
+You moderate this group: messages that mention nobody come to you. Answer them yourself, or bring in the right teammates by @mentioning them in your reply or with \`ask_bot\`.
+
+## New messages in #Launch prep since your last turn
 
 **Charan** · 2026-10-12 14:03 UTC:
 Status check, team?

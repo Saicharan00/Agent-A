@@ -195,7 +195,7 @@ export class PlatformTools {
     },
 
     post_message: (bot, { thread_id, text }) => {
-      const m = this.opts.threads.postAsBot(bot, thread_id, text);
+      const m = this.opts.threads.postAsBot(bot, thread_id, text, this.currentRun(bot.id));
       return { message_id: m.id, thread_id: m.threadId };
     },
 

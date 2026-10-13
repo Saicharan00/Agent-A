@@ -76,6 +76,10 @@ export const threads = sqliteTable(
     archivedAt: text('archived_at'),
     /** When the owner last viewed the thread (F13 unread counts). Not in PLAN's column list. */
     lastReadAt: text('last_read_at'),
+    /** Group chats (F18): what the group is for (shown to bots each turn). */
+    purpose: text('purpose').notNull().default(''),
+    /** Group chats (F18): who answers messages without @mentions; null = Agent A if present, else the first member. */
+    moderatorBotId: text('moderator_bot_id'),
   },
   (t) => [index('threads_updated_idx').on(t.updatedAt)],
 );

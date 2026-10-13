@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  GroupCreateRequest,
   LiveEvent,
   RunView,
   SendMessageRequest,
@@ -128,7 +129,10 @@ export function useUpdateThread(threadId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: ThreadUpdateRequest) => threadsApi.update(threadId, body),
-    onSuccess: (thread) => qc.setQueryData<ThreadView>(queryKeys.thread(threadId), thread),
+    onSuccess: (thread) => {
+      qc.setQueryData<ThreadView>(queryKeys.thread(threadId), thread);
+      if (thread.kind === 'group') void qc.invalidateQueries({ queryKey: queryKeys.groups });
+    },
     onError: (err) =>
       void toast.error(err instanceof Error ? err.message : 'Could not update the conversation'),
   });
@@ -179,4 +183,35 @@ export function useMarkRead(threadId: string, latestMessageId: string | undefine
     document.addEventListener('visibilitychange', mark);
     return () => document.removeEventListener('visibilitychange', mark);
   }, [qc, threadId, latestMessageId, enabled]);
+}
+
+// ---------- group chats (F18) ----------
+
+export function useGroups() {
+  return useQuery({ queryKey: queryKeys.groups, queryFn: () => threadsApi.groups() });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GroupCreateRequest) => threadsApi.createGroup(body),
+    onSuccess: (thread) => {
+      qc.setQueryData<ThreadView>(queryKeys.thread(thread.id), thread);
+      void qc.invalidateQueries({ queryKey: queryKeys.groups });
+    },
+  });
+}
+
+/** Add or remove a group member. */
+export function useGroupMember(threadId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ botId, action }: { botId: string; action: 'add' | 'remove' }) =>
+      action === 'add' ? threadsApi.addMember(threadId, botId) : threadsApi.removeMember(threadId, botId),
+    onSuccess: (thread) => {
+      qc.setQueryData<ThreadView>(queryKeys.thread(threadId), thread);
+      void qc.invalidateQueries({ queryKey: queryKeys.groups });
+    },
+    onError: (err) => void toast.error(err instanceof Error ? err.message : 'Could not update the members'),
+  });
 }

@@ -3,7 +3,7 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate] [mock:browser]; anything else echoes the prompt.
+// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate]; anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
   'hello',
@@ -13,6 +13,7 @@ export const MOCK_SCENARIOS = [
   'slow',
   'delegate',
   'browser',
+  'moderate',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -129,6 +130,29 @@ export class MockEngine implements EngineAdapter {
       }
     }
     yield { type: 'run.finished', status, sessionId };
+  }
+
+  /** One Platform MCP tool call with its result (or a stub when no platform is connected). */
+  private async *platformCall(
+    callId: string,
+    call: { name: string; input: unknown },
+    input: EngineRunInput,
+    emit: Emit,
+  ): AsyncGenerator<number> {
+    emit({ type: 'tool.call', callId, ...call });
+    yield this.tickMs * 2;
+    let output: string;
+    let isError = false;
+    try {
+      output = this.opts.platform
+        ? await this.opts.platform.call(call.name, call.input, input.bot.id)
+        : 'Platform MCP is not connected; call recorded by the mock engine.';
+    } catch (err) {
+      output = (err as Error).message;
+      isError = true;
+    }
+    emit({ type: 'tool.result', callId, output, ...(isError ? { isError } : {}) });
+    yield this.tickMs;
   }
 
   /** Each scenario emits events and yields the delay (ms) before its next step; returns the final status. */
@@ -264,31 +288,47 @@ export class MockEngine implements EngineAdapter {
         ];
         const intro = 'I will split this up and tell the team. ';
         yield* stream(intro);
-        for (const [i, call] of calls.entries()) {
-          const callId = `mock-mcp-${i + 1}`;
-          emit({ type: 'tool.call', callId, ...call });
-          yield tick * 2;
-          let output: string;
-          let isError = false;
-          try {
-            output = this.opts.platform
-              ? await this.opts.platform.call(call.name, call.input, input.bot.id)
-              : 'Platform MCP is not connected; call recorded by the mock engine.';
-          } catch (err) {
-            output = (err as Error).message;
-            isError = true;
-          }
-          emit({ type: 'tool.result', callId, output, ...(isError ? { isError } : {}) });
-          yield tick;
-        }
+        for (const [i, call] of calls.entries())
+          yield* this.platformCall(`mock-mcp-${i + 1}`, call, input, emit);
         const done = 'Delegated: one subtask created and Agent A notified.';
         yield* stream(done);
         emit({ type: 'text.final', text: intro + done });
         usage(intro + done);
         return 'succeeded';
       }
+      case 'moderate': {
+        // As the group's moderator, hand the message to the first other member (listed in the prompt) via ask_bot.
+        const target = input.prompt.includes('You moderate this group')
+          ? /^- .+ \(@([a-z0-9-]+)\)(?!.*\[[^\]]*\byou\b)/m.exec(input.prompt)?.[1]
+          : undefined;
+        if (!target) {
+          yield* reply('I am not moderating a group here, so there is nobody to hand this to.');
+          return 'succeeded';
+        }
+        // No @ here: the ask_bot call is the hand-over (a mention would start a second turn).
+        const intro = `${target} is best placed for this; asking them. `;
+        yield* stream(intro);
+        yield* this.platformCall(
+          'mock-mcp-1',
+          {
+            name: 'mcp__agenta__ask_bot',
+            input: { bot: target, message: 'Could you take this one?', thread_id: input.threadId },
+          },
+          input,
+          emit,
+        );
+        const done = 'Handed over.';
+        yield* stream(done);
+        emit({ type: 'text.final', text: intro + done });
+        usage(intro + done);
+        return 'succeeded';
+      }
       case 'echo': {
-        yield* reply(`You said: ${input.prompt}`);
+        // A multi-line prompt (e.g. a group turn) is quoted, so the @mentions in it don't trigger anyone again.
+        const said = input.prompt.includes('\n')
+          ? `\n\n${input.prompt.replace(/^/gm, '> ')}`
+          : ` ${input.prompt}`;
+        yield* reply(`You said:${said}`);
         return 'succeeded';
       }
     }

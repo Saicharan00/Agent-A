@@ -3,6 +3,8 @@ import { extname, join } from 'node:path';
 import type { Bot, Message, Repos, Run, Thread } from '@agenta/db';
 import {
   INBOX_DIR,
+  type AddMemberRequest,
+  type GroupCreateRequest,
   type InboxUploadResponse,
   type LiveMessage,
   type LiveThreadActivity,
@@ -16,8 +18,11 @@ import {
   type SendMessageRequest,
   type SendMessageResponse,
   type ThreadView,
+  addMemberRequestSchema,
   composeUserMessage,
   composeUserPrompt,
+  groupCreateRequestSchema,
+  parseMentions,
   messagePageQuerySchema,
   runViewSchema,
   sanitizeInboxName,
@@ -30,6 +35,9 @@ import type { EventBus } from '../bus';
 import { botHomeDir } from '../containers/home';
 import { buildPrompt, toPromptMessages } from '../engines/prompt';
 import type { RunService } from '../runs/service';
+
+/** Bot-triggered turns allowed in a chain started by one owner message (PLAN F18 loop guard). */
+export const MAX_HOPS = 6;
 
 type Log = { info(obj: object, msg?: string): void; debug(obj: object, msg?: string): void };
 
@@ -75,9 +83,10 @@ export function inboxDir(botsDir: string, botId: string): string {
 }
 
 /**
- * Direct chat (PLAN F13): reading a thread's history and posting the owner's messages. Posting writes the user
- * message, publishes it on `thread:<id>` and queues one run per addressed bot (in a DM: the DM's bot). Group-chat
- * routing (@mentions) arrives with F18; until then a group message is stored without starting runs.
+ * Chats (PLAN F13, F18): reading a thread's history and posting messages. Posting writes the message, publishes it
+ * on `thread:<id>` and queues one run per addressed bot: in a DM the DM's bot; in a group the @mentioned members,
+ * or the moderator when nobody is mentioned. Bot messages in a group that @mention another member start that
+ * member's turn, one hop further, up to MAX_HOPS.
  */
 export class ThreadService {
   constructor(private readonly opts: ThreadServiceOptions) {}
@@ -89,12 +98,81 @@ export class ThreadService {
   }
 
   get(id: string): ThreadView {
-    const thread = this.thread(id);
-    const activity = this.opts.repos.runs.lastActivityByBot();
+    return this.view(this.thread(id));
+  }
+
+  private view(thread: Thread, activity = this.opts.repos.runs.lastActivityByBot()): ThreadView {
     return {
       ...thread,
-      members: this.opts.repos.threads.listMembers(id).map((b) => this.opts.bots.view(b, activity)),
+      members: this.opts.repos.threads.listMembers(thread.id).map((b) => this.opts.bots.view(b, activity)),
     };
+  }
+
+  /** Non-archived threads, most recently active first (the sidebar's group list uses kind=group). */
+  list(kind?: Thread['kind']): ThreadView[] {
+    const activity = this.opts.repos.runs.lastActivityByBot();
+    return this.opts.repos.threads.list({ kind }).map((t) => this.view(t, activity));
+  }
+
+  createGroup(body: GroupCreateRequest): ThreadView {
+    const { repos } = this.opts;
+    const req = groupCreateRequestSchema.parse(body);
+    for (const botId of req.memberBotIds) this.activeBot(botId);
+    if (req.moderatorBotId && !req.memberBotIds.includes(req.moderatorBotId)) {
+      throw new ThreadError('moderator_not_member', 'The moderator must be a member of the group', 400);
+    }
+    const thread = repos.threads.create({ kind: 'group', ...req });
+    this.opts.log.info({ threadId: thread.id, members: req.memberBotIds.length }, 'group created');
+    return this.get(thread.id);
+  }
+
+  addMember(id: string, body: AddMemberRequest): ThreadView {
+    const thread = this.group(id);
+    const bot = this.activeBot(addMemberRequestSchema.parse(body).botId);
+    if (this.opts.repos.threads.addMember(thread.id, bot.id)) {
+      this.systemMessage(thread.id, `${bot.name} joined the group.`);
+    }
+    return this.get(id);
+  }
+
+  removeMember(id: string, botId: string): ThreadView {
+    const { repos } = this.opts;
+    const thread = this.group(id);
+    const bot = repos.bots.get(botId);
+    if (!bot || !repos.threads.isMember(id, botId)) {
+      throw new ThreadError('not_a_member', `Bot ${botId} is not in this group`, 404);
+    }
+    if (repos.threads.listMembers(id).length <= 1) {
+      throw new ThreadError('last_member', 'A group needs at least one member', 409);
+    }
+    repos.threads.removeMember(id, botId);
+    if (thread.moderatorBotId === botId) repos.threads.update(id, { moderatorBotId: null });
+    this.systemMessage(id, `${bot.name} left the group.`);
+    return this.get(id);
+  }
+
+  private group(id: string): Thread {
+    const thread = this.writable(id);
+    if (thread.kind !== 'group')
+      throw new ThreadError('not_a_group', 'Only group chats have editable members', 409);
+    return thread;
+  }
+
+  private activeBot(botId: string): Bot {
+    const bot = this.opts.repos.bots.get(botId);
+    if (!bot) throw new ThreadError('bot_not_found', `Bot ${botId} not found`, 404);
+    if (bot.archivedAt) throw new ThreadError('bot_archived', `${bot.name} is archived`, 409);
+    return bot;
+  }
+
+  private systemMessage(threadId: string, text: string): void {
+    this.publish(this.opts.repos.messages.create({ threadId, authorType: 'system', contentMd: text }));
+  }
+
+  /** Who answers group messages without mentions: the configured moderator, else Agent A, else the first member. */
+  moderatorOf(thread: Thread, members: Bot[]): Bot | undefined {
+    const active = members.filter((b) => !b.archivedAt);
+    return active.find((b) => b.id === thread.moderatorBotId) ?? active.find((b) => b.isLead) ?? active[0];
   }
 
   /** A page of history, oldest first: the newest `limit` messages, or the ones just before `before`. */
@@ -109,17 +187,24 @@ export class ThreadService {
     return { messages: (hasMore ? rows.slice(1) : rows).map(toMessageView), hasMore };
   }
 
-  /** The bots a new owner message in this thread is addressed to. */
-  private recipients(threadId: string, kind: string): Bot[] {
-    if (kind !== 'dm') return [];
-    return this.opts.repos.threads.listMembers(threadId);
+  /** The bots a new owner message is addressed to, and the members it mentions. */
+  private recipients(thread: Thread, content: string): { bots: Bot[]; mentions: string[] } {
+    const members = this.opts.repos.threads.listMembers(thread.id);
+    if (thread.kind === 'dm') return { bots: members, mentions: [] };
+    if (thread.kind !== 'group') return { bots: [], mentions: [] };
+    const mentions = parseMentions(content, members);
+    if (mentions.length > 0) {
+      return { bots: mentions.map((id) => members.find((b) => b.id === id)!), mentions };
+    }
+    const moderator = this.moderatorOf(thread, members);
+    return { bots: moderator ? [moderator] : [], mentions };
   }
 
   send(id: string, body: SendMessageRequest): SendMessageResponse {
     const { repos, log } = this.opts;
     const thread = this.writable(id);
     const req = sendMessageRequestSchema.parse(body);
-    const recipients = this.recipients(id, thread.kind);
+    const { bots: recipients, mentions } = this.recipients(thread, req.content);
     const archived = recipients.find((b) => b.archivedAt);
     if (archived) {
       throw new ThreadError('bot_archived', `${archived.name} is archived; restore it to chat`, 409);
@@ -139,6 +224,7 @@ export class ThreadService {
       threadId: id,
       authorType: 'user',
       contentMd: composeUserMessage(req.content, req.attachments),
+      mentions,
     });
     // What the bot reads for this message: the text plus the attachments' full paths in its computer.
     const forBot = { ...message, contentMd: composeUserPrompt(req.content, req.attachments) };
@@ -173,8 +259,8 @@ export class ThreadService {
     return thread;
   }
 
-  /** A bot's own message in a thread it belongs to (Platform MCP `post_message`). Starts no runs (routing: F18). */
-  postAsBot(bot: Bot, threadId: string, text: string): MessageView {
+  /** A bot's own message in a thread it belongs to (Platform MCP `post_message`); its @mentions are routed. */
+  postAsBot(bot: Bot, threadId: string, text: string, parentRun?: Run): MessageView {
     this.writable(threadId);
     if (!this.opts.repos.threads.isMember(threadId, bot.id)) {
       throw new ThreadError('not_a_member', `You are not a member of thread ${threadId}`, 403);
@@ -185,9 +271,44 @@ export class ThreadService {
       authorBotId: bot.id,
       contentMd: text,
     });
-    this.publish(message);
+    const routed = this.routeBotMessage(message, parentRun) ?? message;
+    this.publish(routed);
     this.opts.log.info({ threadId, messageId: message.id, botId: bot.id }, 'bot posted');
-    return toMessageView(message);
+    return toMessageView(routed);
+  }
+
+  /**
+   * A bot's message in a group (its reply or a post): every other member it @mentions gets a `mention` run one hop
+   * further than `parentRun`. Past MAX_HOPS nobody is triggered. Records the mentions on the message and returns it
+   * (undefined when nothing changed). The caller publishes the message.
+   */
+  routeBotMessage(message: Message, parentRun?: Run): Message | undefined {
+    const { repos, log } = this.opts;
+    const thread = repos.threads.get(message.threadId);
+    if (!thread || thread.kind !== 'group' || thread.archivedAt || message.authorType !== 'bot') return;
+    const members = repos.threads.listMembers(thread.id).filter((b) => !b.archivedAt);
+    const mentions = parseMentions(message.contentMd, members).filter((id) => id !== message.authorBotId);
+    if (mentions.length === 0) return;
+    const stored = repos.messages.setMentions(message.id, mentions) ?? message;
+    const hopCount = (parentRun?.hopCount ?? 0) + 1;
+    if (hopCount > MAX_HOPS) {
+      log.info({ threadId: thread.id, messageId: message.id, hopCount }, 'mention not routed: hop limit');
+      return stored;
+    }
+    for (const id of mentions) {
+      const bot = members.find((b) => b.id === id)!;
+      const run = this.opts.runs.enqueue({
+        botId: bot.id,
+        threadId: thread.id,
+        trigger: 'mention',
+        prompt: this.promptFor(bot, thread, stored),
+        parentRunId: parentRun?.id ?? null,
+        hopCount,
+      });
+      this.markSeen(run, stored.id);
+    }
+    log.info({ threadId: thread.id, messageId: message.id, mentions }, 'bot mentions routed');
+    return stored;
   }
 
   /**
@@ -250,14 +371,30 @@ export class ThreadService {
           .filter((m) => m.id !== latest.id && m.authorBotId !== bot.id)
       : [];
     // Every bot, not just members: teammates can write in a bot's DM through ask_bot.
-    const members = new Map(repos.bots.list({ includeArchived: true }).map((b) => [b.id, b]));
-    return buildPrompt({ bot, thread, newMessages: toPromptMessages([...unseen, latest], members) });
+    const everyone = new Map(repos.bots.list({ includeArchived: true }).map((b) => [b.id, b]));
+    const newMessages = toPromptMessages([...unseen, latest], everyone);
+    if (thread.kind !== 'group') return buildPrompt({ bot, thread, newMessages });
+    const members = repos.threads.listMembers(thread.id).filter((b) => !b.archivedAt);
+    const group = {
+      purpose: thread.purpose,
+      members,
+      moderatorId: this.moderatorOf(thread, members)?.id ?? null,
+    };
+    return buildPrompt({ bot, thread, newMessages, group });
   }
 
   /** Rename, or toggle Explain mode (read by the prompt builder on the bots' next turns). */
   update(id: string, body: ThreadUpdateRequest): ThreadView {
-    this.thread(id);
-    this.opts.repos.threads.update(id, threadUpdateRequestSchema.parse(body));
+    const thread = this.thread(id);
+    const patch = threadUpdateRequestSchema.parse(body);
+    if (patch.moderatorBotId !== undefined || patch.purpose !== undefined) {
+      if (thread.kind !== 'group')
+        throw new ThreadError('not_a_group', 'Only group chats have a moderator and purpose', 409);
+    }
+    if (patch.moderatorBotId && !this.opts.repos.threads.isMember(id, patch.moderatorBotId)) {
+      throw new ThreadError('moderator_not_member', 'The moderator must be a member of the group', 400);
+    }
+    this.opts.repos.threads.update(id, patch);
     return this.get(id);
   }
 

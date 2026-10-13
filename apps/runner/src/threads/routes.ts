@@ -1,10 +1,13 @@
 import {
   MAX_ATTACHMENT_BYTES,
+  addMemberRequestSchema,
   apiError,
+  groupCreateRequestSchema,
   inboxUploadQuerySchema,
   messagePageQuerySchema,
   retryTurnRequestSchema,
   sendMessageRequestSchema,
+  threadListQuerySchema,
   threadUpdateRequestSchema,
 } from '@agenta/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
@@ -41,12 +44,37 @@ async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise
 }
 
 /**
+ * GET/POST /api/threads (group chats), POST /api/threads/:id/members, DELETE /api/threads/:id/members/:botId,
  * GET/PATCH /api/threads/:id, GET /api/threads/unread, POST /api/threads/:id/{read,retry},
  * GET/POST /api/threads/:id/messages, and POST /api/bots/:id/inbox?name= (raw file bytes,
  * application/octet-stream) for chat attachments.
  */
 export async function registerThreadRoutes(app: FastifyInstance, threads: ThreadService): Promise<void> {
   app.get('/api/threads/unread', async () => threads.unread());
+
+  app.get('/api/threads', async (req, reply) => {
+    const q = parse(threadListQuerySchema, req.query, reply, 'invalid_query');
+    if (!q) return;
+    return threads.list(q.kind);
+  });
+
+  app.post('/api/threads', async (req, reply) => {
+    const body = parse(groupCreateRequestSchema, req.body, reply, 'invalid_body');
+    if (!body) return;
+    const res = await handle(reply, () => threads.createGroup(body));
+    if (res) return reply.code(201).send(res);
+  });
+
+  app.post<IdParams>('/api/threads/:id/members', async (req, reply) => {
+    const body = parse(addMemberRequestSchema, req.body, reply, 'invalid_body');
+    if (!body) return;
+    return handle(reply, () => threads.addMember(req.params.id, body));
+  });
+
+  app.delete<{ Params: { id: string; botId: string } }>(
+    '/api/threads/:id/members/:botId',
+    async (req, reply) => handle(reply, () => threads.removeMember(req.params.id, req.params.botId)),
+  );
 
   app.patch<IdParams>('/api/threads/:id', async (req, reply) => {
     const body = parse(threadUpdateRequestSchema, req.body, reply, 'invalid_body');

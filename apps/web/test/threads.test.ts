@@ -2,6 +2,9 @@ import type { EngineQueueStateResponse, LiveEvent, MessageView, RunView } from '
 import { describe, expect, it } from 'vitest';
 import { buildTimeline, timelineText } from '@/lib/timeline';
 import {
+  insertMention,
+  mentionAt,
+  mentionCandidates,
   EMPTY_STREAM,
   type MessagesData,
   applyStreamEvent,
@@ -221,5 +224,27 @@ describe('runState', () => {
       runState(run('r', { status: 'limited' }), engines('2026-10-13T10:30:00.000Z'), true, now)?.label,
     ).toMatch(/^Usage limit reached — this turn runs again at \d{2}:\d{2}$/);
     expect(runState(run('r', { status: 'succeeded' }), undefined, false, now)).toBeNull();
+  });
+});
+
+describe('@mention autocomplete', () => {
+  const bots = [
+    { slug: 'agent-a', name: 'Agent A' },
+    { slug: 'alice', name: 'Alice' },
+    { slug: 'code-reviewer', name: 'Code Reviewer' },
+  ];
+  it('finds the mention being typed before the caret', () => {
+    expect(mentionAt('hi @al', 6)).toEqual({ start: 3, query: 'al' });
+    expect(mentionAt('@', 1)).toEqual({ start: 0, query: '' });
+    expect(mentionAt('mail x@al', 9)).toBeNull();
+    expect(mentionAt('@alice done', 11)).toBeNull();
+    expect(mentionAt('hi @al and more', 6)).toEqual({ start: 3, query: 'al' });
+  });
+  it('ranks prefix matches first and inserts @slug with one space', () => {
+    expect(mentionCandidates(bots, 'a').map((b) => b.slug)).toEqual(['agent-a', 'alice']);
+    expect(mentionCandidates(bots, 'rev').map((b) => b.slug)).toEqual(['code-reviewer']);
+    expect(mentionCandidates(bots, '')).toHaveLength(3);
+    expect(insertMention('hi @al', 6, 3, 'alice')).toEqual({ text: 'hi @alice ', caret: 10 });
+    expect(insertMention('hi @al there', 6, 3, 'alice')).toEqual({ text: 'hi @alice there', caret: 10 });
   });
 });

@@ -1,15 +1,16 @@
 'use client';
 
-import { MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, Users } from 'lucide-react';
+import { Hash, MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import type { BotView } from '@agenta/shared';
 import { BotAvatar } from '@/components/bot-avatar';
+import { NewGroupDialog } from '@/components/chat/group-dialogs';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { Button } from '@/components/ui/button';
 import { useBots } from '@/hooks/use-bots';
-import { useUnreadCounts } from '@/hooks/use-thread';
+import { useGroups, useUnreadCounts } from '@/hooks/use-thread';
 import { isActivePath, NAV_ITEMS } from '@/lib/nav';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
@@ -202,6 +203,66 @@ function SidebarBots({ collapsed, pathname }: { collapsed: boolean; pathname: st
   );
 }
 
+function SidebarGroups({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
+  const { data: groups, isPending } = useGroups();
+  const { data: unread } = useUnreadCounts();
+  const [creating, setCreating] = useState(false);
+  return (
+    <Section
+      title="Groups"
+      collapsed={collapsed}
+      action={
+        <button
+          type="button"
+          aria-label="New group"
+          onClick={() => setCreating(true)}
+          className="rounded p-0.5 hover:bg-sidebar-accent hover:text-foreground"
+        >
+          <Plus className="size-3.5" />
+        </button>
+      }
+    >
+      <ul aria-label="Groups" className="space-y-0.5">
+        {(groups ?? []).map((g) => {
+          const active = pathname === `/threads/${g.id}`;
+          const badge = active ? 0 : (unread?.counts[g.id] ?? 0);
+          return (
+            <li key={g.id}>
+              <Link
+                href={`/threads/${g.id}`}
+                title={collapsed ? g.title : undefined}
+                aria-current={active ? 'page' : undefined}
+                data-testid="sidebar-group"
+                className={cn(
+                  'flex h-8 items-center gap-2.5 rounded-md px-2 text-sm hover:bg-sidebar-accent',
+                  active && 'bg-sidebar-accent font-medium',
+                  collapsed && 'justify-center px-0',
+                )}
+              >
+                <Hash className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                {!collapsed && <span className="min-w-0 flex-1 truncate">{g.title}</span>}
+                {collapsed && <span className="sr-only">{g.title}</span>}
+                {!collapsed && badge > 0 && (
+                  <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 font-semibold text-primary-foreground">
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
+                {badge > 0 && <span className="sr-only">{`${badge} unread`}</span>}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {!collapsed && !isPending && groups?.length === 0 && (
+        <p className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+          <Users className="size-3.5" aria-hidden /> No group chats yet.
+        </p>
+      )}
+      <NewGroupDialog open={creating} onClose={() => setCreating(false)} />
+    </Section>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed: collapsed, toggleSidebar } = useShell();
@@ -240,13 +301,7 @@ export function Sidebar() {
       <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto p-2">
         <SidebarBots collapsed={collapsed} pathname={pathname} />
 
-        <Section title="Groups" collapsed={collapsed}>
-          {!collapsed && (
-            <p className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
-              <Users className="size-3.5" aria-hidden /> No group chats yet.
-            </p>
-          )}
-        </Section>
+        <SidebarGroups collapsed={collapsed} pathname={pathname} />
 
         <Section title="Workspace" collapsed={collapsed}>
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => (

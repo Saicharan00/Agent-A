@@ -91,12 +91,19 @@ export const threadCreateSchema = z.object({
   kind: z.enum(THREAD_KINDS),
   title: z.string().trim().min(1).max(200),
   explainMode: z.boolean().default(false),
+  purpose: z.string().trim().max(2000).default(''),
+  moderatorBotId: z.string().nullable().default(null),
   memberBotIds: z.array(z.string()).default([]),
 });
 export type ThreadCreateInput = z.input<typeof threadCreateSchema>;
 
 export const threadUpdateSchema = z
-  .object({ title: z.string().trim().min(1).max(200), explainMode: z.boolean() })
+  .object({
+    title: z.string().trim().min(1).max(200),
+    explainMode: z.boolean(),
+    purpose: z.string().trim().max(2000),
+    moderatorBotId: z.string().nullable(),
+  })
   .partial();
 export type ThreadUpdateInput = z.input<typeof threadUpdateSchema>;
 

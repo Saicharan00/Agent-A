@@ -114,6 +114,7 @@ const threads = new ThreadService({
   bots,
   runs,
 });
+runs.onReply = (run, reply) => void threads.routeBotMessage(reply, run);
 const platformTools = new PlatformTools({ repos, threads, log: rootLog.child({ module: 'platform-tools' }) });
 const platformMcp = new PlatformMcpServer({
   repos,

@@ -109,6 +109,11 @@ export function makeMessagesRepo(db: Db) {
         .get();
     },
 
+    /** The bots a message @mentions (group routing, F18). */
+    setMentions(id: string, mentions: string[]): Message | undefined {
+      return db.update(messages).set({ mentions }).where(eq(messages.id, id)).returning().get();
+    },
+
     setRunId(id: string, runId: string): Message | undefined {
       return db.update(messages).set({ runId }).where(eq(messages.id, id)).returning().get();
     },

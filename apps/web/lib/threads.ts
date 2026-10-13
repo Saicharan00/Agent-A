@@ -1,7 +1,9 @@
 // Direct chat logic for the UI (F13): API calls, the merged transcript (messages + the runs they started), the
 // per-run stream reducer and inline run states. Components only render what these return.
 import {
+  type BotView,
   type EngineQueueStateResponse,
+  type GroupCreateRequest,
   type LiveEvent,
   type MessagePage,
   type MessageView,
@@ -34,6 +36,13 @@ const enc = encodeURIComponent;
 
 export const threadsApi = {
   get: (id: string) => apiRequest(`/threads/${enc(id)}`, threadViewSchema),
+  groups: () => apiRequest('/threads', z.array(threadViewSchema), { query: { kind: 'group' } }),
+  createGroup: (body: GroupCreateRequest) =>
+    apiRequest('/threads', threadViewSchema, { method: 'POST', body }),
+  addMember: (id: string, botId: string) =>
+    apiRequest(`/threads/${enc(id)}/members`, threadViewSchema, { method: 'POST', body: { botId } }),
+  removeMember: (id: string, botId: string) =>
+    apiRequest(`/threads/${enc(id)}/members/${enc(botId)}`, threadViewSchema, { method: 'DELETE' }),
   messages: (id: string, before?: string) =>
     apiRequest(`/threads/${enc(id)}/messages`, messagePageSchema, {
       query: { before, limit: MESSAGE_PAGE_SIZE },
@@ -279,4 +288,32 @@ export function retryableRun(runs: RunView[], botId: string): RunView | null {
 export function lastUserMessage(messages: MessageView[]): MessageView | null {
   for (let i = messages.length - 1; i >= 0; i--) if (messages[i]!.authorType === 'user') return messages[i]!;
   return null;
+}
+
+// ---------- @mentions (group composer) ----------
+
+/** The `@partial` being typed just before the caret, or null when the caret is not in a mention. */
+export function mentionAt(text: string, caret: number): { start: number; query: string } | null {
+  const m = /(^|[^\w@])@([a-z0-9-]*)$/i.exec(text.slice(0, caret));
+  if (!m) return null;
+  return { start: caret - m[2]!.length - 1, query: m[2]!.toLowerCase() };
+}
+
+/** Members matching a mention query: slug or name prefix first, then anywhere in the name. Up to 8. */
+export function mentionCandidates<B extends Pick<BotView, 'slug' | 'name'>>(bots: B[], query: string): B[] {
+  const starts = bots.filter((b) => b.slug.startsWith(query) || b.name.toLowerCase().startsWith(query));
+  const rest = bots.filter((b) => !starts.includes(b) && b.name.toLowerCase().includes(query));
+  return [...starts, ...rest].slice(0, 8);
+}
+
+/** Replaces the mention being typed with `@slug ` and returns the new text and caret. */
+export function insertMention(
+  text: string,
+  caret: number,
+  start: number,
+  slug: string,
+): { text: string; caret: number } {
+  const inserted = `@${slug} `;
+  const after = text.slice(caret).replace(/^\s/, '');
+  return { text: text.slice(0, start) + inserted + after, caret: start + inserted.length };
 }

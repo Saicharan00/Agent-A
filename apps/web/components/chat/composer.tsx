@@ -1,13 +1,14 @@
 'use client';
 
-import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@agenta/shared';
+import { type BotView, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@agenta/shared';
 import { Loader2, Paperclip, Send, Square, X } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { BotAvatar } from '@/components/bot-avatar';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { Button } from '@/components/ui/button';
 import { useSendMessage } from '@/hooks/use-thread';
 import { matchesShortcut, SHORTCUTS } from '@/lib/shortcuts';
-import { threadsApi } from '@/lib/threads';
+import { insertMention, mentionAt, mentionCandidates, threadsApi } from '@/lib/threads';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
@@ -47,8 +48,11 @@ export function Composer({
   stopping,
   draft,
   onDraftDone,
+  mentionable,
 }: {
   threadId: string;
+  /** Group chats: the members `@` autocompletes. */
+  mentionable?: BotView[];
   /** Where attachments go (the DM's bot); null disables attaching. */
   botId: string | null;
   botName: string;
@@ -66,6 +70,19 @@ export function Composer({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const send = useSendMessage(threadId);
+  const [caret, setCaret] = useState(0);
+  const [highlight, setHighlight] = useState(0);
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const mention = mentionable ? mentionAt(text, caret) : null;
+  const candidates = mention && mentionable ? mentionCandidates(mentionable, mention.query) : [];
+  const suggesting = candidates.length > 0 && dismissedAt !== mention?.start;
+  const pick = (bot: BotView) => {
+    if (!mention) return;
+    const next = insertMention(text, caret, mention.start, bot.slug);
+    setText(next.text);
+    setCaret(next.caret);
+    requestAnimationFrame(() => inputRef.current?.setSelectionRange(next.caret, next.caret));
+  };
 
   // Edit and resend: load the draft once per request.
   const draftKey = draft?.key;
@@ -139,6 +156,24 @@ export function Composer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (suggesting) {
+      const n = candidates.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlight((h) => (h + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
+        return;
+      }
+      if ((e.key === 'Enter' && !e.ctrlKey && !e.metaKey) || e.key === 'Tab') {
+        e.preventDefault();
+        pick(candidates[Math.min(highlight, n - 1)]!);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setDismissedAt(mention!.start);
+        return;
+      }
+    }
     if (matchesShortcut(e, SHORTCUTS.send) || (e.metaKey && e.key === 'Enter')) {
       e.preventDefault();
       submit();
@@ -216,10 +251,44 @@ export function Composer({
             ))}
           </ul>
         )}
+        {suggesting && (
+          <ul
+            role="listbox"
+            aria-label="Mention a bot"
+            className="mx-2 mt-2 max-h-56 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md"
+          >
+            {candidates.map((bot, i) => (
+              <li
+                key={bot.id}
+                role="option"
+                aria-selected={i === highlight}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // keep the textarea focused
+                  pick(bot);
+                }}
+                onMouseEnter={() => setHighlight(i)}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+                  i === highlight && 'bg-accent text-accent-foreground',
+                )}
+              >
+                <BotAvatar name={bot.name} color={bot.avatarColor} shape={bot.avatarShape} size="sm" />
+                <span className="font-medium">{bot.name}</span>
+                <span className="text-xs text-muted-foreground">@{bot.slug}</span>
+                {bot.role && <span className="truncate text-xs text-muted-foreground">· {bot.role}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
         <textarea
           ref={inputRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setCaret(e.target.selectionStart);
+            setHighlight(0);
+          }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
           rows={1}
           disabled={!!disabledReason}

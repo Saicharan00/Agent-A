@@ -1,7 +1,7 @@
 'use client';
 
-import { type BotView, type MessageView, splitUserMessage } from '@agenta/shared';
-import { GraduationCap, MessagesSquare, Monitor, Settings } from 'lucide-react';
+import { type BotView, type MessageView, type ThreadView as Thread, splitUserMessage } from '@agenta/shared';
+import { GraduationCap, Hash, MessagesSquare, Monitor, Settings, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
@@ -27,15 +27,59 @@ import { STATUS_LABEL } from '@/lib/avatar';
 import { buildTranscript, flattenPages, lastUserMessage, retryableRun, stoppableRuns } from '@/lib/threads';
 import { cn } from '@/lib/utils';
 import { Composer, type ComposerDraft } from './composer';
+import { GroupMembersDialog } from './group-dialogs';
 import { MessageList } from './message-list';
+
+/** Group header: name, purpose, stacked member avatars that open the members dialog. */
+function GroupHeading({ thread }: { thread: Thread }) {
+  const [open, setOpen] = useState(false);
+  const shown = thread.members.slice(0, 5);
+  return (
+    <>
+      <Hash className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-base font-semibold">{thread.title}</h1>
+        <p className="truncate text-xs text-muted-foreground">
+          {thread.purpose || `${thread.members.length} member${thread.members.length === 1 ? '' : 's'}`}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Members (${thread.members.length})`}
+        data-testid="group-members"
+        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-accent"
+      >
+        <span className="flex -space-x-1.5">
+          {shown.map((b) => (
+            <span key={b.id} className="rounded-full ring-2 ring-background" title={b.name}>
+              <BotAvatar
+                name={b.name}
+                color={b.avatarColor}
+                shape={b.avatarShape}
+                status={b.status}
+                size="sm"
+              />
+            </span>
+          ))}
+        </span>
+        <Users className="size-4 text-muted-foreground" aria-hidden />
+        <span className="text-xs text-muted-foreground">{thread.members.length}</span>
+      </button>
+      <GroupMembersDialog thread={thread} open={open} onClose={() => setOpen(false)} />
+    </>
+  );
+}
 
 function ThreadHeader({
   bot,
+  group,
   title,
   explainMode,
   onToggleExplain,
 }: {
   bot: BotView | undefined;
+  group: Thread | undefined;
   title: string;
   explainMode: boolean | undefined;
   onToggleExplain: () => void;
@@ -43,19 +87,25 @@ function ThreadHeader({
   const { openComputer } = useShell();
   return (
     <header className="flex items-center gap-3 border-b px-4 py-2.5">
-      {bot && (
-        <BotAvatar name={bot.name} color={bot.avatarColor} shape={bot.avatarShape} status={bot.status} />
+      {group ? (
+        <GroupHeading thread={group} />
+      ) : (
+        <>
+          {bot && (
+            <BotAvatar name={bot.name} color={bot.avatarColor} shape={bot.avatarShape} status={bot.status} />
+          )}
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-base font-semibold">{bot?.name ?? title}</h1>
+            {bot && (
+              <p className="truncate text-xs text-muted-foreground">
+                {[bot.role, ENGINE_LABELS[bot.engine] + (bot.model ? ` · ${bot.model}` : '')]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
+          </div>
+        </>
       )}
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-base font-semibold">{bot?.name ?? title}</h1>
-        {bot && (
-          <p className="truncate text-xs text-muted-foreground">
-            {[bot.role, ENGINE_LABELS[bot.engine] + (bot.model ? ` · ${bot.model}` : '')]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-        )}
-      </div>
       {explainMode !== undefined && (
         <Button
           variant="ghost"
@@ -108,7 +158,8 @@ export function ThreadView({ threadId }: { threadId: string }) {
 
   // Thread events (messages, run status) update the cache in LiveProvider.
   useLiveChannel(`thread:${threadId}`);
-  const member = thread.data?.members[0];
+  const isGroup = thread.data?.kind === 'group';
+  const member = isGroup ? undefined : thread.data?.members[0];
   useLiveChannel(member ? `bot:${member.id}` : null);
   // The bot detail query is patched live (status); the thread's copy is a snapshot.
   const liveBot = useBot(member?.id ?? '', { enabled: !!member }).data;
@@ -168,14 +219,15 @@ export function ThreadView({ threadId }: { threadId: string }) {
     ? 'This conversation is archived.'
     : bot?.archivedAt
       ? `${bot.name} is archived. Restore it to chat.`
-      : thread.data && thread.data.kind !== 'dm'
-        ? 'Group chats arrive soon.'
+      : thread.data && thread.data.kind !== 'dm' && thread.data.kind !== 'group'
+        ? 'This conversation is read-only.'
         : null;
 
   return (
     <div className="flex h-full flex-col" data-testid="thread-view">
       <ThreadHeader
         bot={bot}
+        group={isGroup ? thread.data : undefined}
         title={thread.data?.title ?? 'Conversation'}
         explainMode={thread.data?.explainMode}
         onToggleExplain={() => thread.data && update.mutate({ explainMode: !thread.data.explainMode })}
@@ -199,7 +251,11 @@ export function ThreadView({ threadId }: { threadId: string }) {
             <EmptyState
               icon={MessagesSquare}
               title={bot ? `Start a conversation with ${bot.name}` : 'No messages yet'}
-              description="Ask for anything. Attach files with the paperclip; they land in the bot's work/inbox folder."
+              description={
+                isGroup
+                  ? 'Type @ to mention bots; they answer in turn. Messages without a mention go to the moderator.'
+                  : "Ask for anything. Attach files with the paperclip; they land in the bot's work/inbox folder."
+              }
             />
           )
         }
@@ -207,7 +263,8 @@ export function ThreadView({ threadId }: { threadId: string }) {
       <Composer
         threadId={threadId}
         botId={thread.data?.kind === 'dm' ? (bot?.id ?? null) : null}
-        botName={bot?.name ?? 'the team'}
+        botName={isGroup ? `#${thread.data!.title}` : (bot?.name ?? 'the team')}
+        mentionable={isGroup ? thread.data!.members : undefined}
         disabledReason={thread.data ? disabledReason : 'Loading…'}
         activeRunIds={active}
         onStop={stop}
