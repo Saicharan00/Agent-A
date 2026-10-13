@@ -1,6 +1,7 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Bot, Message, Task, Thread } from '@agenta/db';
+import type { Bot, Goal, Message, Task, Thread } from '@agenta/db';
+import { MAX_REVISION_ROUNDS, goalArtifactsDir } from '@agenta/shared';
 
 // Turns platform state into what an engine reads: the per-turn prompt, a system-prompt addition, and the
 // instruction files the CLIs load on their own (/home/bot/CLAUDE.md for Claude Code, AGENTS.md for Codex).
@@ -21,6 +22,23 @@ export type PromptTask = Pick<
   'id' | 'title' | 'status' | 'priority' | 'descriptionMd' | 'acceptanceMd' | 'revisionCount'
 >;
 
+export type PromptGoal = Pick<
+  Goal,
+  'id' | 'title' | 'slug' | 'goalMd' | 'constraintsMd' | 'autoRun' | 'confirmedAt' | 'maxTasks'
+> & { tasksTotal: number; tasksDone: number };
+
+/** A handed-in task for the lead to review (F20). */
+export type PromptReview = PromptTask & {
+  assigneeName: string;
+  resultSummaryMd: string | null;
+  artifacts: string[];
+};
+
+/** The goal's tasks when the lead writes the goal report (F20). */
+export type PromptReportTask = Pick<Task, 'id' | 'title' | 'resultSummaryMd' | 'artifacts' | 'executedBy'> & {
+  assigneeName: string;
+};
+
 export type PromptGroup = {
   purpose: string;
   members: Pick<Bot, 'id' | 'name' | 'slug' | 'role' | 'isLead'>[];
@@ -38,7 +56,78 @@ export type BuildPromptInput = {
   explainMode?: boolean;
   /** Group chats: purpose and members (F18). */
   group?: PromptGroup | null;
+  /** Goal threads (the lead's turns) and goal task briefs (F20). */
+  goal?: PromptGoal | null;
+  /** A review turn of the lead: the handed-in task. */
+  review?: PromptReview | null;
+  /** The lead's goal report turn: every task is done. */
+  report?: PromptReportTask[] | null;
 };
+
+/** The goal as the lead sees it in its goal thread, with what to do next. */
+function renderGoal(g: PromptGoal): string {
+  const lines = [`## Goal ${g.id}: ${g.title}`, g.goalMd.trim()];
+  if (g.constraintsMd.trim()) lines.push('', '### Constraints', g.constraintsMd.trim());
+  lines.push('', `Artifacts folder for this goal: \`${goalArtifactsDir(g.slug)}\``);
+  if (g.tasksTotal > 0) {
+    lines.push(`Progress: ${g.tasksDone}/${g.tasksTotal} tasks done.`);
+  } else if (g.confirmedAt || g.autoRun) {
+    lines.push(
+      `Plan status: ${g.confirmedAt ? 'the owner confirmed the plan' : 'auto-run is on'}. Create the tasks now with \`create_task\` (at most ${g.maxTasks}).`,
+    );
+  } else {
+    lines.push(
+      'Plan status: waiting for the owner. Propose the plan (or answer the owner) and ask them to confirm it; do not create tasks yet.',
+    );
+  }
+  return lines.join('\n');
+}
+
+/** What a specialist needs to know about the goal behind its task. */
+function renderGoalContext(g: PromptGoal): string {
+  const goal = g.goalMd.trim();
+  const lines = [`### Goal context: ${g.title}`, goal.length > 2000 ? `${goal.slice(0, 2000)}…` : goal];
+  if (g.constraintsMd.trim()) lines.push('', 'Constraints:', g.constraintsMd.trim());
+  lines.push('', `Put your artifacts in \`${goalArtifactsDir(g.slug)}\` (create it if it is missing).`);
+  return lines.join('\n');
+}
+
+function renderReview(r: PromptReview): string {
+  const lines = [
+    `## Review: task ${r.id}: ${r.title}`,
+    `Handed in by ${r.assigneeName} · Revision: ${r.revisionCount}`,
+  ];
+  if (r.acceptanceMd.trim()) lines.push('', '### Acceptance criteria', r.acceptanceMd.trim());
+  lines.push('', '### Result summary', r.resultSummaryMd?.trim() || '_No summary._');
+  lines.push(
+    '',
+    '### Artifacts',
+    r.artifacts.length ? r.artifacts.map((a) => `- ${a}`).join('\n') : '_None._',
+  );
+  lines.push(
+    '',
+    `Check the work against the acceptance criteria (open the artifacts; they are on your computer too). Then call \`review_task\` (id ${r.id}): approve, or request_changes with concrete, actionable feedback. After ${MAX_REVISION_ROUNDS} rounds of changes the owner decides instead.`,
+  );
+  return lines.join('\n');
+}
+
+function renderReport(tasks: PromptReportTask[]): string {
+  return [
+    `## Goal report: all ${tasks.length} tasks are done`,
+    tasks
+      .map(
+        (t) =>
+          `- ${t.title} (${t.id}, ${t.executedBy === 'human' ? 'done by the owner' : t.assigneeName}): ${t.resultSummaryMd?.trim() || 'no summary'}${t.artifacts.length ? ` · artifacts: ${t.artifacts.join(', ')}` : ''}`,
+      )
+      .join('\n'),
+    '',
+    [
+      'Write the goal report as your reply here, with these sections: what was done; decisions made (record each',
+      'with `record_decision`); risks and open questions; what the owner should do themselves; and 1–3 lessons',
+      '(add each with `add_lesson`).',
+    ].join(' '),
+  ].join('\n');
+}
 
 function renderGroup(g: PromptGroup, thread: PromptThread, bot: PromptBot): string {
   const lines = [`## About #${thread.title}`];
@@ -94,13 +183,14 @@ function renderMessage(m: PromptMessage, bot: PromptBot): string {
   return `**${who}** · ${minute(m.createdAt)}${tag}:\n${m.contentMd.trim()}`;
 }
 
-function renderTask(t: PromptTask): string {
+function renderTask(t: PromptTask, goal?: PromptGoal | null): string {
   const lines = [
     `## Task ${t.id}: ${t.title}`,
     `Status: ${t.status} · Priority: ${t.priority}${t.revisionCount > 0 ? ` · Revision ${t.revisionCount}` : ''}`,
   ];
   if (t.descriptionMd.trim()) lines.push('', '### Description', t.descriptionMd.trim());
   if (t.acceptanceMd.trim()) lines.push('', '### Acceptance criteria', t.acceptanceMd.trim());
+  if (goal) lines.push('', renderGoalContext(goal));
   return lines.join('\n');
 }
 
@@ -120,7 +210,7 @@ export function renderFollowUp(bot: PromptBot, messages: PromptMessage[]): strin
 
 /** The text sent to the engine for one turn. */
 export function buildPrompt(input: BuildPromptInput): string {
-  const { bot, thread, newMessages, task } = input;
+  const { bot, thread, newMessages, task, goal } = input;
   const explain = input.explainMode ?? thread.explainMode;
   const simple =
     thread.kind === 'dm' &&
@@ -133,19 +223,24 @@ export function buildPrompt(input: BuildPromptInput): string {
 
   const parts: string[] = [];
   if (input.group) parts.push(renderGroup(input.group, thread, bot));
+  if (goal && thread.kind === 'goal') parts.push(renderGoal(goal));
   if (newMessages.length > 0) {
     const where =
       thread.kind === 'dm'
         ? 'this chat'
         : thread.kind === 'group'
           ? `#${thread.title}`
-          : `the ${thread.kind} thread "${thread.title}"`;
+          : thread.kind === 'goal'
+            ? 'this goal'
+            : `the ${thread.kind} thread "${thread.title}"`;
     parts.push(
       `## New messages in ${where} since your last turn`,
       newMessages.map((m) => renderMessage(m, bot)).join('\n\n'),
     );
   }
-  if (task) parts.push(renderTask(task));
+  if (task) parts.push(renderTask(task, goal));
+  if (input.review) parts.push(renderReview(input.review));
+  if (input.report) parts.push(renderReport(input.report));
   if (explain) parts.push(EXPLAIN_MODE_TEXT);
   if (task) {
     parts.push(
@@ -160,13 +255,33 @@ export function buildPrompt(input: BuildPromptInput): string {
   return parts.join('\n\n');
 }
 
+/** The lead's planning protocol for goal threads (F20), appended to its system prompt. */
+export function planningProtocol(goal: Pick<Goal, 'autoRun' | 'maxTasks'>): string {
+  return [
+    '## Planning protocol (this thread is a goal from the owner)',
+    '1. Restate the goal in one or two sentences.',
+    '2. List your assumptions and any questions for the owner.',
+    `3. Propose a plan: up to ${goal.maxTasks} tasks, each with a title, a short description, acceptance criteria and the best specialist for it (see \`list_bots\`). Mark work the owner must do themselves.`,
+    goal.autoRun
+      ? '4. Auto-run is on: create the tasks with `create_task` right away (assignee = the specialist); each one starts at once.'
+      : '4. Ask the owner to confirm the plan, and wait. Once they confirm, create the tasks with `create_task` (assignee = the specialist); each one starts at once.',
+    'Work only from non-confidential descriptions: never put secrets, credentials or confidential details in tasks.',
+    'Specialists hand in with `submit_task_result`; you then review each result with `review_task`. When every task is done you write the goal report.',
+  ].join('\n');
+}
+
 /** Short identity + platform rules appended to the engine's system prompt. */
-export function buildSystemPromptAppend(bot: PromptBot, thread: PromptThread | null): string {
+export function buildSystemPromptAppend(
+  bot: PromptBot,
+  thread: PromptThread | null,
+  goal?: Pick<Goal, 'autoRun' | 'maxTasks'> | null,
+): string {
   return [
     `You are ${bot.name}${bot.role ? `, ${bot.role}` : ''}: one of the AI teammates on the owner's Agent A team (handle @${bot.slug}).`,
     thread ? `You are working in thread ${thread.id} (${thread.kind}).` : '',
     'Your computer is a Linux container: work in /home/bot/work, keep notes in /home/bot/notes, team files are in /shared.',
     'Use the `agenta` MCP tools to create tasks, message teammates, record decisions and request approval for risky external actions.',
+    goal && thread?.kind === 'goal' ? planningProtocol(goal) : '',
   ]
     .filter(Boolean)
     .join('\n');

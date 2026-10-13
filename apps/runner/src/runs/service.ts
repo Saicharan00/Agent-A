@@ -53,6 +53,8 @@ export type EnqueueInput = {
   prompt: string;
   parentRunId?: string | null;
   hopCount?: number;
+  /** Defaults to the goal of the task, of the thread (a goal thread) or of the parent run. */
+  goalId?: string | null;
 };
 
 /**
@@ -139,13 +141,41 @@ export class RunService {
 
   // ---------- queue ----------
 
+  /**
+   * The goal a new run works for (F20), refusing it while the goal is paused or has used its run budget.
+   * Returns null for runs outside any goal.
+   */
+  admitGoal(input: Pick<EnqueueInput, 'goalId' | 'taskId' | 'threadId' | 'parentRunId'>): string | null {
+    const { repos } = this.opts;
+    const goalId =
+      input.goalId ??
+      (input.taskId ? repos.tasks.get(input.taskId)?.goalId : null) ??
+      (input.threadId ? repos.goals.getByThread(input.threadId)?.id : null) ??
+      (input.parentRunId ? repos.runs.get(input.parentRunId)?.goalId : null) ??
+      null;
+    const goal = goalId ? repos.goals.get(goalId) : undefined;
+    if (!goal) return null;
+    if (goal.pausedAt) {
+      throw new RunError('goal_paused', `The goal "${goal.title}" is paused; resume it first`, 409);
+    }
+    if (repos.goals.countRuns(goal.id) >= goal.maxRuns) {
+      throw new RunError(
+        'goal_run_limit',
+        `The goal "${goal.title}" has used all ${goal.maxRuns} of its runs`,
+        409,
+      );
+    }
+    return goal.id;
+  }
+
   /** Creates a `queued` run for the bot's effective engine and wakes the scheduler. */
   enqueue(input: EnqueueInput & { retryOfRunId?: string | null }): Run {
     const { repos, engines } = this.opts;
     const bot = repos.bots.get(input.botId);
     if (!bot) throw new RunError('bot_not_found', `Bot ${input.botId} not found`, 404);
     if (bot.archivedAt) throw new RunError('bot_archived', `${bot.name} is archived`, 409);
-    const run = repos.runs.create({ ...input, engine: engines.effectiveEngine(bot) });
+    const goalId = this.admitGoal(input);
+    const run = repos.runs.create({ ...input, goalId, engine: engines.effectiveEngine(bot) });
     this.opts.log.info({ runId: run.id, botId: bot.id, trigger: run.trigger }, 'run queued');
     this.publishRun(run);
     this.schedule();
@@ -530,7 +560,11 @@ export class RunService {
       bot,
       threadId: run.threadId ?? run.id,
       prompt: run.prompt,
-      systemPromptAppend: buildSystemPromptAppend(bot, thread),
+      systemPromptAppend: buildSystemPromptAppend(
+        bot,
+        thread,
+        thread?.kind === 'goal' ? repos.goals.getByThread(thread.id) : null,
+      ),
       ...(resumeSessionId ? { resumeSessionId } : {}),
       mcpConfigPath: MCP_CONFIG_PATH,
       cwd: WORK_DIR,

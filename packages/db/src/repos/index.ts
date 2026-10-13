@@ -1,5 +1,6 @@
 import type { Db } from '../client';
 import { makeBotsRepo } from './bots';
+import { makeGoalsRepo } from './goals';
 import { makeDecisionsRepo, makeLessonsRepo, makeMemoriesRepo } from './knowledge';
 import { makeMessagesRepo } from './messages';
 import { makeApprovalsRepo, makeEngineStateRepo, makeNotificationsRepo, makeSchedulesRepo } from './ops';
@@ -18,6 +19,7 @@ export function createRepos(db: Db) {
     sessions: makeSessionsRepo(db),
     runs: makeRunsRepo(db),
     tasks: makeTasksRepo(db),
+    goals: makeGoalsRepo(db),
     memories: makeMemoriesRepo(db),
     decisions: makeDecisionsRepo(db),
     lessons: makeLessonsRepo(db),
@@ -33,6 +35,7 @@ export function createRepos(db: Db) {
 export type Repos = ReturnType<typeof createRepos>;
 
 export * from './bots';
+export * from './goals';
 export * from './knowledge';
 export * from './messages';
 export * from './ops';

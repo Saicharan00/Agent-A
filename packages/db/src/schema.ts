@@ -20,6 +20,7 @@ import {
   CONNECTOR_TYPES,
   DECISION_STATUSES,
   ENGINES,
+  GOAL_STATUSES,
   GUARD_TERM_KINDS,
   LESSON_SOURCES,
   MEMORY_SCOPES,
@@ -129,13 +130,40 @@ export const tasks = sqliteTable(
     dueAt: text('due_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /** The goal this task belongs to (F20). */
+    goalId: text('goal_id').references((): AnySQLiteColumn => goals.id, { onDelete: 'set null' }),
   },
   (t) => [
+    index('tasks_goal_idx').on(t.goalId),
     index('tasks_status_idx').on(t.status),
     index('tasks_assignee_idx').on(t.assigneeBotId),
     index('tasks_parent_idx').on(t.parentTaskId),
   ],
 );
+
+/** Goals (F20). Not in PLAN's table list: a goal groups its tasks and runs for progress, budget and pause. */
+export const goals = sqliteTable('goals', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  /** Names the artifacts folder /shared/projects/<slug>/. */
+  slug: text('slug').notNull(),
+  goalMd: text('goal_md').notNull(),
+  constraintsMd: text('constraints_md').notNull().default(''),
+  status: text('status', { enum: GOAL_STATUSES }).notNull().default('planning'),
+  /** Agent A creates the tasks without waiting for the owner to confirm the plan. */
+  autoRun: bool('auto_run').notNull().default(false),
+  confirmedAt: text('confirmed_at'),
+  pausedAt: text('paused_at'),
+  maxTasks: integer('max_tasks').notNull(),
+  maxRuns: integer('max_runs').notNull(),
+  leadBotId: text('lead_bot_id').references(() => bots.id, { onDelete: 'set null' }),
+  /** The goal's conversation with Agent A (kind `goal`): plan, reviews and the final report. */
+  threadId: text('thread_id').references(() => threads.id, { onDelete: 'set null' }),
+  reportRunId: text('report_run_id'),
+  finishedAt: text('finished_at'),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 export const runs = sqliteTable(
   'runs',
@@ -163,8 +191,11 @@ export const runs = sqliteTable(
     retryOfRunId: text('retry_of_run_id').references((): AnySQLiteColumn => runs.id, {
       onDelete: 'set null',
     }),
+    /** The goal this run works for (F20 run budget and pause). */
+    goalId: text('goal_id').references((): AnySQLiteColumn => goals.id, { onDelete: 'set null' }),
   },
   (t) => [
+    index('runs_goal_idx').on(t.goalId),
     index('runs_status_created_idx').on(t.status, t.createdAt),
     index('runs_bot_idx').on(t.botId, t.createdAt),
     index('runs_thread_idx').on(t.threadId),
@@ -391,6 +422,7 @@ export type BotThreadSession = typeof botThreadSessions.$inferSelect;
 export type Run = typeof runs.$inferSelect;
 export type RunEvent = typeof runEvents.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
+export type Goal = typeof goals.$inferSelect;
 export type TaskEvent = typeof taskEvents.$inferSelect;
 export type Memory = typeof memories.$inferSelect;
 export type Decision = typeof decisions.$inferSelect;

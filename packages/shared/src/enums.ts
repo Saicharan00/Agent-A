@@ -13,7 +13,7 @@ export type BotStatus = (typeof BOT_STATUSES)[number];
 export const NOTIFICATION_LEVELS = ['all', 'mentions', 'none'] as const;
 export type NotificationLevel = (typeof NOTIFICATION_LEVELS)[number];
 
-export const THREAD_KINDS = ['dm', 'group', 'task', 'scheduled'] as const;
+export const THREAD_KINDS = ['dm', 'group', 'task', 'scheduled', 'goal'] as const;
 export type ThreadKind = (typeof THREAD_KINDS)[number];
 
 export const AUTHOR_TYPES = ['user', 'bot', 'system'] as const;
@@ -41,6 +41,10 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
 export const TASK_EXECUTORS = ['agent', 'human', 'mixed'] as const;
 export type TaskExecutor = (typeof TASK_EXECUTORS)[number];
+
+/** A goal (F20): Agent A plans it, the team works its tasks, Agent A reports when every task is done. */
+export const GOAL_STATUSES = ['planning', 'in_progress', 'reporting', 'done'] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
 
 export const MEMORY_SCOPES = ['bot', 'shared'] as const;
 export type MemoryScope = (typeof MEMORY_SCOPES)[number];

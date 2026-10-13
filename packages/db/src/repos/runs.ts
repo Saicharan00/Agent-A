@@ -37,6 +37,7 @@ export function makeRunsRepo(db: Db) {
         botId?: string;
         threadId?: string;
         taskId?: string;
+        goalId?: string;
         status?: RunStatus | RunStatus[];
         limit?: number;
       } = {},
@@ -50,6 +51,7 @@ export function makeRunsRepo(db: Db) {
             opts.botId ? eq(runs.botId, opts.botId) : undefined,
             opts.threadId ? eq(runs.threadId, opts.threadId) : undefined,
             opts.taskId ? eq(runs.taskId, opts.taskId) : undefined,
+            opts.goalId ? eq(runs.goalId, opts.goalId) : undefined,
             statuses ? inArray(runs.status, statuses) : undefined,
           ),
         )

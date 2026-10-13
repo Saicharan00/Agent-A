@@ -146,3 +146,76 @@ describe('system prompt + instruction files', () => {
     }
   });
 });
+
+describe('goal prompts (F20)', () => {
+  const lead = { id: 'bot_lead', name: 'Agent A', slug: 'agent-a', role: 'Lead AI Engineer' };
+  const goalThread: PromptThread = { id: 'thr_goal', kind: 'goal', title: 'Launch page', explainMode: false };
+  const taskThread: PromptThread = { id: 'thr_task', kind: 'task', title: 'Build it', explainMode: false };
+  const goal = {
+    id: 'gol_1',
+    title: 'Launch page',
+    slug: 'launch-page-abc123',
+    goalMd: 'Ship a launch page for the side project.',
+    constraintsMd: 'No customer data.',
+    autoRun: false,
+    confirmedAt: null as string | null,
+    maxTasks: 12,
+    tasksTotal: 0,
+    tasksDone: 0,
+  };
+
+  it('the lead plans, creates tasks once confirmed, then sees progress', () => {
+    const turn = (g: typeof goal) =>
+      buildPrompt({
+        bot: lead,
+        thread: goalThread,
+        newMessages: [msg({ contentMd: 'Here is my goal' })],
+        goal: g,
+      });
+    expect(turn(goal)).toMatchSnapshot();
+    expect(turn({ ...goal, confirmedAt: '2026-10-13T10:00:00.000Z' })).toContain('Create the tasks now');
+    expect(turn({ ...goal, autoRun: true })).toContain('auto-run is on');
+    expect(turn({ ...goal, tasksTotal: 3, tasksDone: 1 })).toContain('Progress: 1/3 tasks done.');
+  });
+
+  it('planning protocol only in goal threads', () => {
+    expect(buildSystemPromptAppend(lead, goalThread, goal)).toMatchSnapshot();
+    expect(buildSystemPromptAppend(lead, taskThread, goal)).not.toContain('Planning protocol');
+  });
+
+  it('task brief with goal context, review and report turns', () => {
+    expect(buildPrompt({ bot, thread: taskThread, newMessages: [], task, goal })).toMatchSnapshot();
+    expect(
+      buildPrompt({
+        bot: lead,
+        thread: goalThread,
+        newMessages: [],
+        goal: { ...goal, tasksTotal: 2 },
+        review: {
+          ...task,
+          assigneeName: 'Code Reviewer',
+          resultSummaryMd: 'Reviewed, two comments.',
+          artifacts: ['/shared/projects/launch-page-abc123/review.md'],
+        },
+      }),
+    ).toMatchSnapshot();
+    expect(
+      buildPrompt({
+        bot: lead,
+        thread: goalThread,
+        newMessages: [],
+        goal: { ...goal, tasksTotal: 1, tasksDone: 1 },
+        report: [
+          {
+            id: 'tsk_1',
+            title: 'Review login PR #42',
+            resultSummaryMd: 'Done.',
+            artifacts: [],
+            executedBy: 'agent',
+            assigneeName: 'Code Reviewer',
+          },
+        ],
+      }),
+    ).toMatchSnapshot();
+  });
+});

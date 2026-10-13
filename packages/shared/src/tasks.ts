@@ -30,6 +30,8 @@ export const taskViewSchema = z.object({
   /** Paths in the bot's computer (/shared/…, /home/bot/…) or URLs. */
   artifacts: z.array(z.string()),
   dueAt: z.string().nullable(),
+  /** The goal it belongs to (F20). */
+  goalId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

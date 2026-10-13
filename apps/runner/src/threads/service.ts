@@ -34,6 +34,7 @@ import type { BotService } from '../bots/service';
 import type { EventBus } from '../bus';
 import { botHomeDir } from '../containers/home';
 import { buildPrompt, renderFollowUp, toPromptMessages } from '../engines/prompt';
+import { toPromptGoal } from '../goals/service';
 import type { RunService } from '../runs/service';
 
 /** Bot-triggered turns allowed in a chain started by one owner message (PLAN F18 loop guard). */
@@ -61,7 +62,7 @@ export type ThreadServiceOptions = {
   log: Log;
   botsDir: string;
   bots: Pick<BotService, 'view'>;
-  runs: Pick<RunService, 'enqueue' | 'cancel'>;
+  runs: Pick<RunService, 'enqueue' | 'cancel' | 'admitGoal'>;
   now?: () => Date;
 };
 
@@ -195,7 +196,8 @@ export class ThreadService {
   /** The bots a new owner message is addressed to, and the members it mentions. */
   private recipients(thread: Thread, content: string): { bots: Bot[]; mentions: string[] } {
     const members = this.opts.repos.threads.listMembers(thread.id);
-    if (thread.kind === 'dm') return { bots: members, mentions: [] };
+    // A goal thread is the owner's conversation with the lead about the goal (F20).
+    if (thread.kind === 'dm' || thread.kind === 'goal') return { bots: members, mentions: [] };
     if (thread.kind !== 'group') return { bots: [], mentions: [] };
     const mentions = parseMentions(content, members);
     if (mentions.length > 0) {
@@ -225,6 +227,8 @@ export class ThreadService {
       }
     }
 
+    // A paused goal or one out of runs refuses before the message is posted.
+    if (thread.kind === 'goal') this.opts.runs.admitGoal({ threadId: id });
     if (thread.pausedAt) {
       repos.threads.setPaused(id, null);
       log.info({ threadId: id }, 'group resumed by a new message');
@@ -474,6 +478,10 @@ export class ThreadService {
     // Every bot, not just members: teammates can write in a bot's DM through ask_bot.
     const everyone = new Map(repos.bots.list({ includeArchived: true }).map((b) => [b.id, b]));
     const newMessages = toPromptMessages([...unseen, latest], everyone);
+    if (thread.kind === 'goal') {
+      const goal = repos.goals.getByThread(thread.id);
+      return buildPrompt({ bot, thread, newMessages, goal: goal && toPromptGoal(repos, goal) });
+    }
     if (thread.kind !== 'group') return buildPrompt({ bot, thread, newMessages });
     const members = repos.threads.listMembers(thread.id).filter((b) => !b.archivedAt);
     const group = {

@@ -12,6 +12,7 @@ const ALL_TABLES = [
   'connectors',
   'decisions',
   'engine_state',
+  'goals',
   'guard_terms',
   'lessons',
   'memories',

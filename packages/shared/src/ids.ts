@@ -18,6 +18,7 @@ export const ID_PREFIXES = {
   guardTerm: 'grd',
   terminal: 'trm',
   desktop: 'dsk',
+  goal: 'gol',
 } as const;
 export type IdKind = keyof typeof ID_PREFIXES;
 

@@ -36,6 +36,13 @@
       "when": 1791926692504,
       "tag": "0004_new_betty_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791929748960,
+      "tag": "0005_clear_shaman",
+      "breakpoints": true
     }
   ]
 }

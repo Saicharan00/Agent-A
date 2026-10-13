@@ -33,6 +33,7 @@ function task(p: Partial<TaskView> = {}): TaskView {
     resultSummaryMd: null,
     artifacts: [],
     dueAt: null,
+    goalId: null,
     createdAt: '2026-10-13T10:00:00.000Z',
     updatedAt: `2026-10-13T10:00:${String(n).padStart(2, '0')}.000Z`,
     ...p,

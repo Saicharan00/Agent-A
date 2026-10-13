@@ -13,6 +13,7 @@ import {
 } from '@agenta/shared';
 import type { EventBus } from '../bus';
 import { buildPrompt, toPromptMessages } from '../engines/prompt';
+import { toPromptGoal } from '../goals/service';
 import type { RunService } from '../runs/service';
 import type { ThreadService } from '../threads/service';
 
@@ -32,7 +33,7 @@ export type TaskServiceOptions = {
   repos: Repos;
   bus: EventBus;
   log: Log;
-  runs: Pick<RunService, 'enqueue'>;
+  runs: Pick<RunService, 'enqueue' | 'admitGoal'>;
   threads: Pick<ThreadService, 'publish'>;
 };
 
@@ -140,16 +141,29 @@ export class TaskService {
 
   /**
    * Queues the assignee's turn in the task thread (created on first start) with the task brief, and moves the task
-   * to in progress. `message` is what the owner says (default: start the task).
+   * to in progress. `message` is what the owner says (default: start the task). `queueBehind` lets the new turn
+   * wait behind the assignee's running turn on the task (a review sent it back while that turn was finishing).
    */
-  start(id: string, message = 'Please start on this task.'): TaskDetail {
+  start(
+    id: string,
+    message = 'Please start on this task.',
+    opts: { queueBehind?: boolean } = {},
+  ): TaskDetail {
     const { repos, log } = this.opts;
     const task = this.task(id);
     if (!task.assigneeBotId) throw new TaskError('no_assignee', 'Assign the task to a bot first', 409);
     if (task.status === 'done') throw new TaskError('task_done', 'This task is done', 409);
     const bot = this.assignee(task.assigneeBotId);
-    const active = repos.runs.list({ taskId: id, status: ['queued', 'running'], limit: 1 })[0];
+    // Only the assignee's turns count: the lead's review turn on the task is not work on it.
+    const active = repos.runs.list({
+      taskId: id,
+      botId: bot.id,
+      status: opts.queueBehind ? 'queued' : ['queued', 'running'],
+      limit: 1,
+    })[0];
     if (active) throw new TaskError('task_running', 'A bot is already working on this task', 409);
+    // A paused goal or one out of runs refuses before anything is posted.
+    this.opts.runs.admitGoal({ taskId: id });
 
     let thread = task.taskThreadId ? repos.threads.get(task.taskThreadId) : undefined;
     if (!thread || thread.archivedAt) {
@@ -160,11 +174,13 @@ export class TaskService {
     const msg = repos.messages.create({ threadId: thread.id, authorType: 'user', contentMd: message });
     const status = task.status === 'todo' || task.status === 'blocked' ? 'in_progress' : task.status;
     const current = repos.tasks.update(id, { status })!;
+    const goal = current.goalId ? repos.goals.get(current.goalId) : undefined;
     const prompt = buildPrompt({
       bot,
       thread,
       newMessages: toPromptMessages([msg], new Map()),
       task: current,
+      goal: goal && toPromptGoal(repos, goal),
     });
     const run = this.opts.runs.enqueue({
       botId: bot.id,

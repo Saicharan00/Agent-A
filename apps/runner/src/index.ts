@@ -15,6 +15,7 @@ import { PlatformMcpServer } from './mcp/server';
 import { PlatformTools } from './mcp/tools';
 import { ContainerLauncher } from './engines/process';
 import { FilesService } from './files/service';
+import { GoalService } from './goals/service';
 import { EngineRegistry } from './engines/registry';
 import { DockerMonitor } from './live/docker-monitor';
 import { LiveHub } from './live/hub';
@@ -115,14 +116,28 @@ const threads = new ThreadService({
   bots,
   runs,
 });
-runs.onReply = (run, reply) => void threads.routeBotMessage(reply, run);
+const tasks = new TaskService({ repos, bus, runs, threads, log: rootLog.child({ module: 'tasks' }) });
+const goals = new GoalService({
+  repos,
+  bus,
+  runs,
+  threads,
+  tasks,
+  sharedDir: config.sharedDir,
+  log: rootLog.child({ module: 'goals' }),
+});
+runs.onReply = (run, reply) => {
+  threads.routeBotMessage(reply, run);
+  goals.onReply(run);
+};
 const platformTools = new PlatformTools({
   repos,
   threads,
   bus,
+  tasks,
+  goals,
   log: rootLog.child({ module: 'platform-tools' }),
 });
-const tasks = new TaskService({ repos, bus, runs, threads, log: rootLog.child({ module: 'tasks' }) });
 const platformMcp = new PlatformMcpServer({
   repos,
   tools: platformTools,
@@ -153,6 +168,7 @@ const app = await buildServer(config, {
   desktops,
   files,
   tasks,
+  goals,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

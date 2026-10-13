@@ -134,6 +134,7 @@ export const runCreateSchema = z.object({
   parentRunId: z.string().nullable().default(null),
   hopCount: z.number().int().min(0).default(0),
   retryOfRunId: z.string().nullable().default(null),
+  goalId: z.string().nullable().default(null),
 });
 export type RunCreateInput = z.input<typeof runCreateSchema>;
 
@@ -187,6 +188,7 @@ export const taskCreateSchema = z.object({
   taskThreadId: z.string().nullable().default(null),
   executedBy: z.enum(TASK_EXECUTORS).default('agent'),
   dueAt: isoDate.nullable().default(null),
+  goalId: z.string().nullable().default(null),
 });
 export type TaskCreateInput = z.input<typeof taskCreateSchema>;
 

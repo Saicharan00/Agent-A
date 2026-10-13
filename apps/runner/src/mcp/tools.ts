@@ -1,5 +1,6 @@
 import type { Bot, Memory, Repos, Run, Task } from '@agenta/db';
 import {
+  MAX_REVISION_ROUNDS,
   PLATFORM_TOOL_PREFIX,
   type PlatformToolInput,
   type PlatformToolName,
@@ -7,7 +8,8 @@ import {
 } from '@agenta/shared';
 import { z } from 'zod';
 import type { EventBus } from '../bus';
-import { publishTaskChanged } from '../tasks/service';
+import type { GoalService } from '../goals/service';
+import { publishTaskChanged, type TaskService } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
 
 type Log = { info(obj: object, msg?: string): void; debug(obj: object, msg?: string): void };
@@ -67,6 +69,10 @@ export type PlatformToolsOptions = {
   /** Live `task.changed` events for the board (F19). */
   bus?: EventBus;
   log: Log;
+  /** Starts tasks the lead assigns within a goal, and sends reviewed work back (F20). */
+  tasks?: Pick<TaskService, 'start'>;
+  /** The goal loop: reviews of handed-in work and escalations to the owner (F20). */
+  goals?: Pick<GoalService, 'onSubmitted' | 'escalate'>;
 };
 
 /**
@@ -286,6 +292,23 @@ export class PlatformTools {
         }
       }
       const run = this.currentRun(bot.id);
+      // Tasks created during a goal's turn belong to the goal, within its guardrails (F20).
+      const goal = run?.goalId ? repos.goals.get(run.goalId) : undefined;
+      if (goal) {
+        if (goal.pausedAt) throw new ToolError('goal_paused', 'The owner paused this goal; wait for them');
+        if (bot.isLead && !goal.confirmedAt && !goal.autoRun) {
+          throw new ToolError(
+            'plan_not_confirmed',
+            'The owner has not confirmed the plan yet: post the plan and wait for their confirmation',
+          );
+        }
+        if (repos.goals.listTasks(goal.id).length >= goal.maxTasks) {
+          throw new ToolError(
+            'goal_task_limit',
+            `This goal already has its maximum of ${goal.maxTasks} tasks`,
+          );
+        }
+      }
       const task = repos.tasks.create({
         title: input.title,
         descriptionMd: input.description,
@@ -295,9 +318,18 @@ export class PlatformTools {
         createdBy: bot.id,
         parentTaskId: input.parent_task_id ?? null,
         originThreadId: run?.threadId ?? null,
+        goalId: goal?.id ?? null,
       });
       this.event(task, bot, 'created', { assignee: task.assigneeBotId, runId: run?.id ?? null });
-      return this.taskView(task);
+      // The lead's goal tasks start at once in their task threads.
+      if (goal && bot.isLead && task.assigneeBotId && this.opts.tasks) {
+        try {
+          this.opts.tasks.start(task.id);
+        } catch (err) {
+          return { ...this.taskView(this.task(task.id)), not_started: (err as Error).message };
+        }
+      }
+      return this.taskView(this.task(task.id));
     },
 
     list_tasks: (bot, { status, assignee, parent_task_id, limit }) =>
@@ -356,6 +388,8 @@ export class PlatformTools {
         artifacts,
       })!;
       this.event(task, bot, 'submitted', { summary, artifacts, runId: this.currentRun(bot.id)?.id ?? null });
+      // In a goal, the lead reviews it next.
+      this.opts.goals?.onSubmitted(updated);
       return this.taskView(updated);
     },
 
@@ -365,6 +399,16 @@ export class PlatformTools {
       if (task.status !== 'in_review') {
         throw new ToolError('not_in_review', `Task ${id} is ${task.status}, not in_review`);
       }
+      // After MAX_REVISION_ROUNDS rounds of changes the owner decides; the task stays in review for them.
+      if (verdict === 'request_changes' && task.revisionCount >= MAX_REVISION_ROUNDS) {
+        this.event(task, bot, 'escalated', { feedback });
+        this.opts.goals?.escalate(task, bot, feedback);
+        return {
+          ...this.taskView(task),
+          escalated: true,
+          note: `${MAX_REVISION_ROUNDS} rounds of changes already: the owner decides on this task now.`,
+        };
+      }
       const updated = this.opts.repos.tasks.update(
         id,
         verdict === 'approve'
@@ -372,7 +416,23 @@ export class PlatformTools {
           : { status: 'changes_requested', revisionCount: task.revisionCount + 1 },
       )!;
       this.event(task, bot, 'reviewed', { verdict, feedback });
-      return this.taskView(updated);
+      // The assignee's next turn starts with the feedback (as when the owner requests changes).
+      if (
+        verdict === 'request_changes' &&
+        updated.assigneeBotId &&
+        updated.assigneeBotId !== bot.id &&
+        updated.executedBy !== 'human' &&
+        this.opts.tasks
+      ) {
+        try {
+          this.opts.tasks.start(id, `Changes requested by ${bot.name}:\n\n${feedback}`, {
+            queueBehind: true,
+          });
+        } catch (err) {
+          return { ...this.taskView(this.task(id)), not_restarted: (err as Error).message };
+        }
+      }
+      return this.taskView(this.task(id));
     },
 
     record_decision: (bot, input) => {

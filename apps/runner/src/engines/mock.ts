@@ -3,7 +3,7 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task];
+// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan];
 // anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
@@ -17,6 +17,7 @@ export const MOCK_SCENARIOS = [
   'moderate',
   'pingpong',
   'task',
+  'plan',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -146,7 +147,7 @@ export class MockEngine implements EngineAdapter {
     call: { name: string; input: unknown },
     input: EngineRunInput,
     emit: Emit,
-  ): AsyncGenerator<number> {
+  ): AsyncGenerator<number, string> {
     emit({ type: 'tool.call', callId, ...call });
     yield this.tickMs * 2;
     let output: string;
@@ -161,6 +162,153 @@ export class MockEngine implements EngineAdapter {
     }
     emit({ type: 'tool.result', callId, output, ...(isError ? { isError } : {}) });
     yield this.tickMs;
+    return output;
+  }
+
+  /** Tool calls between an intro and a closing line, as one reply. */
+  private async *callsThenReply(
+    intro: string,
+    calls: { name: string; input: unknown }[],
+    done: string,
+    input: EngineRunInput,
+    emit: Emit,
+  ): AsyncGenerator<number> {
+    for (const chunk of wordChunks(intro)) {
+      emit({ type: 'text.delta', text: chunk });
+      yield this.tickMs;
+    }
+    for (const [i, call] of calls.entries()) yield* this.platformCall(`mock-mcp-${i + 1}`, call, input, emit);
+    for (const chunk of wordChunks(done)) {
+      emit({ type: 'text.delta', text: chunk });
+      yield this.tickMs;
+    }
+    emit({ type: 'text.final', text: intro + done });
+    emit({
+      type: 'usage',
+      inputTokens: Math.ceil(input.prompt.length / 4),
+      outputTokens: Math.ceil((intro + done).length / 4),
+      costUsdEquivalent: 0,
+    });
+  }
+
+  /** A task turn (its brief names the task): note progress, then hand in a result for review. */
+  private async *taskTurn(id: string, input: EngineRunInput, emit: Emit): AsyncGenerator<number> {
+    yield* this.callsThenReply(
+      'Working on the task. ',
+      [
+        { name: 'mcp__agenta__update_task', input: { id, note: 'Started work (mock).' } },
+        {
+          name: 'mcp__agenta__submit_task_result',
+          input: { id, summary: 'Done by the mock engine.', artifacts: ['/shared/mock-result.md'] },
+        },
+      ],
+      'Handed in for review.',
+      input,
+      emit,
+    );
+  }
+
+  /**
+   * Agent A's side of a goal (F20), picked from what the turn's prompt asks for: review a handed-in task (requests
+   * changes once on a task whose title says "rework"), write the goal report, work a task, create the planned tasks
+   * once the plan is confirmed, or propose the plan.
+   */
+  private async *goalTurn(input: EngineRunInput, emit: Emit): AsyncGenerator<number> {
+    const p = input.prompt;
+    const review = /^## Review: task (tsk_[A-Za-z0-9_-]+): (.+)$/m.exec(p);
+    if (review) {
+      const [, id, title] = review as unknown as [string, string, string];
+      const rework = /rework/i.test(title) && /Revision: 0\b/.test(p);
+      yield* this.callsThenReply(
+        `Reviewing "${title}". `,
+        [
+          {
+            name: 'mcp__agenta__review_task',
+            input: rework
+              ? { id, verdict: 'request_changes', feedback: 'Please add a usage example to the result.' }
+              : { id, verdict: 'approve', feedback: 'Meets the acceptance criteria.' },
+          },
+        ],
+        rework ? 'Requested changes: a usage example is missing.' : 'Approved.',
+        input,
+        emit,
+      );
+      return;
+    }
+    if (/^## Goal report:/m.test(p)) {
+      yield* this.callsThenReply(
+        'Writing the goal report. ',
+        [
+          {
+            name: 'mcp__agenta__record_decision',
+            input: {
+              title: 'Ship the prototype first',
+              context: 'Mock goal',
+              decision: 'Prototype before polishing',
+              status: 'accepted',
+            },
+          },
+          {
+            name: 'mcp__agenta__add_lesson',
+            input: {
+              topic: 'Review against acceptance criteria',
+              lesson: 'Concrete criteria make reviews fast.',
+              why_it_matters: 'Vague criteria cause rework.',
+            },
+          },
+        ],
+        [
+          '## Goal report',
+          '**Done:** every task was handed in and approved.',
+          '**Decisions:** ship the prototype first.',
+          '**Risks / open questions:** none (mock).',
+          '**For you to do:** review the artifacts in /shared/projects.',
+          '**Lesson:** concrete acceptance criteria make reviews fast.',
+        ].join('\n\n'),
+        input,
+        emit,
+      );
+      return;
+    }
+    const task = /^## Task (tsk_[A-Za-z0-9_-]+):/m.exec(p)?.[1];
+    if (task) {
+      yield* this.taskTurn(task, input, emit);
+      return;
+    }
+    if (/Create the tasks now/.test(p)) {
+      const bots = JSON.parse(
+        yield* this.platformCall('mock-mcp-0', { name: 'mcp__agenta__list_bots', input: {} }, input, emit),
+      ) as { handle: string; is_lead: boolean; you?: boolean }[];
+      const team = bots.filter((b) => !b.is_lead && !b.you).map((b) => b.handle);
+      const titles = ['Research the options', 'Build the prototype (rework once)', 'Write the summary'];
+      yield* this.callsThenReply(
+        'Creating the tasks. ',
+        titles.map((title, i) => ({
+          name: 'mcp__agenta__create_task',
+          input: {
+            title,
+            description: `${title} for the goal.`,
+            acceptance: '- result handed in with a summary',
+            assignee: team.length ? team[i % team.length] : 'self',
+          },
+        })),
+        `Created ${titles.length} tasks; the team is on it.`,
+        input,
+        emit,
+      );
+      return;
+    }
+    yield* this.callsThenReply(
+      '',
+      [],
+      [
+        'Goal: deliver what you asked for. Assumptions: mock data is fine.',
+        'Plan: 1) Research the options 2) Build the prototype 3) Write the summary.',
+        'Shall I go ahead? Confirm the plan to start.',
+      ].join('\n\n'),
+      input,
+      emit,
+    );
   }
 
   /** Each scenario emits events and yields the delay (ms) before its next step; returns the final status. */
@@ -305,27 +453,16 @@ export class MockEngine implements EngineAdapter {
         return 'succeeded';
       }
       case 'task': {
-        // A task turn (its brief names the task): note progress, then hand in a result for review.
         const id = /^## Task (tsk_[A-Za-z0-9_-]+):/m.exec(input.prompt)?.[1];
         if (!id) {
           yield* reply('There is no task in this turn.');
           return 'succeeded';
         }
-        const intro = 'Working on the task. ';
-        yield* stream(intro);
-        const calls: { name: string; input: unknown }[] = [
-          { name: 'mcp__agenta__update_task', input: { id, note: 'Started work (mock).' } },
-          {
-            name: 'mcp__agenta__submit_task_result',
-            input: { id, summary: 'Done by the mock engine.', artifacts: ['/shared/mock-result.md'] },
-          },
-        ];
-        for (const [i, call] of calls.entries())
-          yield* this.platformCall(`mock-mcp-${i + 1}`, call, input, emit);
-        const done = 'Handed in for review.';
-        yield* stream(done);
-        emit({ type: 'text.final', text: intro + done });
-        usage(intro + done);
+        yield* this.taskTurn(id, input, emit);
+        return 'succeeded';
+      }
+      case 'plan': {
+        yield* this.goalTurn(input, emit);
         return 'succeeded';
       }
       case 'pingpong': {
