@@ -121,6 +121,16 @@ export function makeRunsRepo(db: Db) {
         .get();
     },
 
+    /** Replaces a still-queued run's prompt (merging a duplicate trigger, F18). Undefined once it has started. */
+    updateQueuedPrompt(id: string, prompt: string): Run | undefined {
+      return db
+        .update(runs)
+        .set({ prompt })
+        .where(and(eq(runs.id, id), eq(runs.status, 'queued')))
+        .returning()
+        .get();
+    },
+
     /** Put a run back in the queue (e.g. after a limit reset or a runner restart). */
     requeue(id: string): Run | undefined {
       return db

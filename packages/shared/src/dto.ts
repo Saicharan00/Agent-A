@@ -103,6 +103,7 @@ export const threadUpdateSchema = z
     explainMode: z.boolean(),
     purpose: z.string().trim().max(2000),
     moderatorBotId: z.string().nullable(),
+    notifications: z.enum(NOTIFICATION_LEVELS),
   })
   .partial();
 export type ThreadUpdateInput = z.input<typeof threadUpdateSchema>;

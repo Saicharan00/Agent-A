@@ -81,6 +81,11 @@ export function makeThreadsRepo(db: Db) {
         .get();
     },
 
+    /** Group pause (F18): a timestamp pauses, null resumes. */
+    setPaused(id: string, at: string | null): Thread | undefined {
+      return db.update(threads).set({ pausedAt: at }).where(eq(threads.id, id)).returning().get();
+    },
+
     /** Bumps updated_at (e.g. when a message is posted) so lists sort by activity. */
     touch(id: string, at: string = nowIso()): void {
       db.update(threads).set({ updatedAt: at }).where(eq(threads.id, id)).run();
@@ -98,7 +103,8 @@ export function makeThreadsRepo(db: Db) {
 
     /**
      * Messages the owner hasn't seen, per non-archived thread: everything not written by the owner after the
-     * thread's last read. Threads without unread messages are left out.
+     * thread's last read, filtered by the thread's notification level (mentions: system messages and messages that
+     * mention @owner; none: nothing). Threads without unread messages are left out.
      */
     unreadCounts(): Record<string, number> {
       const rows = db
@@ -110,6 +116,12 @@ export function makeThreadsRepo(db: Db) {
             isNull(threads.archivedAt),
             ne(messages.authorType, 'user'),
             or(isNull(threads.lastReadAt), gt(messages.createdAt, threads.lastReadAt)),
+            ne(threads.notifications, 'none'),
+            or(
+              ne(threads.notifications, 'mentions'),
+              eq(messages.authorType, 'system'),
+              sql`lower(${messages.contentMd}) like '%@owner%'`,
+            ),
           ),
         )
         .groupBy(messages.threadId)

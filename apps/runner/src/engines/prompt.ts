@@ -62,6 +62,7 @@ function renderGroup(g: PromptGroup, thread: PromptThread, bot: PromptBot): stri
       'You moderate this group: messages that mention nobody come to you. Answer them yourself, or bring in the right teammates by @mentioning them in your reply or with `ask_bot`.',
     );
   }
+  lines.push('', "Write @owner when you need the owner's attention.");
   return lines.join('\n');
 }
 
@@ -108,6 +109,14 @@ The owner is learning from you. Alongside doing the work:
 - Before acting, say in one or two sentences what you are about to do and why.
 - Name the trade-offs you considered and why you picked this option.
 - Afterwards, list the key takeaways a strong engineer would remember from this turn.`;
+
+/** What is appended to a queued turn's prompt when another trigger for the same bot is merged into it. */
+export function renderFollowUp(bot: PromptBot, messages: PromptMessage[]): string {
+  return [
+    '## Also new since this turn was queued',
+    messages.map((m) => renderMessage(m, bot)).join('\n\n'),
+  ].join('\n\n');
+}
 
 /** The text sent to the engine for one turn. */
 export function buildPrompt(input: BuildPromptInput): string {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildTimeline, timelineText } from '@/lib/timeline';
 import {
   insertMention,
+  workingBots,
   mentionAt,
   mentionCandidates,
   EMPTY_STREAM,
@@ -246,5 +247,23 @@ describe('@mention autocomplete', () => {
     expect(mentionCandidates(bots, '')).toHaveLength(3);
     expect(insertMention('hi @al', 6, 3, 'alice')).toEqual({ text: 'hi @alice ', caret: 10 });
     expect(insertMention('hi @al there', 6, 3, 'alice')).toEqual({ text: 'hi @alice there', caret: 10 });
+  });
+});
+
+describe('workingBots', () => {
+  it('lists each active bot once, working before queued', () => {
+    expect(
+      workingBots([
+        { botId: 'a', status: 'queued' },
+        { botId: 'b', status: 'succeeded' },
+        { botId: 'c', status: 'running' },
+        { botId: 'a', status: 'running' },
+        { botId: 'd', status: 'queued' },
+      ]),
+    ).toEqual([
+      { botId: 'a', state: 'working' },
+      { botId: 'c', state: 'working' },
+      { botId: 'd', state: 'queued' },
+    ]);
   });
 });

@@ -226,6 +226,22 @@ export function GroupMembersDialog({
             ))}
           </Select>
         </Field>
+        <Field
+          label="Notifications"
+          htmlFor="group-notifications"
+          hint="What counts as unread in the sidebar."
+        >
+          <Select
+            id="group-notifications"
+            value={thread.notifications}
+            disabled={busy}
+            onChange={(e) => update.mutate({ notifications: e.target.value as ThreadView['notifications'] })}
+          >
+            <option value="all">All messages</option>
+            <option value="mentions">Only @owner mentions and system notes</option>
+            <option value="none">Nothing (muted)</option>
+          </Select>
+        </Field>
         <Field label="Purpose" htmlFor="group-purpose-edit">
           <Textarea
             id="group-purpose-edit"

@@ -33,11 +33,15 @@ import {
 import type { BotService } from '../bots/service';
 import type { EventBus } from '../bus';
 import { botHomeDir } from '../containers/home';
-import { buildPrompt, toPromptMessages } from '../engines/prompt';
+import { buildPrompt, renderFollowUp, toPromptMessages } from '../engines/prompt';
 import type { RunService } from '../runs/service';
 
 /** Bot-triggered turns allowed in a chain started by one owner message (PLAN F18 loop guard). */
 export const MAX_HOPS = 6;
+/** settings key overriding MAX_HOPS (a positive integer). */
+export const MAX_HOPS_SETTING = 'maxHopsPerMessage';
+/** A bot triggered again in the same thread this soon, while its turn is still queued, gets one merged turn. */
+export const TRIGGER_DEBOUNCE_MS = 5_000;
 
 type Log = { info(obj: object, msg?: string): void; debug(obj: object, msg?: string): void };
 
@@ -57,7 +61,8 @@ export type ThreadServiceOptions = {
   log: Log;
   botsDir: string;
   bots: Pick<BotService, 'view'>;
-  runs: { enqueue(input: Parameters<RunService['enqueue']>[0]): Run };
+  runs: Pick<RunService, 'enqueue' | 'cancel'>;
+  now?: () => Date;
 };
 
 export function toMessageView(m: Message): MessageView {
@@ -220,6 +225,10 @@ export class ThreadService {
       }
     }
 
+    if (thread.pausedAt) {
+      repos.threads.setPaused(id, null);
+      log.info({ threadId: id }, 'group resumed by a new message');
+    }
     const message = repos.messages.create({
       threadId: id,
       authorType: 'user',
@@ -279,7 +288,8 @@ export class ThreadService {
 
   /**
    * A bot's message in a group (its reply or a post): every other member it @mentions gets a `mention` run one hop
-   * further than `parentRun`. Past MAX_HOPS nobody is triggered. Records the mentions on the message and returns it
+   * further than `parentRun` (merged into a just-queued turn, see `trigger`). Past the hop limit or while the group
+   * is paused nobody is triggered. Records the mentions on the message and returns it
    * (undefined when nothing changed). The caller publishes the message.
    */
   routeBotMessage(message: Message, parentRun?: Run): Message | undefined {
@@ -290,22 +300,15 @@ export class ThreadService {
     const mentions = parseMentions(message.contentMd, members).filter((id) => id !== message.authorBotId);
     if (mentions.length === 0) return;
     const stored = repos.messages.setMentions(message.id, mentions) ?? message;
-    const hopCount = (parentRun?.hopCount ?? 0) + 1;
-    if (hopCount > MAX_HOPS) {
-      log.info({ threadId: thread.id, messageId: message.id, hopCount }, 'mention not routed: hop limit');
+    if (thread.pausedAt) {
+      log.info({ threadId: thread.id, messageId: message.id }, 'mention not routed: group paused');
       return stored;
     }
+    const hopCount = (parentRun?.hopCount ?? 0) + 1;
+    if (this.overHopLimit(thread.id, hopCount)) return stored;
     for (const id of mentions) {
       const bot = members.find((b) => b.id === id)!;
-      const run = this.opts.runs.enqueue({
-        botId: bot.id,
-        threadId: thread.id,
-        trigger: 'mention',
-        prompt: this.promptFor(bot, thread, stored),
-        parentRunId: parentRun?.id ?? null,
-        hopCount,
-      });
-      this.markSeen(run, stored.id);
+      this.trigger(bot, thread, stored, { trigger: 'mention', parentRun, hopCount });
     }
     log.info({ threadId: thread.id, messageId: message.id, mentions }, 'bot mentions routed');
     return stored;
@@ -336,6 +339,17 @@ export class ThreadService {
     if (thread.kind !== 'dm' && !repos.threads.isMember(threadId, from.id)) {
       throw new ThreadError('not_a_member', `You are not a member of thread ${threadId}`, 403);
     }
+    if (thread.pausedAt) {
+      throw new ThreadError('group_paused', 'The owner paused this group; wait until they write again', 409);
+    }
+    const hopCount = (opts.parentRun?.hopCount ?? 0) + 1;
+    if (this.overHopLimit(threadId, hopCount)) {
+      throw new ThreadError(
+        'hop_limit',
+        `Too many bot-to-bot turns for one owner message (limit ${this.maxHops()}); wait for the owner`,
+        409,
+      );
+    }
     const message = repos.messages.create({
       threadId,
       authorType: 'bot',
@@ -343,18 +357,105 @@ export class ThreadService {
       contentMd: text,
       mentions: [target.id],
     });
-    const run = this.opts.runs.enqueue({
-      botId: target.id,
-      threadId,
+    const run = this.trigger(target, thread, message, {
       trigger: 'delegation',
-      prompt: this.promptFor(target, thread, message),
-      parentRunId: opts.parentRun?.id ?? null,
-      hopCount: (opts.parentRun?.hopCount ?? 0) + 1,
+      parentRun: opts.parentRun,
+      hopCount,
     });
-    this.markSeen(run, message.id);
     this.publish(message);
     this.opts.log.info({ threadId, messageId: message.id, from: from.id, runId: run.id }, 'bot asked');
     return { message: toMessageView(message), run: toRunView(run) };
+  }
+
+  private maxHops(): number {
+    const v = this.opts.repos.settings.get<unknown>(MAX_HOPS_SETTING);
+    return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : MAX_HOPS;
+  }
+
+  /** True (and the owner is told in the thread) when a bot-triggered turn would pass the hop limit. */
+  private overHopLimit(threadId: string, hopCount: number): boolean {
+    const max = this.maxHops();
+    if (hopCount <= max) return false;
+    this.opts.log.info({ threadId, hopCount }, 'bot trigger stopped: hop limit');
+    this.systemMessage(
+      threadId,
+      `Stopped: the bots reached the limit of ${max} bot-to-bot turns for one message. Write here to continue.`,
+    );
+    return true;
+  }
+
+  /**
+   * Starts a bot-triggered turn, or merges it into the bot's turn in this thread that was queued in the last
+   * TRIGGER_DEBOUNCE_MS (its prompt gains the new message), so a burst of mentions becomes one turn.
+   */
+  private trigger(
+    bot: Bot,
+    thread: Thread,
+    message: Message,
+    t: { trigger: 'mention' | 'delegation'; parentRun?: Run; hopCount: number },
+  ): Run {
+    const { repos } = this.opts;
+    const now = (this.opts.now?.() ?? new Date()).getTime();
+    const queued = repos.runs.list({ botId: bot.id, threadId: thread.id, status: 'queued', limit: 1 })[0];
+    if (
+      queued &&
+      (queued.trigger === 'mention' || queued.trigger === 'delegation') &&
+      now - Date.parse(queued.createdAt) <= TRIGGER_DEBOUNCE_MS
+    ) {
+      const everyone = new Map(repos.bots.list({ includeArchived: true }).map((b) => [b.id, b]));
+      const extra = renderFollowUp(bot, toPromptMessages([message], everyone));
+      const merged = repos.runs.updateQueuedPrompt(queued.id, `${queued.prompt}\n\n${extra}`);
+      if (merged) {
+        this.markSeen(merged, message.id);
+        this.opts.log.info(
+          { threadId: thread.id, runId: merged.id, messageId: message.id },
+          'trigger merged',
+        );
+        return merged;
+      }
+    }
+    const run = this.opts.runs.enqueue({
+      botId: bot.id,
+      threadId: thread.id,
+      trigger: t.trigger,
+      prompt: this.promptFor(bot, thread, message),
+      parentRunId: t.parentRun?.id ?? null,
+      hopCount: t.hopCount,
+    });
+    this.markSeen(run, message.id);
+    return run;
+  }
+
+  /** "Pause group": cancels the thread's queued turns; bot mentions start nothing until the owner writes or resumes. */
+  async pause(id: string): Promise<ThreadView> {
+    const { repos } = this.opts;
+    this.group(id);
+    repos.threads.setPaused(id, nowIso());
+    const queued = repos.runs.list({ threadId: id, status: 'queued', limit: 500 });
+    let cancelled = 0;
+    for (const run of queued) {
+      try {
+        await this.opts.runs.cancel(run.id);
+        cancelled++;
+      } catch {
+        // It started or finished meanwhile: nothing to cancel.
+      }
+    }
+    this.systemMessage(
+      id,
+      `Paused by the owner${cancelled ? `: ${cancelled} queued turn${cancelled === 1 ? '' : 's'} cancelled` : ''}. Bots start no new turns here until you write again.`,
+    );
+    this.opts.log.info({ threadId: id, cancelled }, 'group paused');
+    return this.get(id);
+  }
+
+  resume(id: string): ThreadView {
+    const thread = this.group(id);
+    if (thread.pausedAt) {
+      this.opts.repos.threads.setPaused(id, null);
+      this.systemMessage(id, 'Resumed by the owner.');
+    }
+    return this.get(id);
   }
 
   /**

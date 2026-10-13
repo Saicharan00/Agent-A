@@ -1,6 +1,6 @@
 'use client';
 
-import { Hash, MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, Users } from 'lucide-react';
+import { BellOff, Hash, MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
@@ -241,6 +241,9 @@ function SidebarGroups({ collapsed, pathname }: { collapsed: boolean; pathname: 
               >
                 <Hash className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 {!collapsed && <span className="min-w-0 flex-1 truncate">{g.title}</span>}
+                {!collapsed && g.notifications === 'none' && (
+                  <BellOff className="size-3.5 text-muted-foreground" aria-label="Muted" />
+                )}
                 {collapsed && <span className="sr-only">{g.title}</span>}
                 {!collapsed && badge > 0 && (
                   <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 font-semibold text-primary-foreground">

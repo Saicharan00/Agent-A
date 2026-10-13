@@ -226,4 +226,122 @@ describe('group chats', () => {
     const bobRuns = h.repos.runs.list({ threadId: g.id, botId: bob });
     expect(bobRuns.map((r) => [r.trigger, r.hopCount])).toEqual([['mention', 1]]);
   });
+
+  // ---------- session 2: loop guards, pause, notifications ----------
+
+  it('[mock:pingpong] stops at the hop limit with a system message', async () => {
+    const g = (await create({ title: 'G', memberBotIds: [alice, bob] })).body;
+    await send(g.id, '@alice start [mock:pingpong]');
+    await h.service.idle();
+    const runs = h.repos.runs.list({ threadId: g.id }).reverse();
+    expect(runs.map((r) => r.hopCount)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(runs.map((r) => r.botId)).toEqual([alice, bob, alice, bob, alice, bob, alice]);
+    const last = h.repos.messages.listByThread(g.id).at(-1)!;
+    expect(last).toMatchObject({ authorType: 'system' });
+    expect(last.contentMd).toContain('limit of 6 bot-to-bot turns');
+  });
+
+  it('the hop limit comes from the maxHopsPerMessage setting and also caps ask_bot', async () => {
+    h.repos.settings.set('maxHopsPerMessage', 2);
+    const g = (await create({ title: 'G', memberBotIds: [alice, bob] })).body;
+    await send(g.id, '@alice go [mock:pingpong]');
+    await h.service.idle();
+    expect(h.repos.runs.list({ threadId: g.id })).toHaveLength(3);
+    const deep = h.repos.runs.create({
+      botId: alice,
+      threadId: g.id,
+      trigger: 'mention',
+      prompt: 'x',
+      engine: 'mock',
+      hopCount: 2,
+    });
+    const a = h.repos.bots.get(alice)!;
+    const b = h.repos.bots.get(bob)!;
+    expect(() => threads.askBot(a, b, 'help', { threadId: g.id, parentRun: deep })).toThrow(/limit 2/);
+  });
+
+  it('a second trigger for a bot whose turn is still queued (within 5 s) is merged into it', async () => {
+    const g = (await create({ title: 'G', memberBotIds: [alice, bob] })).body;
+    const parent = h.repos.runs.create({
+      botId: alice,
+      threadId: g.id,
+      trigger: 'user',
+      prompt: 'x',
+      engine: 'mock',
+    });
+    const say = (text: string) =>
+      threads.routeBotMessage(
+        h.repos.messages.create({ threadId: g.id, authorType: 'bot', authorBotId: alice, contentMd: text }),
+        parent,
+      );
+    say('@bob first');
+    say('@bob second');
+    const bobRuns = h.repos.runs.list({ threadId: g.id, botId: bob });
+    expect(bobRuns).toHaveLength(1);
+    expect(bobRuns[0]!.prompt).toContain('@bob first');
+    expect(bobRuns[0]!.prompt).toContain('## Also new since this turn was queued');
+    expect(bobRuns[0]!.prompt).toContain('@bob second');
+    await h.service.idle();
+    // Once that turn has run, a new mention starts a new turn.
+    say('@bob third');
+    expect(h.repos.runs.list({ threadId: g.id, botId: bob })).toHaveLength(2);
+    await h.service.idle();
+  });
+
+  it('pause cancels queued turns and stops bot mentions until the owner writes again', async () => {
+    const g = (await create({ title: 'G', memberBotIds: [alice, bob] })).body;
+    h.repos.settings.set('maxConcurrentRuns', 1);
+    const sent = await send(g.id, '@alice @bob both [mock:slow]');
+    const res = await app.inject({ method: 'POST', url: `/api/threads/${g.id}/pause` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<ThreadView>().pausedAt).not.toBeNull();
+    const statuses = sent.runs.map((r) => h.repos.runs.get(r.id)!.status);
+    expect(statuses).toContain('cancelled');
+    const sys = h.repos.messages.listByThread(g.id).filter((m) => m.authorType === 'system');
+    expect(sys.at(-1)!.contentMd).toMatch(/^Paused by the owner: \d queued turns? cancelled/);
+    await Promise.all(h.service.activeRunIds().map((id) => h.service.cancel(id)));
+
+    const msg = h.repos.messages.create({
+      threadId: g.id,
+      authorType: 'bot',
+      authorBotId: alice,
+      contentMd: '@bob hi',
+    });
+    threads.routeBotMessage(msg);
+    expect(h.repos.runs.list({ threadId: g.id, botId: bob, status: 'queued' })).toHaveLength(0);
+    expect(() =>
+      threads.askBot(h.repos.bots.get(alice)!, h.repos.bots.get(bob)!, 'x', { threadId: g.id }),
+    ).toThrow(/paused/);
+
+    await send(g.id, '@alice back to work');
+    expect(h.repos.threads.get(g.id)!.pausedAt).toBeNull();
+    await h.service.idle();
+    const resumed = await app.inject({ method: 'POST', url: `/api/threads/${g.id}/pause` });
+    expect(resumed.statusCode).toBe(200);
+    const r2 = await app.inject({ method: 'POST', url: `/api/threads/${g.id}/resume` });
+    expect(r2.json<ThreadView>().pausedAt).toBeNull();
+    const dm = h.repos.threads.findDm(alice)!.id;
+    expect((await app.inject({ method: 'POST', url: `/api/threads/${dm}/pause` })).statusCode).toBe(409);
+  });
+
+  it('per-group notifications: mentions counts system and @owner messages, none mutes', async () => {
+    const g = (await create({ title: 'G', memberBotIds: [alice] })).body;
+    const bot = (contentMd: string) =>
+      h.repos.messages.create({ threadId: g.id, authorType: 'bot', authorBotId: alice, contentMd });
+    bot('just chatting');
+    bot('@Owner please decide');
+    h.repos.messages.create({ threadId: g.id, authorType: 'system', contentMd: 'note' });
+    const unread = async () =>
+      (await app.inject({ method: 'GET', url: '/api/threads/unread' })).json<{
+        counts: Record<string, number>;
+      }>().counts[g.id];
+    expect(await unread()).toBe(3);
+    const patch = (notifications: string) =>
+      app.inject({ method: 'PATCH', url: `/api/threads/${g.id}`, payload: { notifications } });
+    expect((await patch('mentions')).json<ThreadView>().notifications).toBe('mentions');
+    expect(await unread()).toBe(2);
+    await patch('none');
+    expect(await unread()).toBeUndefined();
+    expect((await patch('loud')).statusCode).toBe(400);
+  });
 });

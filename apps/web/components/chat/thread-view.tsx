@@ -1,7 +1,13 @@
 'use client';
 
-import { type BotView, type MessageView, type ThreadView as Thread, splitUserMessage } from '@agenta/shared';
-import { GraduationCap, Hash, MessagesSquare, Monitor, Settings, Users } from 'lucide-react';
+import {
+  type BotView,
+  type MessageView,
+  type RunView,
+  type ThreadView as Thread,
+  splitUserMessage,
+} from '@agenta/shared';
+import { GraduationCap, Hash, MessagesSquare, Monitor, Pause, Play, Settings, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
@@ -15,6 +21,7 @@ import {
   useCancelRuns,
   useEngineState,
   useMarkRead,
+  usePauseGroup,
   useRetryTurn,
   useThread,
   useThreadMessages,
@@ -24,7 +31,14 @@ import {
 import { ApiClientError } from '@/lib/api';
 import { ENGINE_LABELS } from '@agenta/shared';
 import { STATUS_LABEL } from '@/lib/avatar';
-import { buildTranscript, flattenPages, lastUserMessage, retryableRun, stoppableRuns } from '@/lib/threads';
+import {
+  buildTranscript,
+  flattenPages,
+  lastUserMessage,
+  retryableRun,
+  stoppableRuns,
+  workingBots,
+} from '@/lib/threads';
 import { cn } from '@/lib/utils';
 import { Composer, type ComposerDraft } from './composer';
 import { GroupMembersDialog } from './group-dialogs';
@@ -33,6 +47,8 @@ import { MessageList } from './message-list';
 /** Group header: name, purpose, stacked member avatars that open the members dialog. */
 function GroupHeading({ thread }: { thread: Thread }) {
   const [open, setOpen] = useState(false);
+  const pause = usePauseGroup(thread.id);
+  const paused = !!thread.pausedAt;
   const shown = thread.members.slice(0, 5);
   return (
     <>
@@ -43,6 +59,21 @@ function GroupHeading({ thread }: { thread: Thread }) {
           {thread.purpose || `${thread.members.length} member${thread.members.length === 1 ? '' : 's'}`}
         </p>
       </div>
+      {paused && <StatusPill tone="warn">Paused</StatusPill>}
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={pause.isPending}
+        onClick={() => pause.mutate(!paused)}
+        title={
+          paused
+            ? 'Let bots trigger each other again'
+            : 'Cancel queued turns and stop bots triggering each other until you write again'
+        }
+      >
+        {paused ? <Play aria-hidden /> : <Pause aria-hidden />}
+        {paused ? 'Resume' : 'Pause group'}
+      </Button>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -142,6 +173,32 @@ function ThreadHeader({
         </>
       )}
     </header>
+  );
+}
+
+/** Group strip above the composer: who is working on a turn right now, and who is queued. */
+function WorkingStrip({ runs, botsById }: { runs: RunView[]; botsById: Map<string, BotView> }) {
+  const entries = workingBots(runs);
+  if (entries.length === 0) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-1.5 text-xs text-muted-foreground"
+      data-testid="working-strip"
+      aria-live="polite"
+    >
+      {entries.map(({ botId, state }) => {
+        const bot = botsById.get(botId);
+        return (
+          <span key={botId} className="inline-flex items-center gap-1.5" data-state={state}>
+            {bot && <BotAvatar name={bot.name} color={bot.avatarColor} shape={bot.avatarShape} size="sm" />}
+            <span>
+              <span className="font-medium text-foreground">{bot?.name ?? 'A bot'}</span>{' '}
+              {state === 'working' ? 'is working…' : 'is queued'}
+            </span>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -260,6 +317,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
           )
         }
       />
+      {isGroup && <WorkingStrip runs={runs.data ?? []} botsById={botsById} />}
       <Composer
         threadId={threadId}
         botId={thread.data?.kind === 'dm' ? (bot?.id ?? null) : null}

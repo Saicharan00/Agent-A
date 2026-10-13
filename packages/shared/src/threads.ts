@@ -3,7 +3,14 @@
 import { z } from 'zod';
 import { botViewSchema } from './bots';
 import { runUsageSchema, threadUpdateSchema } from './dto';
-import { AUTHOR_TYPES, ENGINES, RUN_STATUSES, RUN_TRIGGERS, THREAD_KINDS } from './enums';
+import {
+  AUTHOR_TYPES,
+  ENGINES,
+  NOTIFICATION_LEVELS,
+  RUN_STATUSES,
+  RUN_TRIGGERS,
+  THREAD_KINDS,
+} from './enums';
 import { type EngineEvent, engineEventSchema } from './events';
 
 /** Where chat attachments land inside the bot's computer (bind-mounted from data/bots/<id>/home/work/inbox). */
@@ -72,6 +79,10 @@ export const threadViewSchema = z.object({
   purpose: z.string(),
   /** Group chats: the configured moderator (null = default: Agent A if a member, else the first member). */
   moderatorBotId: z.string().nullable(),
+  /** Group chats: paused by the owner (bot mentions start no turns until the owner writes). */
+  pausedAt: z.string().nullable(),
+  /** Which messages count as unread: all, mentions (system + @owner) or none (muted). */
+  notifications: z.enum(NOTIFICATION_LEVELS),
   members: z.array(botViewSchema),
 });
 export type ThreadView = z.infer<typeof threadViewSchema>;

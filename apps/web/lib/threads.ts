@@ -41,6 +41,8 @@ export const threadsApi = {
     apiRequest('/threads', threadViewSchema, { method: 'POST', body }),
   addMember: (id: string, botId: string) =>
     apiRequest(`/threads/${enc(id)}/members`, threadViewSchema, { method: 'POST', body: { botId } }),
+  pause: (id: string) => apiRequest(`/threads/${enc(id)}/pause`, threadViewSchema, { method: 'POST' }),
+  resume: (id: string) => apiRequest(`/threads/${enc(id)}/resume`, threadViewSchema, { method: 'POST' }),
   removeMember: (id: string, botId: string) =>
     apiRequest(`/threads/${enc(id)}/members/${enc(botId)}`, threadViewSchema, { method: 'DELETE' }),
   messages: (id: string, before?: string) =>
@@ -316,4 +318,19 @@ export function insertMention(
   const inserted = `@${slug} `;
   const after = text.slice(caret).replace(/^\s/, '');
   return { text: text.slice(0, start) + inserted + after, caret: start + inserted.length };
+}
+
+// ---------- who is working (group strip) ----------
+
+export type WorkingEntry = { botId: string; state: 'working' | 'queued' };
+
+/** One entry per bot with an active turn in the thread: working beats queued; working bots first. */
+export function workingBots(runs: Pick<RunView, 'botId' | 'status'>[]): WorkingEntry[] {
+  const byBot = new Map<string, WorkingEntry['state']>();
+  for (const r of runs) {
+    if (r.status === 'running') byBot.set(r.botId, 'working');
+    else if (r.status === 'queued' && !byBot.has(r.botId)) byBot.set(r.botId, 'queued');
+  }
+  const list = [...byBot].map(([botId, state]) => ({ botId, state }));
+  return [...list.filter((e) => e.state === 'working'), ...list.filter((e) => e.state === 'queued')];
 }

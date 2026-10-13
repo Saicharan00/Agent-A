@@ -3,7 +3,8 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate]; anything else echoes the prompt.
+// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong];
+// anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
   'hello',
@@ -14,6 +15,7 @@ export const MOCK_SCENARIOS = [
   'delegate',
   'browser',
   'moderate',
+  'pingpong',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -73,6 +75,11 @@ export type MockEngineOptions = {
   slowMs?: number;
   platform?: MockPlatform;
 };
+
+/** The first group member in a group prompt's member list that isn't the bot itself ("[… you]"). */
+function firstOtherMember(prompt: string): string | undefined {
+  return /^- .+ \(@([a-z0-9-]+)\)(?!.*\[[^\]]*\byou\b)/m.exec(prompt)?.[1];
+}
 
 export function pickScenario(prompt: string): MockScenario {
   const m = /\[mock:([a-z]+)\]/i.exec(prompt);
@@ -296,10 +303,16 @@ export class MockEngine implements EngineAdapter {
         usage(intro + done);
         return 'succeeded';
       }
+      case 'pingpong': {
+        // A runaway loop for the hop-limit guard: always @mention the first other group member, passing the keyword on.
+        const target = firstOtherMember(input.prompt);
+        yield* reply(target ? `@${target} ping [mock:pingpong]` : 'Nobody to ping here.');
+        return 'succeeded';
+      }
       case 'moderate': {
         // As the group's moderator, hand the message to the first other member (listed in the prompt) via ask_bot.
         const target = input.prompt.includes('You moderate this group')
-          ? /^- .+ \(@([a-z0-9-]+)\)(?!.*\[[^\]]*\byou\b)/m.exec(input.prompt)?.[1]
+          ? firstOtherMember(input.prompt)
           : undefined;
         if (!target) {
           yield* reply('I am not moderating a group here, so there is nobody to hand this to.');

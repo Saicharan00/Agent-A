@@ -80,6 +80,10 @@ export const threads = sqliteTable(
     purpose: text('purpose').notNull().default(''),
     /** Group chats (F18): who answers messages without @mentions; null = Agent A if present, else the first member. */
     moderatorBotId: text('moderator_bot_id'),
+    /** Group chats (F18): paused by the owner; bot mentions start no turns until the owner writes again. */
+    pausedAt: text('paused_at'),
+    /** Group chats (F18): which messages count as unread (all | mentions = system + @owner | none = muted). */
+    notifications: text('notifications', { enum: NOTIFICATION_LEVELS }).notNull().default('all'),
   },
   (t) => [index('threads_updated_idx').on(t.updatedAt)],
 );

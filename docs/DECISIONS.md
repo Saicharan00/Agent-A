@@ -515,3 +515,18 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Group attachments:** not offered in groups (the composer's paperclip is DM-only); attachments go to one bot's inbox.
 - **Member changes** post a system message ("X joined/left the group."); the web invalidates the thread and group list
   on system-message activity, so other tabs see new members without a new live event type.
+
+## F18 — session 2 (loop guards)
+- **Hop limit:** `MAX_HOPS` = 6, overridable with the `maxHopsPerMessage` setting. A blocked mention posts a system
+  message ("Stopped: … limit of N bot-to-bot turns …"); `ask_bot` past the limit fails with `hop_limit` and posts the
+  same message, in DMs too.
+- **Debounce = merge into the queued turn:** a `mention`/`delegation` trigger for a bot whose bot-triggered turn in
+  the same thread was queued ≤ 5 s ago appends "## Also new since this turn was queued" + the message to that run's
+  prompt (`runs.updateQueuedPrompt`, only while still queued) instead of a second run. Owner-triggered turns are
+  never merged (each owner message keeps its own turn in the transcript).
+- **Pause group:** `threads.paused_at` (migration 0004). Pause cancels the thread's queued runs (running ones finish;
+  the composer's Stop handles those), and while paused bot mentions start nothing and `ask_bot` into the group fails
+  with `group_paused`. The owner's next message, or Resume, clears it. System messages record both.
+- **Per-group notifications:** `threads.notifications` (`all|mentions|none`, the bots' enum). For now it filters the
+  sidebar unread count: `mentions` counts system messages and messages containing `@owner` (group prompts tell bots
+  to write `@owner` for the owner's attention); `none` mutes. F27 reuses the setting for the notification inbox.

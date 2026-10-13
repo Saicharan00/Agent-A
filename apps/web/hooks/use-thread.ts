@@ -215,3 +215,16 @@ export function useGroupMember(threadId: string) {
     onError: (err) => void toast.error(err instanceof Error ? err.message : 'Could not update the members'),
   });
 }
+
+/** Pause (cancels queued turns, stops bot-to-bot triggers) or resume a group. */
+export function usePauseGroup(threadId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paused: boolean) => (paused ? threadsApi.pause(threadId) : threadsApi.resume(threadId)),
+    onSuccess: (thread) => {
+      qc.setQueryData<ThreadView>(queryKeys.thread(threadId), thread);
+      void qc.invalidateQueries({ queryKey: queryKeys.runs });
+    },
+    onError: (err) => void toast.error(err instanceof Error ? err.message : 'Could not pause the group'),
+  });
+}

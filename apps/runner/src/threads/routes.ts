@@ -44,7 +44,7 @@ async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise
 }
 
 /**
- * GET/POST /api/threads (group chats), POST /api/threads/:id/members, DELETE /api/threads/:id/members/:botId,
+ * GET/POST /api/threads (group chats), POST /api/threads/:id/{pause,resume}, POST /api/threads/:id/members, DELETE /api/threads/:id/members/:botId,
  * GET/PATCH /api/threads/:id, GET /api/threads/unread, POST /api/threads/:id/{read,retry},
  * GET/POST /api/threads/:id/messages, and POST /api/bots/:id/inbox?name= (raw file bytes,
  * application/octet-stream) for chat attachments.
@@ -64,6 +64,14 @@ export async function registerThreadRoutes(app: FastifyInstance, threads: Thread
     const res = await handle(reply, () => threads.createGroup(body));
     if (res) return reply.code(201).send(res);
   });
+
+  app.post<IdParams>('/api/threads/:id/pause', async (req, reply) =>
+    handle(reply, () => threads.pause(req.params.id)),
+  );
+
+  app.post<IdParams>('/api/threads/:id/resume', async (req, reply) =>
+    handle(reply, () => threads.resume(req.params.id)),
+  );
 
   app.post<IdParams>('/api/threads/:id/members', async (req, reply) => {
     const body = parse(addMemberRequestSchema, req.body, reply, 'invalid_body');
