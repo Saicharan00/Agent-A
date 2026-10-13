@@ -3,6 +3,8 @@ import { apiError, type HealthResponse } from '@agenta/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pkg from '../package.json' with { type: 'json' };
 import type { Repos } from '@agenta/db';
+import { registerBotRoutes } from './bots/routes';
+import type { BotService } from './bots/service';
 import type { RunnerConfig } from './config';
 import type { ContainerManager } from './containers/manager';
 import { registerComputerRoutes } from './containers/routes';
@@ -30,6 +32,8 @@ export type ServerDeps = {
   runs?: RunService;
   /** Live event fan-out (F11): GET /ws. */
   live?: LiveHub;
+  /** Bot management (F12): /api/bots CRUD, archive, restore, duplicate. */
+  bots?: BotService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -73,6 +77,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
     return { ok: true, version: pkg.version, uptime: process.uptime(), docker };
   });
 
+  if (deps.bots) registerBotRoutes(app, deps.bots);
   if (deps.containers) registerComputerRoutes(app, deps.containers);
   if (deps.engineAuth) registerEngineRoutes(app, deps.engineAuth);
   if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);

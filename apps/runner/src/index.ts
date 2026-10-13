@@ -1,5 +1,7 @@
 import { closeDb, createRepos, openDb } from '@agenta/db';
 import { loadRootEnv } from '@agenta/shared/env';
+import { BotService } from './bots/service';
+import { ensureMcpToken } from './bots/mcp-token';
 import { EventBus } from './bus';
 import { loadConfig } from './config';
 import { createDockerApi } from './containers/docker';
@@ -72,11 +74,23 @@ const runs = new RunService({
   bus,
   engines: new EngineRegistry(engineAdapters, config.engineOverride),
   log: rootLog.child({ module: 'runs' }),
-  prepare: computerPreparer({ containers, botsDir: config.botsDir }),
+  prepare: computerPreparer({
+    containers,
+    botsDir: config.botsDir,
+    ensureToken: (botId) => void ensureMcpToken(repos, config.botsDir, botId),
+  }),
+});
+const bots = new BotService({
+  repos,
+  bus,
+  log: rootLog.child({ module: 'bots' }),
+  botsDir: config.botsDir,
+  containers,
+  runs,
 });
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
-const app = await buildServer(config, { repos, containers, engineAuth, runs, live });
+const app = await buildServer(config, { repos, containers, engineAuth, runs, live, bots });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
   // Stops running engines and records them as failed ("runner stopped") before the DB closes.

@@ -1,7 +1,7 @@
-import { Bot, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { EmptyState } from '@/components/empty-state';
+import { BotsGrid } from '@/components/bots/bots-grid';
 import { Page, PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -19,11 +19,7 @@ export default function BotsPage() {
           </Link>
         }
       />
-      <EmptyState
-        icon={Bot}
-        title="No bots yet"
-        description="Create your first bot to start a conversation."
-      />
+      <BotsGrid />
     </Page>
   );
 }

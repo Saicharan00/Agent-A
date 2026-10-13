@@ -18,6 +18,10 @@ type ShellState = {
   setComputerOpen: (open: boolean) => void;
   computerTab: ComputerTab;
   setComputerTab: (tab: ComputerTab) => void;
+  /** The bot whose computer the panel shows (null: none picked yet). */
+  computerBotId: string | null;
+  /** Focuses a bot's computer and opens the panel. */
+  openComputer: (botId: string) => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
 };
@@ -50,6 +54,7 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
   const [computerOpen, setComputerOpenState] = useState(false);
   const [computerTab, setComputerTabState] = useState<ComputerTab>('terminal');
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [computerBotId, setComputerBotId] = useState<string | null>(null);
 
   useEffect(() => {
     // localStorage wins if the cookie was lost (e.g. cleared): re-apply and re-sync the cookie.
@@ -88,6 +93,14 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
     writeStorage(STORAGE_KEYS.computerTab, tab);
   }, []);
 
+  const openComputer = useCallback(
+    (botId: string) => {
+      setComputerBotId(botId);
+      setComputerOpen(true);
+    },
+    [setComputerOpen],
+  );
+
   // Global shortcuts.
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
@@ -120,6 +133,8 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
       setComputerOpen,
       computerTab,
       setComputerTab,
+      computerBotId,
+      openComputer,
       paletteOpen,
       setPaletteOpen,
     }),
@@ -133,6 +148,8 @@ export function ShellProvider({ children, initialTheme }: { children: ReactNode;
       setComputerOpen,
       computerTab,
       setComputerTab,
+      computerBotId,
+      openComputer,
       paletteOpen,
     ],
   );

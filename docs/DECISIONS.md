@@ -303,3 +303,39 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Docker pill goes live** via `DockerMonitor` (10 s poll in the runner, `docker.state` on `global` only on change).
 - Query keys for later features are fixed in `apps/web/lib/query-keys.ts` (lists under `'list'`), and
   `lib/live-cache.ts` patches bot/run status and growing messages in cached arrays, and invalidates on new messages.
+
+## F12 — Bot management (2026-10-13)
+- **API** (`apps/runner/src/bots/`): `GET /api/bots?archived=exclude|include|only`, `POST /api/bots`,
+  `GET/PATCH/DELETE /api/bots/:id`, `POST /api/bots/:id/{archive,restore,duplicate}`. Request schemas are
+  `.strict()` variants of the F02 DTOs without `isLead` (the lead is seeded by the platform in F21, and the lead can't
+  be archived or deleted). Responses are `BotView`: the row minus `mcpTokenHash`/`containerId`/`novncPort`, plus
+  `dmThreadId` and `lastActivityAt` (latest run created/started/finished).
+- **Explicit handles must be free** (409 `slug_taken`); a blank handle is derived from the name and auto-suffixed
+  (`writer-2`). Renames keep the handle (it is what @mentions use) but retitle the DM thread.
+- **MCP token: plaintext in one file, not yet in an MCP config.** Creating a bot writes `agm_<32 random bytes>` to
+  `<home>/.agenta/mcp-token` (mode 600, owned by the bot user) and stores only its SHA-256 in `mcp_token_hash`. F17
+  renders `~/.agenta/mcp.json` from that file. Writing an `agenta` MCP server entry now would point both engines at a
+  server that doesn't exist until F17. Before every real run the token is re-checked against the hash and re-issued
+  if the home lost it (e.g. a home wipe). `verifyMcpToken` compares in constant time.
+- **Limits and handle are baked into the container at create time.** After a change to RAM/CPUs/handle, a stopped
+  container is removed (recreated lazily, home kept); a running one is left alone and the PATCH answers
+  `restartRequired: true` (UI toast). Idle/run timeouts are read live and need neither.
+- **Archive** sets `archived_at` first (so `enqueue` refuses new runs), cancels queued/running runs, stops the computer.
+  The DM thread is kept. **Delete** requires the exact name, archives, cancels runs, removes the container (fails 503
+  and leaves the bot archived if Docker can't, so no container is orphaned), deletes the bot's DM threads (group
+  threads stay) and the row (cascades runs, sessions, memories…), and removes `data/bots/<id>` only when asked.
+- **Duplicate** copies profile, instructions, engine/model and settings into a new bot named "<name> (copy)" with a
+  fresh handle, DM thread, home and token, and no history.
+- **Live:** new `bots.changed {botId, change}` event on `global`; the web invalidates bot lists and that bot's detail
+  (not after `deleted`, where a refetch would only 404). Bot lists are keyed by archived filter
+  (`queryKeys.botList(f)`); `bot.status` patches every cached list.
+- **UI:** `/bots` grid (Active/Archived tabs, quick actions Chat → DM thread, Computer → focuses that bot in the right
+  panel via `openComputer(botId)`, Stop), `/bots/new` and `/bots/[id]` share `BotForm`, which validates with the
+  runner's own zod schema and maps issues to fields. The sidebar lists non-archived, sidebar-visible bots (link →
+  DM thread) and pins the lead when one exists. Form controls and the dialog are native elements
+  (`<select>`, `<dialog>`), not Radix. `mock` is not offered in the engine picker (API only).
+- **Embedded markdown headings are demoted** (`#` → `<h3>` …) so instruction previews and, later, chat messages never
+  add a second page-level `<h1>`.
+- **New dependencies:** `react-markdown` + `remark-gfm` (planned stack; no raw HTML rendering). shiki arrives with F13.
+- **E2E bot homes live in `data/e2e/bots`** (`AGENTA_BOTS_DIR`/`AGENTA_SHARED_DIR` in playwright.config.ts) so bots
+  created by tests never land in the owner's `data/bots`.

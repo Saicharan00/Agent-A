@@ -3,7 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from './query-keys';
 import type { RunnerStatus } from './runner';
 
-type Cache = Pick<QueryClient, 'getQueryData' | 'setQueryData' | 'invalidateQueries'>;
+type Cache = Pick<QueryClient, 'getQueryData' | 'setQueryData' | 'setQueriesData' | 'invalidateQueries'>;
 
 type WithId = { id: string } & Record<string, unknown>;
 
@@ -63,7 +63,17 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
     }
     case 'bot.status':
       patchCached(cache, queryKeys.bot(event.botId), event.botId, { status: event.status });
-      patchCached(cache, queryKeys.bots, event.botId, { status: event.status });
+      // Every cached bot list (any archived filter) under the ['bots', 'list'] prefix.
+      cache.setQueriesData<WithId[]>({ queryKey: queryKeys.bots }, (list) =>
+        Array.isArray(list)
+          ? list.map((b) => (b.id === event.botId ? { ...b, status: event.status } : b))
+          : list,
+      );
+      return;
+    case 'bots.changed':
+      void cache.invalidateQueries({ queryKey: queryKeys.bots });
+      // Only that bot's detail, and not once deleted (a refetch would just 404; the entry ages out).
+      if (event.change !== 'deleted') void cache.invalidateQueries({ queryKey: queryKeys.bot(event.botId) });
       return;
     case 'run.updated':
       patchCached(cache, queryKeys.run(event.runId), event.runId, {

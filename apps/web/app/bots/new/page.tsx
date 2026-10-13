@@ -1,6 +1,5 @@
-import { Bot } from 'lucide-react';
 import type { Metadata } from 'next';
-import { EmptyState } from '@/components/empty-state';
+import { NewBot } from '@/components/bots/new-bot';
 import { Page, PageHeader } from '@/components/page-header';
 
 export const metadata: Metadata = { title: 'New bot' };
@@ -8,12 +7,11 @@ export const metadata: Metadata = { title: 'New bot' };
 export default function NewBotPage() {
   return (
     <Page>
-      <PageHeader title="New bot" description="Name, role, engine and instructions." />
-      <EmptyState
-        icon={Bot}
-        title="Bot creation arrives in F12"
-        description="The form will create a bot and its computer."
+      <PageHeader
+        title="New bot"
+        description="Name, role, engine and instructions. Its computer is created the first time it works."
       />
+      <NewBot />
     </Page>
   );
 }

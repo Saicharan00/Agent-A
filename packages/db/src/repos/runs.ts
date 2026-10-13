@@ -135,6 +135,19 @@ export function makeRunsRepo(db: Db) {
       return db.delete(runs).where(eq(runs.id, id)).run().changes > 0;
     },
 
+    /** botId → latest run activity (created, started or finished). Bots without runs are absent. */
+    lastActivityByBot(): Map<string, string> {
+      const rows = db
+        .select({
+          botId: runs.botId,
+          at: sql<string>`max(coalesce(${runs.finishedAt}, ${runs.startedAt}, ${runs.createdAt}))`,
+        })
+        .from(runs)
+        .groupBy(runs.botId)
+        .all();
+      return new Map(rows.map((r) => [r.botId, r.at]));
+    },
+
     /** Appends an event with the next per-run sequence number (1, 2, 3…). */
     appendEvent(runId: string, type: string, payload: unknown): RunEvent {
       return db.transaction((tx) => {

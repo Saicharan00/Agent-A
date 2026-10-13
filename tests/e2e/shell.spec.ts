@@ -4,7 +4,6 @@ const ROUTES: { path: string; heading: string }[] = [
   { path: '/', heading: 'Agent A' },
   { path: '/bots', heading: 'Bots' },
   { path: '/bots/new', heading: 'New bot' },
-  { path: '/bots/bot_demo', heading: 'Bot' },
   { path: '/threads/thr_demo', heading: 'Thread' },
   { path: '/tasks', heading: 'Tasks' },
   { path: '/learn', heading: 'Learn' },

@@ -42,6 +42,14 @@ export function wipeHome(botsDir: string, home: string): void {
   for (const entry of readdirSync(target)) rmSync(join(target, entry), { recursive: true, force: true });
 }
 
+/** Deletes `<botsDir>/<botId>` (the bot's home and anything else stored for it). Bot deletion only. */
+export function removeBotDir(botsDir: string, botId: string): void {
+  const dir = resolve(botHomeDir(botsDir, botId), '..');
+  const root = resolve(botsDir) + sep;
+  if (!dir.startsWith(root)) throw new Error(`Refusing to delete ${dir}: not under ${root}`);
+  rmSync(dir, { recursive: true, force: true });
+}
+
 /**
  * Bot homes must support symlinks (npm, Python venvs, git). The repo's virtiofs workspace mount does not,
  * so data/bots and data/shared are bind-mounted from the VM disk (scripts/vm-mounts.sh). Returns an error

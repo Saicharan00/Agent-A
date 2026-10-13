@@ -8,9 +8,14 @@ import type { PrepareComputer } from './service';
 /**
  * Before a real-engine turn: start the bot's computer on demand, hold a lease so the idle sweep can't stop it
  * mid-run, and render /home/bot/CLAUDE.md + AGENTS.md from the bot's current instructions (memory: F22,
- * the Platform MCP config: F17). The mock engine never touches the computer, so tests and e2e need no Docker.
+ * the Platform MCP config: F17), re-issuing the bot's MCP token if the home lost it. The mock engine never touches the computer, so tests and e2e need no Docker.
  */
-export function computerPreparer(opts: { containers?: ContainerManager; botsDir: string }): PrepareComputer {
+export function computerPreparer(opts: {
+  containers?: ContainerManager;
+  botsDir: string;
+  /** Re-issues the bot's Platform MCP token if its home lost it (F12; e.g. after a home wipe). */
+  ensureToken?: (botId: string) => void;
+}): PrepareComputer {
   return async (bot: Bot, engine: Engine) => {
     if (engine === 'mock') return () => undefined;
     if (!opts.containers)
@@ -20,6 +25,7 @@ export function computerPreparer(opts: { containers?: ContainerManager; botsDir:
     try {
       const home = botHomeDir(opts.botsDir, bot.id);
       bootstrapHome(home);
+      opts.ensureToken?.(bot.id);
       writeInstructionFiles(home, renderInstructionFiles(bot));
     } catch (err) {
       release();

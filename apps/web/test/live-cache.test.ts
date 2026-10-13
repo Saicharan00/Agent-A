@@ -50,18 +50,39 @@ describe('applyLiveEvent', () => {
     expect(qc.getQueryData(queryKeys.runnerStatus)).toEqual({ state: 'down', reason: 'x' });
   });
 
-  it('patches bot status in the list and the detail', () => {
-    qc.setQueryData(queryKeys.bots, [
+  it('patches bot status in every bot list and the detail', () => {
+    const list = [
       { id: 'b1', status: 'stopped', name: 'A' },
       { id: 'b2', status: 'stopped', name: 'B' },
-    ]);
+    ];
+    qc.setQueryData(queryKeys.botList('exclude'), list);
+    qc.setQueryData(queryKeys.botList('include'), list);
     qc.setQueryData(queryKeys.bot('b1'), { id: 'b1', status: 'stopped', name: 'A' });
     applyLiveEvent(qc, { type: 'bot.status', botId: 'b1', status: 'running' });
-    expect(qc.getQueryData(queryKeys.bots)).toEqual([
-      { id: 'b1', status: 'running', name: 'A' },
-      { id: 'b2', status: 'stopped', name: 'B' },
-    ]);
+    for (const key of [queryKeys.botList('exclude'), queryKeys.botList('include')]) {
+      expect(qc.getQueryData(key)).toEqual([
+        { id: 'b1', status: 'running', name: 'A' },
+        { id: 'b2', status: 'stopped', name: 'B' },
+      ]);
+    }
     expect(qc.getQueryData(queryKeys.bot('b1'))).toEqual({ id: 'b1', status: 'running', name: 'A' });
+  });
+
+  it('bots.changed invalidates bot lists and that bot only', () => {
+    qc.setQueryData(queryKeys.botList('exclude'), []);
+    qc.setQueryData(queryKeys.bot('b1'), { id: 'b1' });
+    qc.setQueryData(queryKeys.bot('other'), { id: 'other' });
+    applyLiveEvent(qc, { type: 'bots.changed', botId: 'b1', change: 'updated' });
+    expect(qc.getQueryState(queryKeys.botList('exclude'))!.isInvalidated).toBe(true);
+    expect(qc.getQueryState(queryKeys.bot('b1'))!.isInvalidated).toBe(true);
+    expect(qc.getQueryState(queryKeys.bot('other'))!.isInvalidated).toBe(false);
+
+    // Deleted: lists refresh, the detail is left alone (a refetch would only 404).
+    qc.setQueryData(queryKeys.botList('exclude'), []);
+    qc.setQueryData(queryKeys.bot('b2'), { id: 'b2' });
+    applyLiveEvent(qc, { type: 'bots.changed', botId: 'b2', change: 'deleted' });
+    expect(qc.getQueryState(queryKeys.botList('exclude'))!.isInvalidated).toBe(true);
+    expect(qc.getQueryState(queryKeys.bot('b2'))!.isInvalidated).toBe(false);
   });
 
   it('patches run status and invalidates run lists only', () => {

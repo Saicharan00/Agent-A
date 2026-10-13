@@ -148,6 +148,43 @@ export class ContainerManager {
     return this.status(botId);
   }
 
+  /**
+   * Removes the bot's container for good (bot deleted). The home folder is left alone; see `removeBotDir`.
+   * Safe when there is no container or Docker never created one.
+   */
+  async destroy(botId: string): Promise<void> {
+    await this.withLock(botId, async () => {
+      const bot = this.opts.repos.bots.get(botId);
+      if (!bot) return;
+      const c = await this.findContainer(bot);
+      if (c) await this.docker.remove(c.id);
+      this.lastActivity.delete(botId);
+      this.setStatus(bot, 'stopped', { containerId: null, novncPort: null });
+      if (c) this.opts.log.info({ botId, containerId: c.id }, 'bot container removed');
+    });
+  }
+
+  /**
+   * The container's name and resource limits are fixed at create time. After a bot's slug or limits change, a
+   * stopped container is removed so the next start recreates it (the home folder is kept). A running one is
+   * left alone; returns true when it must be restarted (Reset) to pick up the change.
+   */
+  async discardStale(botId: string): Promise<boolean> {
+    return this.withLock(botId, async () => {
+      const bot = this.requireBot(botId);
+      const c = await this.findContainer(bot);
+      if (!c) return false;
+      if (c.state === 'running' || c.state === 'restarting') return true;
+      await this.docker.remove(c.id);
+      this.setStatus(bot, 'stopped', { containerId: null, novncPort: null });
+      this.opts.log.info(
+        { botId, containerId: c.id },
+        'stale bot container removed (recreated on next start)',
+      );
+      return false;
+    });
+  }
+
   /** Starts the computer on demand; returns its running container. */
   async ensureRunning(botId: string): Promise<ContainerInfo> {
     const bot = this.requireBot(botId);

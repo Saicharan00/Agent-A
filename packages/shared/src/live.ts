@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { LiveBotsChanged } from './bots';
 import type { BotStatusEvent } from './computer';
 import { ENGINES, RUN_STATUSES } from './enums';
 import { engineEventSchema } from './events';
@@ -58,7 +59,13 @@ export const liveDockerStateSchema = z.object({
 export type LiveDockerState = z.infer<typeof liveDockerStateSchema>;
 
 export type LiveEvent =
-  LiveRunEvent | LiveRunUpdated | LiveMessage | LiveEngineState | LiveDockerState | BotStatusEvent;
+  | LiveRunEvent
+  | LiveRunUpdated
+  | LiveMessage
+  | LiveEngineState
+  | LiveDockerState
+  | BotStatusEvent
+  | LiveBotsChanged;
 
 // ---------- WebSocket wire protocol (GET /ws, F11) ----------
 // One socket per browser tab carries any number of channel subscriptions. Every frame is one JSON object.

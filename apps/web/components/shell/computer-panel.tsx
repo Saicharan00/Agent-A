@@ -2,8 +2,10 @@
 
 import { FolderTree, ListChecks, MonitorPlay, SquareTerminal, X } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
+import { BotAvatar } from '@/components/bot-avatar';
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
+import { useBots } from '@/hooks/use-bots';
 import { cn } from '@/lib/utils';
 import { COMPUTER_TABS, type ComputerTab, useShell } from './shell-context';
 
@@ -15,7 +17,10 @@ const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal
 };
 
 export function ComputerPanel() {
-  const { computerOpen, setComputerOpen, computerTab, setComputerTab } = useShell();
+  const { computerOpen, setComputerOpen, computerTab, setComputerTab, computerBotId } = useShell();
+  // From the (live) bot list, so a bot deleted elsewhere simply drops out of focus.
+  const { data: bots } = useBots();
+  const bot = bots?.find((b) => b.id === computerBotId);
   if (!computerOpen) return null;
 
   // Arrow-key navigation between tabs (WAI-ARIA tabs pattern).
@@ -75,12 +80,28 @@ export function ComputerPanel() {
         id="computer-tabpanel"
         role="tabpanel"
         aria-labelledby={`computer-tab-${computerTab}`}
-        className="flex-1 overflow-auto p-4"
+        className="flex flex-1 flex-col gap-3 overflow-auto p-4"
       >
+        {bot && (
+          <div className="flex items-center gap-2" data-testid="computer-bot">
+            <BotAvatar
+              name={bot.name}
+              color={bot.avatarColor}
+              shape={bot.avatarShape}
+              status={bot.status}
+              size="sm"
+            />
+            <span className="truncate text-sm font-medium">{bot.name}</span>
+          </div>
+        )}
         <EmptyState
           icon={meta.icon}
           title={`${meta.label} not connected`}
-          description={`Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`}
+          description={
+            bot
+              ? `${bot.name}'s ${meta.label.toLowerCase()} arrives in ${meta.feature}.`
+              : `Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`
+          }
         />
       </div>
     </aside>

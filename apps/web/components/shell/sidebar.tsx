@@ -4,9 +4,11 @@ import { MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, Users } from 'luci
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+import type { BotView } from '@agenta/shared';
 import { BotAvatar } from '@/components/bot-avatar';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { Button } from '@/components/ui/button';
+import { useBots } from '@/hooks/use-bots';
 import { isActivePath, NAV_ITEMS } from '@/lib/nav';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
@@ -67,6 +69,112 @@ function NavLink({
   );
 }
 
+/** A bot opens its DM thread (chat); a bot without one opens its settings. */
+function botHref(bot: BotView): string {
+  return bot.dmThreadId ? `/threads/${bot.dmThreadId}` : `/bots/${bot.id}`;
+}
+
+function BotLink({
+  bot,
+  subtitle,
+  collapsed,
+  active,
+}: {
+  bot: BotView;
+  subtitle?: string;
+  collapsed: boolean;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={botHref(bot)}
+      title={collapsed ? bot.name : undefined}
+      aria-current={active ? 'page' : undefined}
+      data-testid="sidebar-bot"
+      className={cn(
+        'flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-sidebar-accent',
+        active && 'bg-sidebar-accent',
+        collapsed && 'justify-center px-0',
+      )}
+    >
+      <BotAvatar
+        name={bot.name}
+        color={bot.avatarColor}
+        shape={bot.avatarShape}
+        status={bot.status}
+        size="sm"
+      />
+      {!collapsed && (
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{bot.name}</span>
+          {subtitle && <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function SidebarBots({ collapsed, pathname }: { collapsed: boolean; pathname: string }) {
+  const { data: bots, isPending } = useBots();
+  const lead = bots?.find((b) => b.isLead);
+  const others = (bots ?? []).filter((b) => !b.isLead && b.sidebarVisible);
+  const isActive = (bot: BotView) =>
+    pathname === `/bots/${bot.id}` || (bot.dmThreadId !== null && pathname === `/threads/${bot.dmThreadId}`);
+
+  return (
+    <>
+      {/* Agent A is always pinned at the top (seeded with the team in F21; a placeholder until then). */}
+      <Section title="Lead" collapsed={collapsed}>
+        {lead ? (
+          <BotLink bot={lead} subtitle={lead.role} collapsed={collapsed} active={isActive(lead)} />
+        ) : (
+          <Link
+            href="/bots"
+            title={collapsed ? 'Agent A' : undefined}
+            className={cn(
+              'flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-sidebar-accent',
+              collapsed && 'justify-center px-0',
+            )}
+          >
+            <BotAvatar name="Agent A" color="#6366f1" shape="hexagon" status="stopped" size="sm" />
+            {!collapsed && (
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">Agent A</span>
+                <span className="block truncate text-xs text-muted-foreground">Lead AI Engineer</span>
+              </span>
+            )}
+          </Link>
+        )}
+      </Section>
+
+      <Section
+        title="Bots"
+        collapsed={collapsed}
+        action={
+          <Link
+            href="/bots/new"
+            aria-label="New bot"
+            className="rounded p-0.5 hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <Plus className="size-3.5" />
+          </Link>
+        }
+      >
+        <ul aria-label="Bots" className="space-y-0.5">
+          {others.map((bot) => (
+            <li key={bot.id}>
+              <BotLink bot={bot} collapsed={collapsed} active={isActive(bot)} />
+            </li>
+          ))}
+        </ul>
+        {!collapsed && !isPending && others.length === 0 && (
+          <p className="px-2 py-1 text-xs text-muted-foreground">No bots yet.</p>
+        )}
+      </Section>
+    </>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed: collapsed, toggleSidebar } = useShell();
@@ -103,41 +211,7 @@ export function Sidebar() {
       </div>
 
       <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto p-2">
-        {/* Agent A is always pinned at the top. Real bot data arrives in F12. */}
-        <Section title="Lead" collapsed={collapsed}>
-          <Link
-            href="/bots"
-            title={collapsed ? 'Agent A' : undefined}
-            className={cn(
-              'flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-sidebar-accent',
-              collapsed && 'justify-center px-0',
-            )}
-          >
-            <BotAvatar name="Agent A" color="#6366f1" shape="hexagon" status="stopped" size="sm" />
-            {!collapsed && (
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">Agent A</span>
-                <span className="block truncate text-xs text-muted-foreground">Lead AI Engineer</span>
-              </span>
-            )}
-          </Link>
-        </Section>
-
-        <Section
-          title="Bots"
-          collapsed={collapsed}
-          action={
-            <Link
-              href="/bots/new"
-              aria-label="New bot"
-              className="rounded p-0.5 hover:bg-sidebar-accent hover:text-foreground"
-            >
-              <Plus className="size-3.5" />
-            </Link>
-          }
-        >
-          {!collapsed && <p className="px-2 py-1 text-xs text-muted-foreground">No bots yet.</p>}
-        </Section>
+        <SidebarBots collapsed={collapsed} pathname={pathname} />
 
         <Section title="Groups" collapsed={collapsed}>
           {!collapsed && (

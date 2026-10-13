@@ -24,6 +24,9 @@ export default defineConfig({
       // Engines always look "not set up" in e2e, whatever the owner has in .env.local / data/secrets.
       CLAUDE_CODE_OAUTH_TOKEN: '',
       AGENTA_SECRETS_DIR: 'data/e2e/secrets',
+      // Bots created by e2e get their home folders (and MCP tokens) here, never in the owner's data/bots.
+      AGENTA_BOTS_DIR: 'data/e2e/bots',
+      AGENTA_SHARED_DIR: 'data/e2e/shared',
     },
   },
 });
