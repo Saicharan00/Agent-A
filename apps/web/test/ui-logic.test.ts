@@ -30,6 +30,11 @@ describe('shortcuts', () => {
     expect(matchesShortcut(key('k', { ctrlKey: true, shiftKey: true }), 'Ctrl+K')).toBe(false);
     expect(matchesShortcut(key('Enter', { ctrlKey: true }), 'Ctrl+Enter')).toBe(true);
   });
+
+  it('ignores key events without a key (Chrome autofill)', () => {
+    const autofill = { ...key('k', { ctrlKey: true }), key: undefined };
+    expect(matchesShortcut(autofill, 'Ctrl+K')).toBe(false);
+  });
 });
 
 describe('avatar helpers', () => {

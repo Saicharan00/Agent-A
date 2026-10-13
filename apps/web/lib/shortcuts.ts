@@ -14,9 +14,11 @@ export function parseShortcut(combo: string): Shortcut {
   };
 }
 
-type KeyEventLike = { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean };
+// `key` can be missing: Chrome dispatches a keydown without it when an autofill suggestion is picked.
+type KeyEventLike = { key?: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean };
 
 export function matchesShortcut(ev: KeyEventLike, combo: string): boolean {
+  if (typeof ev.key !== 'string') return false;
   const s = parseShortcut(combo);
   return (
     ev.key.toLowerCase() === s.key &&
