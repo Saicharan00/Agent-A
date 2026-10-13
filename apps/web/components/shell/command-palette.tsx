@@ -1,9 +1,10 @@
 'use client';
 
 import { Command } from 'cmdk';
-import { Monitor, Moon, PanelLeft, Sun } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { Monitor, Moon, PanelLeft, Sun, Target } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { NEW_GOAL_ANCHOR, focusNewGoal } from '@/components/goals/new-goal-form';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { NAV_ITEMS, NEW_BOT_ITEM } from '@/lib/nav';
 import { SHORTCUTS } from '@/lib/shortcuts';
@@ -41,6 +42,7 @@ const groupClass =
 /** Ctrl+K palette shell: navigation + UI commands. Search over threads/tasks arrives with real data. */
 export function CommandPalette() {
   const router = useRouter();
+  const pathname = usePathname();
   const { paletteOpen, setPaletteOpen, theme, toggleTheme, toggleSidebar, computerOpen, setComputerOpen } =
     useShell();
 
@@ -63,6 +65,19 @@ export function CommandPalette() {
       />
       <Command.List className="max-h-[min(60vh,400px)] overflow-y-auto p-1">
         <Command.Empty className="py-6 text-center text-sm text-muted-foreground">No results.</Command.Empty>
+        <Command.Group heading="Agent A" className={groupClass}>
+          <Item
+            icon={<Target />}
+            keywords={['goal', 'plan', 'delegate', 'agent a']}
+            onSelect={run(() => {
+              // On Home the form is already there: focus it once the palette has handed focus back.
+              if (pathname === '/') setTimeout(focusNewGoal, 50);
+              else router.push(`/#${NEW_GOAL_ANCHOR}`);
+            })}
+          >
+            New goal
+          </Item>
+        </Command.Group>
         <Command.Group heading="Go to" className={groupClass}>
           {[...NAV_ITEMS, NEW_BOT_ITEM].map(({ href, label, icon: Icon, keywords }) => (
             <Item

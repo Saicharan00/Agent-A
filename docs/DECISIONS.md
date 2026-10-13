@@ -548,3 +548,40 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Drag & drop uses native HTML5 DnD** (no new dependency); the drawer's status select is the keyboard alternative.
 - Mock engine `[mock:task]`: in a task turn, adds a note (`update_task`) and hands in a result
   (`submit_task_result`, artifact `/shared/mock-result.md`).
+
+## F20 — Agent A delegation loop
+- **`goals` table (migration 0005), not in PLAN's table list:** a goal holds the owner's text, constraints, auto-run
+  flag, guardrails (`max_tasks` 12, `max_runs` 40), the lead, its thread and the report run. `tasks.goal_id` and
+  `runs.goal_id` tie work to it, so progress and the run budget are plain counts.
+- **New thread kind `goal`:** the goal's conversation with the lead (plan, confirmation, reviews, report). The owner's
+  messages there go to the lead like a DM, and every turn's prompt carries the goal (text, constraints, artifacts
+  folder `/shared/projects/<slug>/`, and the plan status: waiting for confirmation / create the tasks now / progress).
+  The planning protocol is added to the lead's system prompt only in goal threads.
+- **Goal of a run is derived in `RunService.enqueue`** (explicit, else the task's, the goal thread's, or the parent
+  run's), which is also the single guard: a paused goal or one at its run budget refuses new runs (`goal_paused`,
+  `goal_run_limit`). Senders check first (`admitGoal`) so nothing is posted when the run would be refused.
+- **Confirmation is enforced, not just asked for:** until the owner clicks Confirm plan (or auto-run is on),
+  `create_task` from the lead in a goal turn fails with `plan_not_confirmed`; it also enforces `max_tasks`. Confirm
+  posts "I confirm the plan…" in the goal thread, which starts the lead's turn.
+- **The lead's goal tasks start on creation** (task thread + brief with goal context). Other `create_task` calls keep
+  the F17 behaviour (not started).
+- **Review = a `review` run of the lead in the goal thread** with the task id, queued when a goal task is handed in
+  (the lead's own tasks are left to the owner). `review_task` request_changes now restarts the assignee with the
+  feedback (any task, like the owner's request-changes), queued behind its still-finishing turn. A third request
+  after `MAX_REVISION_ROUNDS` = 2 is refused as an escalation: the task stays in review, a `escalated` task event and a
+  notification ask the owner to decide.
+- **Goal report:** the GoalService listens to `task.changed`; when every goal task is done it queues the lead's report
+  run (trigger `review`) and marks the goal `reporting`; the report run's reply marks it `done` (+ notification).
+  The report prompt asks for `record_decision` / `add_lesson` calls.
+- **Pause** cancels the goal's queued runs (running ones finish) and blocks new ones; **Resume** restarts assigned
+  tasks with no turn, re-queues missing reviews (not escalated ones) and re-runs a report that never finished.
+- **Owner-visible blockers:** when a review or the report can't start (budget, missing lead) a system message in the
+  goal thread and a `goal.blocked` notification say why.
+- **Mock `[mock:plan]`:** Agent A's whole side picked from the prompt: review (requests changes once on a task whose
+  title says "rework"), report (`record_decision` + `add_lesson`), task turn, create 3 tasks round-robin over the
+  non-lead bots once confirmed, otherwise propose a plan. The goal text carries the keyword into every goal turn.
+- **UI:** Home has the New goal form (goal, constraints with the non-confidential hint, auto-run) and goal cards with
+  progress bar and budget (tasks, runs); goal threads get a bar with status, progress and Confirm / Pause / Resume.
+  Ctrl+K → "New goal" focuses the form. Goal queries refetch on `goal.changed`, `task.changed` and `run.updated`.
+- **E2E lead:** the e2e DB has no seeded team until F21, so `goals.spec.ts` inserts a mock lead (and a specialist)
+  straight into `data/e2e/agenta.db` through `@agenta/db`.

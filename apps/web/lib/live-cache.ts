@@ -88,6 +88,8 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
           : list,
       );
       void cache.invalidateQueries({ queryKey: queryKeys.runs });
+      // A goal's run budget counts its runs.
+      void cache.invalidateQueries({ queryKey: queryKeys.goals });
       return;
     }
     case 'message.updated':
@@ -130,6 +132,11 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
     case 'task.changed':
       // Lists and the open drawer; cheap at single-owner scale.
       void cache.invalidateQueries({ queryKey: queryKeys.tasks });
+      // Goal progress counts done tasks.
+      void cache.invalidateQueries({ queryKey: queryKeys.goals });
+      return;
+    case 'goal.changed':
+      void cache.invalidateQueries({ queryKey: queryKeys.goals });
       return;
     case 'run.event':
       return;

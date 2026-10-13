@@ -24,4 +24,7 @@ export const queryKeys = {
   tasks: ['tasks'] as const,
   taskList: ['tasks', 'list'] as const,
   task: (id: string) => ['tasks', 'detail', id] as const,
+  /** Prefix of every goal query (refetched on goal.changed and task.changed). */
+  goals: ['goals'] as const,
+  goalList: ['goals', 'list'] as const,
 };

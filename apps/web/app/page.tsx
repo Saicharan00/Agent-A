@@ -1,6 +1,7 @@
 import { Bot, KanbanSquare, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { EmptyState } from '@/components/empty-state';
+import { HomeGoals } from '@/components/goals/home-goals';
 import { Page, PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -11,6 +12,7 @@ export default function HomePage() {
         title="Agent A"
         description="Your AI team, led by Agent A. Plan, delegate, review — and learn how a lead thinks."
       />
+      <HomeGoals />
       <div className="grid gap-4 md:grid-cols-3">
         <EmptyState
           icon={Sparkles}

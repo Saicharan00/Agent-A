@@ -12,10 +12,12 @@ import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { EmptyState } from '@/components/empty-state';
+import { GoalBar } from '@/components/goals/goal-progress';
 import { useShell } from '@/components/shell/shell-context';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { useBot } from '@/hooks/use-bots';
+import { useGoalOfThread } from '@/hooks/use-goals';
 import { useLiveChannel } from '@/hooks/use-live-channel';
 import {
   useCancelRuns,
@@ -216,6 +218,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
   // Thread events (messages, run status) update the cache in LiveProvider.
   useLiveChannel(`thread:${threadId}`);
   const isGroup = thread.data?.kind === 'group';
+  const goal = useGoalOfThread(threadId, thread.data?.kind === 'goal');
   const member = isGroup ? undefined : thread.data?.members[0];
   useLiveChannel(member ? `bot:${member.id}` : null);
   // The bot detail query is patched live (status); the thread's copy is a snapshot.
@@ -276,7 +279,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
     ? 'This conversation is archived.'
     : bot?.archivedAt
       ? `${bot.name} is archived. Restore it to chat.`
-      : thread.data && thread.data.kind !== 'dm' && thread.data.kind !== 'group'
+      : thread.data && !['dm', 'group', 'goal'].includes(thread.data.kind)
         ? 'This conversation is read-only.'
         : null;
 
@@ -289,6 +292,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
         explainMode={thread.data?.explainMode}
         onToggleExplain={() => thread.data && update.mutate({ explainMode: !thread.data.explainMode })}
       />
+      {goal && <GoalBar goal={goal} />}
       <MessageList
         items={items}
         botsById={botsById}
