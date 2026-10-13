@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
   // The floating dev badge covers the sidebar footer; build errors still show as an overlay.
   devIndicators: false,
+  experimental: {
+    // Proxied request bodies (the rewrites below) are cut at 10 MB by default. Files tab uploads go up to
+    // MAX_UPLOAD_BYTES (50 MB, packages/shared/src/files.ts); the runner enforces the exact limit.
+    proxyClientMaxBodySize: '51mb',
+  },
   // The browser only ever talks to the web origin; runner REST calls are proxied
   // server-side so the runner can stay bound to 127.0.0.1 (see docs/DECISIONS.md).
   async rewrites() {

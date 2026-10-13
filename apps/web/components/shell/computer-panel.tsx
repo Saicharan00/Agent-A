@@ -1,8 +1,9 @@
 'use client';
 
 import { FolderTree, ListChecks, MonitorPlay, SquareTerminal, X } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import { type KeyboardEvent, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
+import { FilesPanel } from '@/components/computer/files-panel';
 import { TerminalPanel } from '@/components/computer/terminal-panel';
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
@@ -13,16 +14,19 @@ import { COMPUTER_TABS, type ComputerTab, useShell } from './shell-context';
 const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal; feature: string }> = {
   terminal: { label: 'Terminal', icon: SquareTerminal, feature: 'F14' }, // TerminalPanel
   desktop: { label: 'Desktop', icon: MonitorPlay, feature: 'F16' },
-  files: { label: 'Files', icon: FolderTree, feature: 'F15' },
+  files: { label: 'Files', icon: FolderTree, feature: 'F15' }, // FilesPanel
   runs: { label: 'Runs', icon: ListChecks, feature: 'F10' },
 };
 
 export function ComputerPanel() {
-  const { computerOpen, setComputerOpen, computerTab, setComputerTab, computerBotId, computerFilePath } =
-    useShell();
+  const { computerOpen, setComputerOpen, computerTab, setComputerTab, computerBotId } = useShell();
   // From the (live) bot list, so a bot deleted elsewhere simply drops out of focus.
   const { data: bots } = useBots();
   const bot = bots?.find((b) => b.id === computerBotId);
+  // The Files tab mounts on first visit and then stays mounted (like terminals), so an unsaved edit survives
+  // switching tabs.
+  const [filesMounted, setFilesMounted] = useState(false);
+  if (computerOpen && computerTab === 'files' && !filesMounted) setFilesMounted(true);
   if (!computerOpen) return null;
 
   // Arrow-key navigation between tabs (WAI-ARIA tabs pattern).
@@ -98,25 +102,26 @@ export function ComputerPanel() {
         )}
         {/* Always mounted while the panel is open, so shells survive switching tabs and bots. */}
         <TerminalPanel bot={bot} bots={bots} visible={computerTab === 'terminal'} />
-        {computerTab !== 'terminal' && (
+        {bot && filesMounted && <FilesPanel key={bot.id} bot={bot} visible={computerTab === 'files'} />}
+        {computerTab !== 'terminal' && !(computerTab === 'files' && bot) && (
           <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
-            {computerTab === 'files' && computerFilePath && (
-              <p
-                className="truncate font-mono text-xs text-muted-foreground"
-                data-testid="computer-file-path"
-              >
-                {computerFilePath}
-              </p>
+            {computerTab === 'files' ? (
+              <EmptyState
+                icon={meta.icon}
+                title="No bot selected"
+                description="Pick a bot (its Computer button) to browse its files and the team share."
+              />
+            ) : (
+              <EmptyState
+                icon={meta.icon}
+                title={`${meta.label} not connected`}
+                description={
+                  bot
+                    ? `${bot.name}'s ${meta.label.toLowerCase()} arrives in ${meta.feature}.`
+                    : `Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`
+                }
+              />
             )}
-            <EmptyState
-              icon={meta.icon}
-              title={`${meta.label} not connected`}
-              description={
-                bot
-                  ? `${bot.name}'s ${meta.label.toLowerCase()} arrives in ${meta.feature}.`
-                  : `Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`
-              }
-            />
           </div>
         )}
       </div>

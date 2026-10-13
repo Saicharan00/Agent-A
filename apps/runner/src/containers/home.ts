@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { SHARED_LAYOUT } from '@agenta/shared';
 
 // Host-side folders bind-mounted into bot containers:
 //   <botsDir>/<botId>/home → /home/bot      <sharedDir> → /shared
@@ -65,4 +66,9 @@ export function checkSymlinks(dir: string): string | null {
   } catch (err) {
     return `${dir} does not support symlinks (${(err as Error).message}). Run scripts/vm-mounts.sh so it lives on the VM disk.`;
   }
+}
+
+/** Creates the team share's standard folders (knowledge, decisions, handoff, projects) if missing. */
+export function ensureSharedLayout(sharedDir: string): void {
+  for (const d of SHARED_LAYOUT) mkdirSync(join(sharedDir, d), { recursive: true });
 }

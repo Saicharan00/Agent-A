@@ -16,6 +16,7 @@ import { CONTAINER_HOME } from '../engines/process';
 import { buildSystemPromptAppend } from '../engines/prompt';
 import type { EngineRegistry } from '../engines/registry';
 import type { EngineRunInput } from '../engines/types';
+import { publishEngineFileChange } from '../files/service';
 import { RunEventWriter } from './events';
 
 // The run orchestrator (F10): every bot turn is a `runs` row that a single in-process scheduler moves
@@ -550,6 +551,10 @@ export class RunService {
         break;
       case 'limit.hit':
         turn.limit = event;
+        break;
+      case 'file.changed':
+        // Lets an open Files tab refresh (shell-made changes have no event; the tab also re-polls).
+        publishEngineFileChange(this.opts.bus, run.botId, event.path, event.change);
         break;
     }
     writer.push(event);

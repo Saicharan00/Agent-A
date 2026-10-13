@@ -91,7 +91,7 @@ test.describe('app shell', () => {
     await expect(panel).toBeVisible();
     await expect(panel.getByRole('tab', { name: 'Terminal' })).toHaveAttribute('aria-selected', 'true');
     await panel.getByRole('tab', { name: 'Files' }).click();
-    await expect(panel.getByRole('tabpanel')).toContainText('Files not connected');
+    await expect(panel.getByRole('tabpanel')).toContainText('No bot selected');
     await page.keyboard.press('ArrowRight');
     await expect(panel.getByRole('tab', { name: 'Runs' })).toHaveAttribute('aria-selected', 'true');
     await panel.getByRole('button', { name: 'Close computer panel' }).click();

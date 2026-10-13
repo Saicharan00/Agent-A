@@ -417,3 +417,28 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Terminal theme is always dark** (CLI colour schemes assume it), in both app themes.
 - **e2e bot homes on the VM disk:** `scripts/vm-mounts.sh` also bind-mounts `data/e2e/bots` and `data/e2e/shared`
   (the virtiofs project mount has no symlinks, which bot homes require), so e2e can start real bot computers.
+
+## F15 — Files & shared workspace
+- **Deps:** `@monaco-editor/react@4` + `monaco-editor@0.57` (web), the stack's editor. Monaco's AMD build is served
+  by the app itself (`app/monaco/vs/[...path]/route.ts` reads `node_modules/monaco-editor/min/vs`) and the loader is
+  pointed at `/monaco/vs`: the default jsDelivr CDN is blocked in the sandbox and the app should work offline.
+  No copy step, nothing generated into `public/`.
+- **API shape:** paths are root-relative (`root=home|shared`, `path=work/a.txt`), not container paths, under
+  `/api/bots/:id/files*` (list, `content` GET/PUT, `raw`, `upload`, `mkdir`, `rename`, DELETE). The team share is
+  reached through any bot. `locateContainerPath` maps chip paths (`/home/bot/…`, `/shared/…`) to these.
+- **Path safety:** `..` and absolute paths are refused outright (not normalised away). Every operation realpaths the
+  parent folder (and, when following, the target) and checks it stays under the root's realpath, so symlinked files
+  or parent folders pointing outside are refused; links themselves can still be listed/renamed/deleted. TOCTOU
+  symlink swaps are out of scope for a single-user local tool.
+- **Raw bytes never render as HTML on the app origin:** only images and PDFs are served inline; everything else is
+  `application/octet-stream` + `attachment`, with `nosniff`. SVG gets `CSP: sandbox`.
+- **Save conflicts:** saves send the `modifiedAt` the file was opened at; a newer file on disk → 409
+  `modified_elsewhere` and the viewer offers Reload (bots edit files concurrently).
+- **Live refresh:** API changes and engine `file.changed` events publish `files.changed` (home → `bot:<id>`, share →
+  `global`). Shell-made changes have no event, so open folders also re-list every 5 s while the tab is visible.
+- **Upload limit 50 MB;** Next's rewrite proxy cuts bodies at 10 MB by default, so `next.config.ts` sets
+  `experimental.proxyClientMaxBodySize: '51mb'` (verified: a 30 MB upload/download round-trips byte-identical).
+- **Noise folders** (`node_modules`, `.cache`, `.npm`, `.pnpm-store`, `__pycache__`, `.venv`, `.local`, `.git`) are
+  flagged by the runner and hidden behind a toggle (persisted in localStorage). Other dotfiles stay visible.
+- **Files tab mounts on first visit and stays mounted** while the panel is open, so an unsaved edit survives tab
+  switches. `/shared/{knowledge,decisions,handoff,projects}` are created at runner start and before a container starts.

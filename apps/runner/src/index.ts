@@ -12,6 +12,7 @@ import { ClaudeEngine } from './engines/claude';
 import { CodexEngine } from './engines/codex';
 import { MockEngine } from './engines/mock';
 import { ContainerLauncher } from './engines/process';
+import { FilesService } from './files/service';
 import { EngineRegistry } from './engines/registry';
 import { DockerMonitor } from './live/docker-monitor';
 import { LiveHub } from './live/hub';
@@ -98,6 +99,13 @@ const threads = new ThreadService({
   bots,
   runs,
 });
+const files = new FilesService({
+  repos,
+  bus,
+  log: rootLog.child({ module: 'files' }),
+  botsDir: config.botsDir,
+  sharedDir: config.sharedDir,
+});
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const terminals =
   containers && new TerminalService({ containers, log: rootLog.child({ module: 'terminal' }) });
@@ -111,6 +119,7 @@ const app = await buildServer(config, {
   bots,
   threads,
   terminals,
+  files,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

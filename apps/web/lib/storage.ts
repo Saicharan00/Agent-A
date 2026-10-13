@@ -30,4 +30,5 @@ export const STORAGE_KEYS = {
   sidebarCollapsed: 'agenta.sidebarCollapsed',
   computerOpen: 'agenta.computerOpen',
   computerTab: 'agenta.computerTab',
+  filesShowHidden: 'agenta.filesShowHidden',
 } as const;

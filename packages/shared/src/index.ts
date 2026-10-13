@@ -11,3 +11,4 @@ export * from './live';
 export * from './bots';
 export * from './threads';
 export * from './terminal';
+export * from './files';

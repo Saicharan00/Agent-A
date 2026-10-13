@@ -15,7 +15,7 @@ import {
   type TtyHandle,
   dockerStatus,
 } from './docker';
-import { botHomeDir, bootstrapHome, checkSymlinks, wipeHome } from './home';
+import { botHomeDir, bootstrapHome, checkSymlinks, ensureSharedLayout, wipeHome } from './home';
 import { BOT_LABEL, buildContainerSpec, statusFromContainer } from './spec';
 
 type Log = {
@@ -411,6 +411,7 @@ export class ContainerManager {
       if (problem) throw new ContainerError('storage_unsupported', problem, 503);
     }
     if (bootstrapHome(home)) this.opts.log.info({ botId: bot.id, home }, 'bot home created');
+    ensureSharedLayout(this.opts.sharedDir);
 
     this.gateway ??= await this.docker.ensureNetwork(this.network, { agenta: '1' });
     const specOpts = {

@@ -10,6 +10,8 @@ import type { RunnerConfig } from './config';
 import type { ContainerManager } from './containers/manager';
 import { registerComputerRoutes } from './containers/routes';
 import type { EngineAuth } from './engines/auth';
+import { registerFileRoutes } from './files/routes';
+import type { FilesService } from './files/service';
 import { registerEngineRoutes } from './engines/routes';
 import type { LiveHub } from './live/hub';
 import { registerLiveRoutes } from './live/routes';
@@ -43,6 +45,8 @@ export type ServerDeps = {
   threads?: ThreadService;
   /** Live terminal (F14): GET /ws/terminal/:botId. */
   terminals?: TerminalService;
+  /** Files & shared workspace (F15): /api/bots/:id/files*. */
+  files?: FilesService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -92,6 +96,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);
   if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
   if (deps.threads) await registerThreadRoutes(app, deps.threads);
+  if (deps.files) await registerFileRoutes(app, deps.files);
   if (deps.live || deps.terminals) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });

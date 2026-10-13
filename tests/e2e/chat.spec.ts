@@ -213,10 +213,17 @@ test.describe('direct chat', () => {
       if (pass === 'live') await page.reload();
     }
 
-    // A file chip opens the bot's computer on the Files tab at that path.
+    // A file chip opens the bot's computer on the Files tab at that path. The mock engine only reports the write,
+    // so put the file on disk the way a real engine would have.
+    const put = await request.post(`/api/bots/${bot.id}/files/upload?root=home&path=work&name=hello.txt`, {
+      headers: { 'content-type': 'application/octet-stream' },
+      data: Buffer.from('hello from mock\n'),
+    });
+    expect([201, 409]).toContain(put.status());
     await lastTurn(page).getByTestId('file-chip').click();
     await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('computer-file-path')).toHaveText('/home/bot/work/hello.txt');
+    await expect(page.getByTestId('file-viewer').locator('.view-lines')).toContainText('hello from mock');
     await expect(page.getByTestId('computer-bot')).toContainText(bot.name);
   });
 
