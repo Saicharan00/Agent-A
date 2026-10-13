@@ -14,7 +14,11 @@ const nextConfig: NextConfig = {
   // The browser only ever talks to the web origin; runner REST calls are proxied
   // server-side so the runner can stay bound to 127.0.0.1 (see docs/DECISIONS.md).
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${runnerUrl}/api/:path*` }];
+    // /ws (live events, F11) goes the same way: Next proxies the WebSocket upgrade to the runner.
+    return [
+      { source: '/api/:path*', destination: `${runnerUrl}/api/:path*` },
+      { source: '/ws', destination: `${runnerUrl}/ws` },
+    ];
   },
 };
 

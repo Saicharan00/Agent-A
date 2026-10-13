@@ -8,7 +8,9 @@ import type { ContainerManager } from './containers/manager';
 import { registerComputerRoutes } from './containers/routes';
 import type { EngineAuth } from './engines/auth';
 import { registerEngineRoutes } from './engines/routes';
-import { registerRunRoutes } from './runs/routes';
+import type { LiveHub } from './live/hub';
+import { registerLiveRoutes } from './live/routes';
+import { registerEngineStateRoute, registerRunRoutes } from './runs/routes';
 import type { RunService } from './runs/service';
 
 declare module 'fastify' {
@@ -26,6 +28,8 @@ export type ServerDeps = {
   engineAuth?: EngineAuth;
   /** Run orchestrator (F10): /api/runs routes. Needs `repos`. */
   runs?: RunService;
+  /** Live event fan-out (F11): GET /ws. */
+  live?: LiveHub;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -72,6 +76,8 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.containers) registerComputerRoutes(app, deps.containers);
   if (deps.engineAuth) registerEngineRoutes(app, deps.engineAuth);
   if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);
+  if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
+  if (deps.live) await registerLiveRoutes(app, deps.live, { webOrigin: config.webOrigin });
 
   return app;
 }

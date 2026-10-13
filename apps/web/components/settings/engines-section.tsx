@@ -7,9 +7,10 @@ import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { ENGINE_LABELS, engineView } from '@/lib/engines';
+import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast';
 
-export const ENGINES_QUERY_KEY = ['settings', 'engines'] as const;
+export const ENGINES_QUERY_KEY = queryKeys.engineAuth;
 
 function EngineCard({ status }: { status: EngineAuthStatus }) {
   const view = engineView(status);

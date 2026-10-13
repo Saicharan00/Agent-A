@@ -277,3 +277,29 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - Runs API: `GET /api/runs?botId=&threadId=&taskId=&status=a,b&limit=`, `GET /api/runs/:id`,
   `GET /api/runs/:id/events?afterSeq=&limit=` (`{ runId, status, events }`), `POST /api/runs/:id/cancel` (404 unknown,
   409 already finished; waits up to 15 s for a running engine to stop).
+
+## F11 — Realtime event bus & WebSocket (2026-10-13)
+- **New dependency `@fastify/websocket`** (in the planned stack; brings `ws`). Tests use Node 22's built-in
+  `WebSocket` client, so no client dependency.
+- **The browser reaches `/ws` through Next**, like `/api`: a `/ws` rewrite to the runner; Next 16 proxies the upgrade
+  for external rewrites. The runner stays on 127.0.0.1 and port 3000 remains the only published port.
+- **One multiplexed socket per tab** (`LiveConnection`, `LiveProvider`) instead of one socket per channel: refcounted
+  channel listeners, one server subscription per channel. Wire protocol in `packages/shared/src/live.ts`
+  (`subscribe {channel, afterSeq?}` / `unsubscribe` / `ping`; server sends `event`, `subscribed`, `unsubscribed`,
+  `ping`/`pong`, `error`).
+- **Replay only on `run:` channels.** The server subscribes to the bus and reads `run_events` after `afterSeq` in one
+  synchronous block (the writer publishes after commit), then streams live events de-duplicated by seq; the client
+  also de-duplicates and re-subscribes with its last seq after a reconnect. Other channels carry state changes the
+  REST API can re-read, so after a reconnect the client invalidates all queries instead of replaying them.
+- **Heartbeat** every 20 s: a protocol ping (peers silent for a whole period are terminated) plus an app-level `ping`
+  frame, because browsers can't see protocol pings; the client reconnects after 50 s without any frame. Slow
+  consumers (> 8 MB buffered) are dropped and replay on reconnect. Max 256 channels per socket, 64 KB client frames.
+- **Origin check on the upgrade**: only the web origin and its localhost/127.0.0.1/[::1] aliases on the same port
+  (browsers apply no CORS to WebSockets); no Origin (local scripts/tests) is allowed.
+- **Engine pills** combine auth (F06) with the new `GET /api/engines/state` (`{ override, engines: [{ engine,
+  limitedUntil }] }`, expired pauses reported as null), patched live by `engine.state`. With
+  `AGENTA_ENGINE_OVERRIDE=mock` all runs (and their limits) are on the mock engine, so a "Mock" pill appears only then
+  and shows its pause; that is what the Playwright check watches.
+- **Docker pill goes live** via `DockerMonitor` (10 s poll in the runner, `docker.state` on `global` only on change).
+- Query keys for later features are fixed in `apps/web/lib/query-keys.ts` (lists under `'list'`), and
+  `lib/live-cache.ts` patches bot/run status and growing messages in cached arrays, and invalidates on new messages.

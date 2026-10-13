@@ -1,6 +1,11 @@
 // Typed client for the runner REST API. The browser always calls the web origin's /api,
 // which Next rewrites to the runner (see docs/DECISIONS.md, F01).
-import { apiErrorSchema, engineSettingsResponseSchema, healthResponseSchema } from '@agenta/shared';
+import {
+  apiErrorSchema,
+  engineQueueStateResponseSchema,
+  engineSettingsResponseSchema,
+  healthResponseSchema,
+} from '@agenta/shared';
 import type { z } from 'zod';
 
 export class ApiClientError extends Error {
@@ -90,4 +95,7 @@ export const api = {
       { query: { verify: opts.verify ? 1 : undefined } },
       fetchImpl,
     ),
+  /** Usage-limit pauses per engine and the engine override (F11). */
+  engineState: (fetchImpl?: typeof fetch) =>
+    apiRequest('/engines/state', engineQueueStateResponseSchema, {}, fetchImpl),
 };

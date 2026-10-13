@@ -5,9 +5,9 @@ import { Bell, Monitor, Moon, Search, Sun } from 'lucide-react';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
-import { ENGINES_QUERY_KEY } from '@/components/settings/engines-section';
 import { api } from '@/lib/api';
-import { dockerPill, enginePillLabel, engineView } from '@/lib/engines';
+import { dockerPill, enginePill, mockPill, type PillView } from '@/lib/engines';
+import { queryKeys } from '@/lib/query-keys';
 import { fetchRunnerStatus } from '@/lib/runner';
 import { SHORTCUTS } from '@/lib/shortcuts';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ function PillText({ label }: { label: string }) {
 
 function RunnerPill() {
   const { data } = useQuery({
-    queryKey: ['runner-status'],
+    queryKey: queryKeys.runnerStatus,
     queryFn: () => fetchRunnerStatus(),
     refetchInterval: 15_000,
   });
@@ -47,34 +47,51 @@ function RunnerPill() {
   );
 }
 
+function Pill({ testId, view }: { testId: string; view: PillView }) {
+  return (
+    <StatusPill data-testid={testId} tone={view.tone} title={view.title}>
+      <PillText label={view.label} />
+    </StatusPill>
+  );
+}
+
+/**
+ * Auth status (F06) plus live queue state (F11): `engine.state` events on the global channel patch the
+ * engine-state query, so a usage-limit pause shows at once; the slow poll lets an expired pause fall off.
+ */
 function EnginePills() {
-  const { data } = useQuery({
-    queryKey: ENGINES_QUERY_KEY,
+  const { data: auth } = useQuery({
+    queryKey: queryKeys.engineAuth,
     queryFn: () => api.engines(),
     refetchInterval: 60_000,
   });
+  const { data: queue } = useQuery({
+    queryKey: queryKeys.engineState,
+    queryFn: () => api.engineState(),
+    refetchInterval: 30_000,
+  });
+  const limitOf = (engine: string) => queue?.engines.find((e) => e.engine === engine)?.limitedUntil;
   return (
     <>
-      {(['claude', 'codex'] as const).map((engine) => {
-        const s = data?.engines.find((e) => e.engine === engine);
-        return (
-          <StatusPill
-            key={engine}
-            data-testid={`${engine}-status`}
-            tone={s ? engineView(s).tone : 'neutral'}
-            title={s ? `${enginePillLabel(s, engine)}. ${s.detail}` : 'Checking…'}
-          >
-            <PillText label={enginePillLabel(s, engine)} />
-          </StatusPill>
-        );
-      })}
+      {(['claude', 'codex'] as const).map((engine) => (
+        <Pill
+          key={engine}
+          testId={`${engine}-status`}
+          view={enginePill(
+            engine,
+            auth?.engines.find((e) => e.engine === engine),
+            limitOf(engine),
+          )}
+        />
+      ))}
+      {queue?.override === 'mock' && <Pill testId="mock-status" view={mockPill(limitOf('mock'))} />}
     </>
   );
 }
 
 function DockerPill() {
   const { data } = useQuery({
-    queryKey: ['runner-status'],
+    queryKey: queryKeys.runnerStatus,
     queryFn: () => fetchRunnerStatus(),
     refetchInterval: 15_000,
   });
@@ -107,7 +124,7 @@ export function TopBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Engine pills show auth status (F06); rate-limit state joins them in F10/F28. */}
+        {/* Engine pills: auth status (F06) + live usage-limit pauses (F11). */}
         {/* Narrow windows (or the Computer panel open) shrink pills to dot + name; see PillText. */}
         <div className="hidden items-center gap-1.5 sm:flex" aria-label="Engine status">
           <EnginePills />

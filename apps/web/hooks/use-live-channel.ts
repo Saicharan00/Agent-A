@@ -1,39 +1,41 @@
 'use client';
 
+import type { LiveEvent } from '@agenta/shared';
 import { useEffect, useRef, useState } from 'react';
-import { defaultLiveUrl, LiveChannelClient, type LiveStatus } from '@/lib/live-channel';
+import { useLiveConnection, useLiveStatus } from '@/components/live-provider';
+import type { LiveStatus } from '@/lib/live-channel';
 
 /**
- * Subscribes to a runner channel (`run:<id>`, `thread:<id>`, `bot:<id>`, `global`) and reconnects
- * automatically. Skeleton: the server side and wire protocol arrive in F11, so pass `enabled: false`
- * (the default) until then to avoid connection attempts.
+ * Listens on a runner channel (`run:<id>`, `thread:<id>`, `bot:<id>`, `global`) over the tab's shared live socket.
+ * The cache side effects (bot status, messages, run status) happen in LiveProvider whatever `onEvent` does.
+ * Run channels replay from `afterSeq` (default: the whole run) and survive reconnects without gaps or repeats.
  */
 export function useLiveChannel(
   channel: string | null,
-  opts: { enabled?: boolean; url?: string; onEvent?: (event: unknown) => void } = {},
-): { status: LiveStatus; lastEvent: unknown } {
-  const { enabled = false, url } = opts;
-  const [status, setStatus] = useState<LiveStatus>('idle');
-  const [lastEvent, setLastEvent] = useState<unknown>(undefined);
+  opts: { enabled?: boolean; afterSeq?: number; onEvent?: (event: LiveEvent) => void } = {},
+): { status: LiveStatus; lastEvent: LiveEvent | undefined } {
+  const { enabled = true, afterSeq } = opts;
+  const connection = useLiveConnection();
+  const status = useLiveStatus();
+  const [lastEvent, setLastEvent] = useState<LiveEvent | undefined>(undefined);
   const onEventRef = useRef(opts.onEvent);
   useEffect(() => {
     onEventRef.current = opts.onEvent;
   });
+  // afterSeq only matters for the first subscribe; later changes must not resubscribe.
+  const afterSeqRef = useRef(afterSeq);
 
   useEffect(() => {
-    if (!enabled || !channel) return;
-    const client = new LiveChannelClient({
-      url: url ?? defaultLiveUrl(window.location),
+    if (!enabled || !channel || !connection) return;
+    return connection.subscribe(
       channel,
-      onStatus: setStatus,
-      onMessage: ({ event }) => {
+      (event) => {
         setLastEvent(event);
         onEventRef.current?.(event);
       },
-    });
-    client.start();
-    return () => client.stop();
-  }, [channel, enabled, url]);
+      { afterSeq: afterSeqRef.current },
+    );
+  }, [channel, enabled, connection]);
 
   return { status, lastEvent };
 }

@@ -1,5 +1,12 @@
 import type { Run, RunEvent } from '@agenta/db';
-import { apiError, runEventsQuerySchema, runListQuerySchema } from '@agenta/shared';
+import {
+  ENGINES,
+  type EngineQueueStateResponse,
+  apiError,
+  nowIso,
+  runEventsQuerySchema,
+  runListQuerySchema,
+} from '@agenta/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { z } from 'zod';
 import { RunError, type RunService } from './service';
@@ -57,5 +64,20 @@ export function registerRunRoutes(app: FastifyInstance, runs: RunService): void 
       if (err instanceof RunError) return reply.code(err.statusCode).send(apiError(err.code, err.message));
       throw err;
     }
+  });
+}
+
+/** GET /api/engines/state: usage-limit pauses per engine (top-bar pills) and the engine override, if any. */
+export function registerEngineStateRoute(app: FastifyInstance, override: 'mock' | undefined): void {
+  app.get('/api/engines/state', async (): Promise<EngineQueueStateResponse> => {
+    const now = nowIso();
+    const rows = new Map(app.repos!.engineState.list().map((r) => [r.engine, r.limitedUntil]));
+    return {
+      override: override ?? null,
+      engines: ENGINES.map((engine) => {
+        const until = rows.get(engine) ?? null;
+        return { engine, limitedUntil: until && until > now ? until : null };
+      }),
+    };
   });
 }

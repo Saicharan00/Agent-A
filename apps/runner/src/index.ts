@@ -11,6 +11,8 @@ import { CodexEngine } from './engines/codex';
 import { MockEngine } from './engines/mock';
 import { ContainerLauncher } from './engines/process';
 import { EngineRegistry } from './engines/registry';
+import { DockerMonitor } from './live/docker-monitor';
+import { LiveHub } from './live/hub';
 import { computerPreparer } from './runs/prepare';
 import { RunService } from './runs/service';
 import { envFileSource } from './engines/secrets';
@@ -72,8 +74,11 @@ const runs = new RunService({
   log: rootLog.child({ module: 'runs' }),
   prepare: computerPreparer({ containers, botsDir: config.botsDir }),
 });
-const app = await buildServer(config, { repos, containers, engineAuth, runs });
+const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
+const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
+const app = await buildServer(config, { repos, containers, engineAuth, runs, live });
 app.addHook('onClose', async () => {
+  dockerMonitor?.stop();
   // Stops running engines and records them as failed ("runner stopped") before the DB closes.
   await runs.shutdown();
   // Bot containers keep running across runner restarts; the reconcile loop adopts them on start.
@@ -108,5 +113,6 @@ if (containers) {
   if (docker.ok) app.log.info({ docker: docker.version, image: docker.image }, 'docker ready');
   else app.log.warn({ error: docker.error }, 'docker unreachable: bot computers unavailable');
   containers.startLoops();
+  dockerMonitor?.start();
 }
 if (config.engineOverride) app.log.warn({ engine: config.engineOverride }, 'engine override active');

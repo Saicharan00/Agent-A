@@ -1,6 +1,14 @@
 import type { EngineAuthStatus } from '@agenta/shared';
 import { describe, expect, it } from 'vitest';
-import { dockerPill, enginePillLabel, engineView } from '@/lib/engines';
+import {
+  activeLimit,
+  clockTime,
+  dockerPill,
+  enginePill,
+  enginePillLabel,
+  engineView,
+  mockPill,
+} from '@/lib/engines';
 
 const status = (over: Partial<EngineAuthStatus>): EngineAuthStatus => ({
   engine: 'claude',
@@ -41,6 +49,41 @@ describe('engine display', () => {
     expect(dockerPill({ ok: true, image: true, version: '29' })).toMatchObject({
       tone: 'ok',
       label: 'Docker: ok',
+    });
+  });
+});
+
+describe('live engine pills', () => {
+  const now = Date.parse('2026-10-13T12:00:00.000Z');
+  const later = '2026-10-13T14:05:00.000Z';
+
+  it('a pause still in force wins over the auth state', () => {
+    const p = enginePill('claude', status({}), later, now);
+    expect(p.tone).toBe('warn');
+    expect(p.label).toBe(`Claude: limited until ${clockTime(later)}`);
+    expect(clockTime(later)).toMatch(/^\d{2}:\d{2}$/);
+    expect(p.title).toContain('paused');
+  });
+
+  it('expired or absent pauses fall back to the auth pill', () => {
+    expect(activeLimit('2026-10-13T11:59:59.000Z', now)).toBeNull();
+    expect(
+      enginePill('codex', status({ engine: 'codex', state: 'missing', mode: 'none' }), null, now),
+    ).toMatchObject({
+      tone: 'warn',
+      label: 'Codex: not set up',
+    });
+    expect(enginePill('claude', undefined, undefined, now)).toMatchObject({
+      tone: 'neutral',
+      label: 'Claude: …',
+    });
+  });
+
+  it('mock pill shows the override and its pauses', () => {
+    expect(mockPill(null, now)).toMatchObject({ tone: 'neutral', label: 'Mock: on' });
+    expect(mockPill(later, now)).toMatchObject({
+      tone: 'warn',
+      label: `Mock: limited until ${clockTime(later)}`,
     });
   });
 });
