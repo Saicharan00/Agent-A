@@ -152,3 +152,46 @@ Stream-json messages seen (one JSON object per line):
   assistant `error: "rate_limit"`, or limit wording ("usage limit reached", "hit your limit · resets 3pm (Zone)",
   "Claude AI usage limit reached|<epoch>"); reset parsing in `limits.ts`. Replace `test/fixtures/claude/limit.jsonl`
   with a real capture when one happens.
+
+## Codex adapter (F09, observed 2026-10-13 with codex-cli 0.162.1)
+
+Command (`apps/runner/src/engines/codex.ts` → `buildCodexArgs`), same launcher as F08 (`setsid` group, prompt on stdin):
+```
+codex exec            --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox [-m <m>] [-c developer_instructions="<system text>"] -
+codex exec resume <id> --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox [-m <m>] [-c developer_instructions="…"] -
+```
+- `-` = read the prompt from stdin (without it and with an open stdin Codex prints "Reading additional input from stdin…").
+- `exec resume` has no `-C/--cd`; the cwd comes from the exec workdir (`/home/bot/work`) for both forms.
+- **No system-prompt flag**: `-c developer_instructions="…"` (TOML basic string) works and appears as the first
+  developer message (verified with `codex debug prompt-input`, offline).
+- **AGENTS.md discovery**: Codex reads `AGENTS.md` from the git root down to the cwd, so `/home/bot/AGENTS.md` is
+  **not** read when the cwd is `/home/bot/work`. It always reads `$CODEX_HOME/AGENTS.md` (`~/.codex/AGENTS.md`), so the
+  adapter mirrors the rendered file there before each run.
+- `~/.codex/config.toml` is rendered before each run: `approval_policy = "never"`, `sandbox_mode = "danger-full-access"`,
+  Playwright MCP, plus the servers of the bot's Claude-style MCP config (F17). Stdio → `command`/`args`/`env`;
+  HTTP → `url` + `http_headers` (checked with `codex mcp get --json`). Unknown keys only fail with `--strict-config`.
+- `codex debug prompt-input [-c …] [PROMPT]` renders the model-visible input as JSON with no network: the tool for
+  checking instructions.
+
+JSONL events seen:
+| Event | Mapped to |
+|---|---|
+| `thread.started {thread_id}` | session id (resume with `exec resume <thread_id>`) |
+| `turn.started` | nothing |
+| `item.started` / `item.completed` `command_execution {command, aggregated_output, exit_code, status}` | `tool.call` `shell` / `tool.result` (error if exit ≠ 0 or failed) |
+| `item.completed` `agent_message {text}` (no streaming deltas; also mid-turn progress messages) | `text.final` |
+| `item.*` `reasoning {text}` · `file_change {changes:[{path, kind: add\|update\|delete}]}` · `mcp_tool_call {server, tool, arguments, result, error}` · `web_search {query}` (documented shapes, not in the smoke run) | `thinking` · `apply_patch` call/result + `file.changed` · `mcp__<server>__<tool>` · `web_search` |
+| `item.completed` `error {message}` (e.g. "Falling back from WebSockets to HTTPS transport…") | nothing (notice) |
+| `error {message}` "Reconnecting... 2/5 (…)" / "Reconnecting... waiting for network" | nothing (transient) |
+| `turn.completed {usage: {input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens, reasoning_output_tokens}}` | `usage` (input already includes cached; output + reasoning) |
+| `turn.failed {error: {message}}` | `error` or `limit.hit` |
+
+- Files written by shell commands (e.g. `printf hi > hello.txt`, what the smoke run did) produce no `file.changed`;
+  only `file_change` items do.
+- **Offline / no network: Codex retries forever** ("Reconnecting... waiting for network"); the run orchestrator must
+  apply a timeout (F10).
+- Unknown resume id: nothing on stdout, stderr `Error: thread/resume: thread/resume failed: no rollout found for thread id <id> (code -32600)`,
+  exit 1 → retry once as a new thread + `system` event.
+- Without auth.json Codex still starts and fails on the API (no early "not logged in").
+- **Usage limit: not observed yet.** Detected from wording ("You've hit your usage limit… try again at 3:05 PM" /
+  "… at Oct 14th, 2026 9:05 AM" / "in N minutes") in `error`/`turn.failed`/stderr; times are the container's zone (UTC).

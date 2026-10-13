@@ -25,6 +25,7 @@
     "auth:codex": "tsx scripts/engine-login.ts codex",
     "smoke:auth": "vitest run --config tests/smoke/vitest.config.ts auth",
     "smoke:claude": "vitest run --config tests/smoke/vitest.config.ts claude",
+    "smoke:codex": "vitest run --config tests/smoke/vitest.config.ts codex",
     "mock:run": "tsx --tsconfig apps/runner/tsconfig.json apps/runner/scripts/mock-run.ts",
     "doctor": "tsx scripts/doctor.ts"
   },

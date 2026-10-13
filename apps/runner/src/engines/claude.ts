@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { EngineEvent, RunFinishStatus } from '@agenta/shared';
-import { parseJsonl } from './jsonl';
+import { CliEngine, type CliEngineOptions, type CliStreamMapper, type CliTurn } from './cli';
 import { parseResetTime, toIso } from './limits';
-import type { EngineLauncher, EngineProcess } from './process';
-import type { EngineAdapter, EngineRunInput } from './types';
 
 // Claude Code adapter: `claude -p --output-format stream-json` inside the bot's computer, mapped to EngineEvents.
 // Observed stream format (2.1.296) and flags: docs/engines.md → "Claude Code adapter (F08)".
 
-type Log = { debug(obj: object, msg?: string): void; warn(obj: object, msg?: string): void };
 type Json = Record<string, unknown>;
 
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -47,7 +44,7 @@ function resultText(content: unknown): string {
  * Stateful mapper for one `claude -p` process: feed every parsed stream-json message to `map`, then call `finish`
  * with the exit code. Never emits run.started/run.finished (the adapter owns those).
  */
-export class ClaudeStreamMapper {
+export class ClaudeStreamMapper implements CliStreamMapper {
   sessionId?: string;
   /** The resumed session no longer exists (the adapter retries without --resume). */
   resumeMissing = false;
@@ -261,177 +258,22 @@ export function buildClaudeArgs(a: ClaudeArgsInput): string[] {
   ];
 }
 
-export type ClaudeEngineOptions = {
-  launcher: EngineLauncher;
-  /** Exec-time credentials (EngineAuth.execEnv('claude')); read per run so a new token works at once. */
-  env: () => Record<string, string>;
-  log: Log;
-  /** SIGINT → SIGKILL grace period on cancel. Default 5 s. */
-  killGraceMs?: number;
-  /** After SIGKILL, stop waiting for the stream to close. Default 3 s. */
-  closeGraceMs?: number;
-  now?: () => Date;
-  /** Every raw stream-json message (fixture capture in the smoke test). */
-  tap?: (msg: unknown) => void;
-};
+export type ClaudeEngineOptions = CliEngineOptions;
 
-const MAX_STDERR = 64 * 1024;
-const RUN_FILES = '.agenta/runs';
-
-type Attempt = { status: RunFinishStatus; sessionId: string; resumeMissing: boolean };
-
-export class ClaudeEngine implements EngineAdapter {
+export class ClaudeEngine extends CliEngine {
   readonly id = 'claude' as const;
-  private readonly killGraceMs: number;
-  private readonly closeGraceMs: number;
+  protected readonly label = 'Claude Code';
 
-  constructor(private readonly opts: ClaudeEngineOptions) {
-    this.killGraceMs = opts.killGraceMs ?? 5000;
-    this.closeGraceMs = opts.closeGraceMs ?? 3000;
+  protected newMapper(): ClaudeStreamMapper {
+    return new ClaudeStreamMapper(this.opts.now);
   }
 
-  async *run(input: EngineRunInput, signal: AbortSignal): AsyncGenerator<EngineEvent> {
-    const botId = input.bot.id;
-    const { launcher } = this.opts;
-    // A new session gets an id up front (--session-id), so run.started can carry it immediately.
-    let sessionId = input.resumeSessionId ?? randomUUID();
-    yield { type: 'run.started', engine: 'claude', sessionId };
-    if (signal.aborted) {
-      yield { type: 'run.finished', status: 'cancelled', sessionId };
-      return;
-    }
-
-    const dir = `${RUN_FILES}/${randomUUID()}`;
-    let result: Attempt;
-    try {
-      const promptFile = launcher.writeHomeFile(botId, `${dir}/prompt.md`, input.prompt);
-      const systemPromptFile = input.systemPromptAppend.trim()
-        ? launcher.writeHomeFile(botId, `${dir}/system.md`, input.systemPromptAppend)
-        : undefined;
-      const mcpConfigPath = launcher.homeFileExists(botId, input.mcpConfigPath)
-        ? input.mcpConfigPath
-        : undefined;
-      if (!mcpConfigPath)
-        this.opts.log.debug({ botId, path: input.mcpConfigPath }, 'no MCP config yet; running without');
-      const model = input.model ?? input.bot.model ?? undefined;
-      const files = { promptFile, systemPromptFile, mcpConfigPath, model };
-
-      result = yield* this.attempt(
-        input,
-        { ...files, sessionId, resume: Boolean(input.resumeSessionId) },
-        signal,
-      );
-      if (result.resumeMissing && input.resumeSessionId && !signal.aborted) {
-        yield {
-          type: 'system',
-          message: `The previous Claude Code session (${input.resumeSessionId}) was not found, so this turn started a new session.`,
-        };
-        sessionId = randomUUID();
-        result = yield* this.attempt(input, { ...files, sessionId, resume: false }, signal);
-      }
-    } catch (err) {
-      const message = (err as Error).message;
-      if (!signal.aborted) yield { type: 'error', message: `Could not run Claude Code: ${message}` };
-      result = { status: signal.aborted ? 'cancelled' : 'failed', sessionId, resumeMissing: false };
-    } finally {
-      try {
-        launcher.removeHomeFile(botId, dir);
-      } catch (err) {
-        this.opts.log.warn({ botId, err: (err as Error).message }, 'could not remove run files');
-      }
-    }
-    yield { type: 'run.finished', status: result.status, sessionId: result.sessionId };
+  /** New sessions get an id up front (--session-id), so run.started carries it immediately. */
+  protected override newSessionId(): string {
+    return randomUUID();
   }
 
-  private async *attempt(
-    input: EngineRunInput,
-    a: {
-      promptFile: string;
-      systemPromptFile?: string;
-      mcpConfigPath?: string;
-      model?: string;
-      sessionId: string;
-      resume: boolean;
-    },
-    signal: AbortSignal,
-  ): AsyncGenerator<EngineEvent, Attempt> {
-    const botId = input.bot.id;
-    const mapper = new ClaudeStreamMapper(this.opts.now);
-    const proc = await this.opts.launcher.spawn(botId, {
-      cmd: buildClaudeArgs(a),
-      env: { ...this.opts.env(), DISPLAY: ':99' },
-      workdir: input.cwd,
-      stdinFile: a.promptFile,
-    });
-
-    let stderr = '';
-    proc.stderr.on('data', (c: Buffer) => {
-      stderr = (stderr + c.toString('utf8')).slice(-MAX_STDERR);
-    });
-    proc.stderr.on('error', () => undefined);
-    const stopCancel = this.onAbort(proc, signal);
-
-    let exitCode: number | null;
-    let finished = false;
-    try {
-      const messages = parseJsonl(proc.stdout, {
-        onNoise: (line) =>
-          this.opts.log.debug({ botId, line: line.slice(0, 500) }, 'claude: non-JSON output'),
-        onOversized: (length) => this.opts.log.warn({ botId, length }, 'claude: oversized line dropped'),
-      });
-      try {
-        for await (const msg of messages) {
-          if (signal.aborted) continue; // drain until the process dies; nothing more for the UI
-          this.opts.tap?.(msg);
-          yield* mapper.map(msg);
-        }
-      } catch (err) {
-        // stream destroyed by the cancel fallback, or the exec connection broke
-        if (!signal.aborted)
-          this.opts.log.warn({ botId, err: (err as Error).message }, 'claude: output stream error');
-      }
-      exitCode = await Promise.race([
-        proc.wait(),
-        delay(signal.aborted ? this.closeGraceMs : 10_000).then(() => null),
-      ]);
-      finished = true;
-    } finally {
-      stopCancel();
-      // Cancelled (or the consumer stopped iterating): reap the whole group. Tool processes started in the
-      // background ignore SIGINT and would outlive the CLI otherwise.
-      if (signal.aborted || !finished) await proc.signal('KILL');
-      await proc.dispose();
-    }
-
-    const sessionId = mapper.sessionId ?? a.sessionId;
-    if (signal.aborted) return { status: 'cancelled', sessionId, resumeMissing: false };
-    if (stderr.trim()) this.opts.log.debug({ botId, stderr: stderr.slice(-2000) }, 'claude: stderr');
-    const done = mapper.finish(exitCode, stderr);
-    if (!(a.resume && mapper.resumeMissing)) yield* done.events;
-    return { status: done.status, sessionId, resumeMissing: a.resume && mapper.resumeMissing };
+  protected command(turn: CliTurn): string[] {
+    return buildClaudeArgs({ ...turn, sessionId: turn.sessionId ?? randomUUID() });
   }
-
-  /** Cancel: SIGINT to the process group, SIGKILL after the grace period, then stop waiting for the stream. */
-  private onAbort(proc: EngineProcess, signal: AbortSignal): () => void {
-    const timers: NodeJS.Timeout[] = [];
-    const onAbort = () => {
-      void proc.signal('INT');
-      timers.push(
-        setTimeout(() => {
-          void proc.signal('KILL');
-          timers.push(setTimeout(() => proc.stdout.destroy(), this.closeGraceMs));
-        }, this.killGraceMs),
-      );
-    };
-    if (signal.aborted) onAbort();
-    else signal.addEventListener('abort', onAbort, { once: true });
-    return () => {
-      signal.removeEventListener('abort', onAbort);
-      for (const t of timers) clearTimeout(t);
-    };
-  }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms).unref());
 }

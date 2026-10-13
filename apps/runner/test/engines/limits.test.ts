@@ -41,6 +41,14 @@ describe('parseResetTime', () => {
     expect(parseResetTime('limit reached in your plan; resets in 45m', NOW)).toBe('2026-10-13T10:45:00.000Z');
   });
 
+  it('Codex wording: time today, or a full date', () => {
+    const base =
+      "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro) or try again at";
+    expect(parseResetTime(`${base} 3:05 PM.`, NOW)).toBe('2026-10-13T15:05:00.000Z');
+    expect(parseResetTime(`${base} Oct 14th, 2026 9:05 AM.`, NOW)).toBe('2026-10-14T09:05:00.000Z');
+    expect(parseResetTime(`${base} later.`, NOW)).toBeUndefined();
+  });
+
   it('nothing usable → undefined', () => {
     expect(parseResetTime("You've hit your limit", NOW)).toBeUndefined();
     expect(parseResetTime('resets 3', NOW)).toBeUndefined();

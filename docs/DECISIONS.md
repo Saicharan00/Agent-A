@@ -212,3 +212,23 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   will be reused by Codex. The limit fixture is synthesized from observed shapes (no real limit hit yet).
 - Smoke test `SMOKE=1 pnpm smoke:claude` (tests/smoke now resolves `@agenta/*` via tsconfig paths).
 - No new dependencies (`setsid` is util-linux, already in the bot image).
+
+## F09 — Codex adapter (2026-10-13)
+- **Shared CLI run loop** (`engines/cli.ts`, abstract `CliEngine`): per-run prompt files, spawn via the F08 launcher,
+  JSONL mapping, cancel (SIGINT → SIGKILL → group reap), one retry when the resumed session is gone, optional
+  before/after hooks. `ClaudeEngine` and `CodexEngine` only supply argv, a stream mapper and hooks.
+- **Codex instructions:** system text via `-c developer_instructions=…` (Codex has no system-prompt flag); the rendered
+  `/home/bot/AGENTS.md` is mirrored to `~/.codex/AGENTS.md` before each run because Codex never reads AGENTS.md above its
+  cwd outside a git repo. Both verified offline with `codex debug prompt-input` (Docker test).
+- **`~/.codex/config.toml` is runner-rendered before each run** (not by the container manager): no Codex sandbox or
+  approvals, Playwright MCP, plus the servers from the bot's Claude-style `mcp.json` translated to TOML, so F17 only
+  writes one MCP config for both engines. Edits by hand are overwritten.
+- **Auth:** `EngineAuth.beforeCodexRun` is a before-hook (a failure fails the run before Codex starts);
+  `afterCodexRun` runs after every attempt that started, including cancels.
+- **Mapping:** `run.started` has no session id for a new thread (Codex reports it in `thread.started`);
+  `run.finished.sessionId` carries it. Shell commands are `shell` tool calls; `file_change` → `apply_patch` +
+  `file.changed`; MCP calls use Claude's `mcp__server__tool` naming so the UI treats both engines alike; transient
+  `Reconnecting…` errors and `error` items are ignored; usage input = `input_tokens` (already includes cached),
+  output = output + reasoning tokens; no cost (Codex doesn't report one).
+- Reset-time parser learned Codex's "try again at 3:05 PM" / "at Oct 14th, 2026 9:05 AM" wording.
+- No new dependencies.

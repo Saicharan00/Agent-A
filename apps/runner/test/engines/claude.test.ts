@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { PassThrough } from 'node:stream';
 import { type EngineEvent, engineEventSchema } from '@agenta/shared';
 import { describe, expect, it } from 'vitest';
 import { ClaudeEngine, ClaudeStreamMapper, buildClaudeArgs } from '../../src/engines/claude';
-import type { EngineLauncher, EngineProcess, EngineSpawn } from '../../src/engines/process';
 import type { EngineRunInput } from '../../src/engines/types';
+import { type Behavior, FakeLauncher, collectEvents, replayText, silent } from './fake-launcher';
 import { FAKE_CLAUDE_TOKEN } from './helpers';
 
 const NOW = new Date('2026-10-13T10:00:00.000Z');
@@ -215,72 +214,6 @@ describe('buildClaudeArgs', () => {
   });
 });
 
-// ---------- adapter with a fake launcher (no Docker, no CLI) ----------
-
-type Behavior = (p: FakeProcess) => void;
-
-class FakeProcess implements EngineProcess {
-  readonly stdout = new PassThrough();
-  readonly stderr = new PassThrough();
-  readonly signals: string[] = [];
-  disposed = false;
-  private resolveExit!: (code: number) => void;
-  private readonly exit = new Promise<number>((r) => (this.resolveExit = r));
-  exited = false;
-  onSignal?: (sig: 'INT' | 'KILL') => void;
-
-  constructor(readonly spec: EngineSpawn) {}
-
-  write(rows: unknown[] | string): void {
-    this.stdout.write(typeof rows === 'string' ? rows : rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
-  }
-  end(code: number): void {
-    if (this.exited) return;
-    this.exited = true;
-    this.stdout.end();
-    this.stderr.end();
-    this.resolveExit(code);
-  }
-  wait(): Promise<number> {
-    return this.exit;
-  }
-  async signal(sig: 'INT' | 'KILL'): Promise<void> {
-    this.signals.push(sig);
-    this.onSignal?.(sig);
-  }
-  async dispose(): Promise<void> {
-    this.disposed = true;
-  }
-}
-
-class FakeLauncher implements EngineLauncher {
-  readonly procs: FakeProcess[] = [];
-  readonly files = new Map<string, string>();
-  readonly existing = new Set<string>();
-  constructor(private readonly behaviors: Behavior[]) {}
-
-  async spawn(_botId: string, spec: EngineSpawn): Promise<EngineProcess> {
-    const p = new FakeProcess(spec);
-    this.procs.push(p);
-    const behavior = this.behaviors[this.procs.length - 1];
-    if (!behavior) throw new Error('container is not running');
-    setImmediate(() => behavior(p));
-    return p;
-  }
-  writeHomeFile(_botId: string, relPath: string, content: string): string {
-    this.files.set(relPath, content);
-    return `/home/bot/${relPath}`;
-  }
-  removeHomeFile(_botId: string, relPath: string): void {
-    for (const k of [...this.files.keys()]) if (k.startsWith(relPath)) this.files.delete(k);
-  }
-  homeFileExists(_botId: string, containerPath: string): boolean {
-    return this.existing.has(containerPath);
-  }
-}
-
-const silent = { debug() {}, warn() {} };
-
 const runInput = (over: Partial<EngineRunInput> = {}): EngineRunInput => ({
   bot: { id: 'bot_1', name: 'Coder', slug: 'coder', role: '', engine: 'claude', model: 'sonnet' },
   threadId: 'thr_1',
@@ -304,19 +237,8 @@ function engineWith(behaviors: Behavior[], opts: { killGraceMs?: number } = {}) 
   return { engine, launcher };
 }
 
-async function collect(engine: ClaudeEngine, input: EngineRunInput, signal = new AbortController().signal) {
-  const events: EngineEvent[] = [];
-  for await (const e of engine.run(input, signal)) events.push(engineEventSchema.parse(e));
-  return events;
-}
-
-const replay =
-  (name: string, code = 0, stderr = ''): Behavior =>
-  (p) => {
-    p.write(fixture(name));
-    if (stderr) p.stderr.write(stderr);
-    p.end(code);
-  };
+const collect = collectEvents;
+const replay = (name: string, code = 0, stderr = ''): Behavior => replayText(fixture(name), code, stderr);
 
 describe('ClaudeEngine', () => {
   it('runs one turn: prompt on stdin, token + DISPLAY in exec env, run files cleaned up', async () => {

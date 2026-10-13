@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import type { Readable } from 'node:stream';
 import type { ExecHandle, ExecOptions } from '../containers/docker';
@@ -42,6 +42,8 @@ export interface EngineLauncher {
   removeHomeFile(botId: string, relPath: string): void;
   /** Whether a container path under /home/bot exists (checked on the host side). */
   homeFileExists(botId: string, containerPath: string): boolean;
+  /** Reads a container path under /home/bot (host side); undefined when missing. */
+  readHomeFile(botId: string, containerPath: string): string | undefined;
 }
 
 type Exec = (botId: string, opts: ExecOptions) => Promise<ExecHandle>;
@@ -52,6 +54,12 @@ const KILLER = 'kill -s "$1" -- "-$(cat "$2")" 2>/dev/null; true';
 
 export function wrapCommand(spec: EngineSpawn, pidFile: string): string[] {
   return ['setsid', '-w', 'sh', '-c', WRAPPER, 'sh', pidFile, spec.stdinFile ?? '/dev/null', ...spec.cmd];
+}
+
+/** `/home/bot/x/y` → `x/y`; undefined for paths outside the home. */
+function homeRelative(containerPath: string): string | undefined {
+  const rel = posix.relative(CONTAINER_HOME, posix.normalize(containerPath));
+  return rel === '' || rel.startsWith('..') || posix.isAbsolute(rel) ? undefined : rel;
 }
 
 async function drain(h: ExecHandle): Promise<number> {
@@ -111,8 +119,17 @@ export class ContainerLauncher implements EngineLauncher {
   }
 
   homeFileExists(botId: string, containerPath: string): boolean {
-    const rel = posix.relative(CONTAINER_HOME, posix.normalize(containerPath));
-    if (rel === '' || rel.startsWith('..') || posix.isAbsolute(rel)) return false;
-    return existsSync(this.hostPath(botId, rel));
+    const rel = homeRelative(containerPath);
+    return rel !== undefined && existsSync(this.hostPath(botId, rel));
+  }
+
+  readHomeFile(botId: string, containerPath: string): string | undefined {
+    const rel = homeRelative(containerPath);
+    if (rel === undefined) return undefined;
+    try {
+      return readFileSync(this.hostPath(botId, rel), 'utf8');
+    } catch {
+      return undefined;
+    }
   }
 }

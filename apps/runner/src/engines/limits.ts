@@ -2,6 +2,7 @@
 //   "Claude AI usage limit reached|1760461200"            (epoch seconds after a pipe)
 //   "You've hit your limit · resets 3pm (Europe/Berlin)"   (wall-clock time, optional IANA zone)
 //   "… try again in 2 hours 15 minutes" / "resets in 45m"  (relative)
+//   "… or try again at 3:05 PM." / "… try again at Oct 14th, 2026 3:05 PM."  (Codex; the container's zone is UTC)
 // Unparseable → undefined; the run queue then falls back to its default back-off (F10).
 
 /** Converts epoch seconds/milliseconds or an ISO string to an ISO string, if plausible. */
@@ -55,7 +56,7 @@ export function nextWallTime(hour: number, minute: number, tz: string, now: Date
 
 const RELATIVE =
   /\bin\s+(?:(\d+)\s*(?:h|hr|hrs|hours?)\b)?[\s,]*(?:and\s+)?(?:(\d+)\s*(?:m|min|mins|minutes?)\b)?/gi;
-const WALL = /\bresets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*\(([^)]+)\))?/i;
+const WALL = /\b(?:resets?|try again)\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?:\s*\(([^)]+)\))?/i;
 
 /** Finds a reset time in an engine's limit message. */
 export function parseResetTime(text: string, now: Date = new Date()): string | undefined {
@@ -64,6 +65,15 @@ export function parseResetTime(text: string, now: Date = new Date()): string | u
 
   const iso = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})/.exec(text);
   if (iso) return toIso(iso[0]);
+
+  const dated =
+    /\b(?:resets?|try again)\s+(?:at|on)?\s*([A-Z][a-z]{2,8}\.? \d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}:\d{2}\s*[AP]M)/i.exec(
+      text,
+    );
+  if (dated) {
+    const t = Date.parse(`${dated[1]}, ${dated[2]} ${dated[3]} UTC`);
+    if (!Number.isNaN(t)) return new Date(t).toISOString();
+  }
 
   if (/reset|try again|available/i.test(text)) {
     for (const rel of text.matchAll(RELATIVE)) {
