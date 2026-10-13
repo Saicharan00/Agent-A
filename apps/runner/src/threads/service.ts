@@ -117,8 +117,7 @@ export class ThreadService {
 
   send(id: string, body: SendMessageRequest): SendMessageResponse {
     const { repos, log } = this.opts;
-    const thread = this.thread(id);
-    if (thread.archivedAt) throw new ThreadError('thread_archived', 'This conversation is archived', 409);
+    const thread = this.writable(id);
     const req = sendMessageRequestSchema.parse(body);
     const recipients = this.recipients(id, thread.kind);
     const archived = recipients.find((b) => b.archivedAt);
@@ -148,20 +147,93 @@ export class ThreadService {
       const prompt = this.promptFor(bot, thread, forBot);
       const run = this.opts.runs.enqueue({ botId: bot.id, threadId: id, trigger: 'user', prompt });
       runs.push(run);
-      // The bot has now seen everything up to this message. Keep the stored engine: a session id from the
-      // bot's previous engine must never be resumed by another one.
-      const session = repos.sessions.get(bot.id, id);
-      repos.sessions.upsert({
-        botId: bot.id,
-        threadId: id,
-        engine: session?.engine ?? run.engine,
-        lastSeenMessageId: message.id,
-      });
+      this.markSeen(run, message.id);
     }
     const stored = runs[0] ? (repos.messages.setRunId(message.id, runs[0].id) ?? message) : message;
     this.publish(stored);
     log.info({ threadId: id, messageId: message.id, runs: runs.map((r) => r.id) }, 'message posted');
     return { message: toMessageView(stored), runs: runs.map(toRunView) };
+  }
+
+  /** The bot has now seen everything up to this message. */
+  private markSeen(run: Run, messageId: string): void {
+    // Keep the stored engine: a session id from the bot's previous engine must never be resumed by another one.
+    const session = this.opts.repos.sessions.get(run.botId, run.threadId!);
+    this.opts.repos.sessions.upsert({
+      botId: run.botId,
+      threadId: run.threadId!,
+      engine: session?.engine ?? run.engine,
+      lastSeenMessageId: messageId,
+    });
+  }
+
+  private writable(id: string): Thread {
+    const thread = this.thread(id);
+    if (thread.archivedAt) throw new ThreadError('thread_archived', 'This conversation is archived', 409);
+    return thread;
+  }
+
+  /** A bot's own message in a thread it belongs to (Platform MCP `post_message`). Starts no runs (routing: F18). */
+  postAsBot(bot: Bot, threadId: string, text: string): MessageView {
+    this.writable(threadId);
+    if (!this.opts.repos.threads.isMember(threadId, bot.id)) {
+      throw new ThreadError('not_a_member', `You are not a member of thread ${threadId}`, 403);
+    }
+    const message = this.opts.repos.messages.create({
+      threadId,
+      authorType: 'bot',
+      authorBotId: bot.id,
+      contentMd: text,
+    });
+    this.publish(message);
+    this.opts.log.info({ threadId, messageId: message.id, botId: bot.id }, 'bot posted');
+    return toMessageView(message);
+  }
+
+  /**
+   * Platform MCP `ask_bot`: `from` posts `text` (mentioning the target) in a thread the target is in, by default the
+   * target's DM with the owner, and the target gets a `delegation` run one hop further than the asking run.
+   * Returns at once; the asker follows up with get_run_status.
+   */
+  askBot(
+    from: Bot,
+    target: Bot,
+    text: string,
+    opts: { threadId?: string; parentRun?: Run } = {},
+  ): { message: MessageView; run: RunView } {
+    const { repos } = this.opts;
+    if (target.id === from.id) throw new ThreadError('ask_self', 'You cannot ask yourself', 400);
+    if (target.archivedAt) throw new ThreadError('bot_archived', `${target.name} is archived`, 409);
+    const threadId = opts.threadId ?? repos.threads.findDm(target.id)?.id;
+    if (!threadId)
+      throw new ThreadError('thread_not_found', `${target.name} has no direct-message thread`, 404);
+    const thread = this.writable(threadId);
+    if (!repos.threads.isMember(threadId, target.id)) {
+      throw new ThreadError('not_a_member', `${target.name} is not in thread ${threadId}`, 400);
+    }
+    // Owner DMs are open to teammates (that is where the owner watches a bot's work); other threads are not.
+    if (thread.kind !== 'dm' && !repos.threads.isMember(threadId, from.id)) {
+      throw new ThreadError('not_a_member', `You are not a member of thread ${threadId}`, 403);
+    }
+    const message = repos.messages.create({
+      threadId,
+      authorType: 'bot',
+      authorBotId: from.id,
+      contentMd: text,
+      mentions: [target.id],
+    });
+    const run = this.opts.runs.enqueue({
+      botId: target.id,
+      threadId,
+      trigger: 'delegation',
+      prompt: this.promptFor(target, thread, message),
+      parentRunId: opts.parentRun?.id ?? null,
+      hopCount: (opts.parentRun?.hopCount ?? 0) + 1,
+    });
+    this.markSeen(run, message.id);
+    this.publish(message);
+    this.opts.log.info({ threadId, messageId: message.id, from: from.id, runId: run.id }, 'bot asked');
+    return { message: toMessageView(message), run: toRunView(run) };
   }
 
   /**
@@ -177,7 +249,8 @@ export class ThreadService {
           .listSince(thread.id, seen)
           .filter((m) => m.id !== latest.id && m.authorBotId !== bot.id)
       : [];
-    const members = new Map(repos.threads.listMembers(thread.id).map((b) => [b.id, b]));
+    // Every bot, not just members: teammates can write in a bot's DM through ask_bot.
+    const members = new Map(repos.bots.list({ includeArchived: true }).map((b) => [b.id, b]));
     return buildPrompt({ bot, thread, newMessages: toPromptMessages([...unseen, latest], members) });
   }
 

@@ -147,15 +147,15 @@ describe('MockEngine scenarios', () => {
     expect(finished(es)).toMatchObject({ status: 'succeeded' });
   });
 
-  it('delegate: platform MCP tool calls (stub result until F17, injectable)', async () => {
+  it('delegate: platform MCP tool calls (stub result unless a platform is injected)', async () => {
     const stub = await collect(engine(), '[mock:delegate]');
     checkShape(stub);
     expect(stub.filter((e) => e.type === 'tool.call').map((e) => (e as { name: string }).name)).toEqual([
       'mcp__agenta__create_task',
-      'mcp__agenta__message_bot',
+      'mcp__agenta__ask_bot',
     ]);
     expect(stub.find((e) => e.type === 'tool.result')).toMatchObject({
-      output: expect.stringMatching(/F17/),
+      output: expect.stringMatching(/not connected/),
     });
 
     const calls: string[] = [];
@@ -164,7 +164,7 @@ describe('MockEngine scenarios', () => {
       platform: {
         call: async (name) => {
           calls.push(name);
-          if (name.endsWith('message_bot')) throw new Error('bot not found');
+          if (name.endsWith('ask_bot')) throw new Error('bot not found');
           return 'task tsk_1 created';
         },
       },

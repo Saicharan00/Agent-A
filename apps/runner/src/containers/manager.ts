@@ -81,6 +81,12 @@ export class ContainerManager {
 
   // ---------- health ----------
 
+  /** The bot network's gateway IP (host.docker.internal inside bots), creating the network if missing. */
+  async networkGateway(): Promise<string> {
+    this.gateway ??= await this.docker.ensureNetwork(this.network, { agenta: '1' });
+    return this.gateway;
+  }
+
   async dockerHealth(): Promise<{ ok: boolean; version?: string; image?: boolean; error?: string }> {
     try {
       const version = await this.docker.version();
@@ -413,12 +419,11 @@ export class ContainerManager {
     if (bootstrapHome(home)) this.opts.log.info({ botId: bot.id, home }, 'bot home created');
     ensureSharedLayout(this.opts.sharedDir);
 
-    this.gateway ??= await this.docker.ensureNetwork(this.network, { agenta: '1' });
     const specOpts = {
       bot,
       home,
       sharedDir: this.opts.sharedDir,
-      gateway: this.gateway,
+      gateway: await this.networkGateway(),
       env: this.opts.containerEnv ?? [],
       image: this.image,
       network: this.network,

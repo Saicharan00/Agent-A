@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PLAYWRIGHT_MCP_SERVER, withPlaywrightServer } from '../../src/engines/mcp-config';
+import { PLAYWRIGHT_MCP_SERVER, withManagedServers } from '../../src/engines/mcp-config';
 import { writeMcpConfig } from '../../src/runs/prepare';
 
 describe('MCP config (Playwright, F16)', () => {
@@ -19,15 +19,15 @@ describe('MCP config (Playwright, F16)', () => {
   });
 
   it('adds Playwright and keeps the other servers', () => {
-    expect(JSON.parse(withPlaywrightServer(undefined))).toEqual({
+    expect(JSON.parse(withManagedServers(undefined))).toEqual({
       mcpServers: { playwright: PLAYWRIGHT_MCP_SERVER },
     });
-    expect(JSON.parse(withPlaywrightServer('not json'))).toEqual({
+    expect(JSON.parse(withManagedServers('not json'))).toEqual({
       mcpServers: { playwright: PLAYWRIGHT_MCP_SERVER },
     });
     const agenta = { type: 'http', url: 'http://host.docker.internal:3002/mcp' };
     const existing = JSON.stringify({ mcpServers: { agenta, playwright: { command: 'old' } } });
-    expect(JSON.parse(withPlaywrightServer(existing))).toEqual({
+    expect(JSON.parse(withManagedServers(existing))).toEqual({
       mcpServers: { agenta, playwright: PLAYWRIGHT_MCP_SERVER },
     });
   });
@@ -41,5 +41,21 @@ describe('MCP config (Playwright, F16)', () => {
     writeFileSync(path, JSON.stringify({ mcpServers: { x: { command: 'x' } } }));
     writeMcpConfig(home);
     expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).mcpServers)).toEqual(['x', 'playwright']);
+  });
+
+  it('adds the Platform MCP server with the bot token when the home has one (F17), private to the bot', () => {
+    const home = mkdtempSync(join(tmpdir(), 'agenta-mcp-'));
+    const url = 'http://host.docker.internal:3002/mcp';
+    writeMcpConfig(home, url);
+    const path = join(home, '.agenta', 'mcp.json');
+    expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).mcpServers)).toEqual(['playwright']); // no token yet
+    writeFileSync(join(home, '.agenta', 'mcp-token'), 'agm_abc\n');
+    writeMcpConfig(home, url);
+    expect(JSON.parse(readFileSync(path, 'utf8')).mcpServers.agenta).toEqual({
+      type: 'http',
+      url,
+      headers: { Authorization: 'Bearer agm_abc' },
+    });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });

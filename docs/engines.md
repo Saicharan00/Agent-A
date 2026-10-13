@@ -209,3 +209,11 @@ JSONL events seen:
 - Without auth.json Codex still starts and fails on the API (no early "not logged in").
 - **Usage limit: not observed yet.** Detected from wording ("You've hit your usage limit… try again at 3:05 PM" /
   "… at Oct 14th, 2026 9:05 AM" / "in N minutes") in `error`/`turn.failed`/stderr; times are the container's zone (UTC).
+
+## Platform MCP server (F17)
+- Both engines reach it as `http://host.docker.internal:3002/mcp` (the runner listens on the `agenta-net` gateway).
+- Claude: `/home/bot/.agenta/mcp.json` → `"agenta": {"type": "http", "url": …, "headers": {"Authorization": "Bearer <token>"}}`
+  (written before every real run, mode 600). Codex: the same entry translated to `[mcp_servers.agenta]` `url` +
+  `http_headers` (the runtime config uses the header, not the template's `bearer_token_env_var`).
+- Verified 2026-10-13 from inside a bot container with curl: no/wrong token → 401; `tools/call whoami` with the bot's
+  token → its identity. Tools appear to engines as `mcp__agenta__<tool>`.

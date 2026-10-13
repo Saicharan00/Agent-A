@@ -1,3 +1,4 @@
+import { PLATFORM_MCP_SERVER } from '@agenta/shared';
 import { CONTAINER_HOME } from './process';
 
 /** Each bot's persistent Chromium profile: sign-ins made by the bot (or the owner on the desktop) survive runs. */
@@ -12,8 +13,19 @@ export const PLAYWRIGHT_MCP_SERVER = {
   args: ['--config', '/opt/agenta/defaults/playwright-mcp.json', '--user-data-dir', BROWSER_PROFILE_DIR],
 };
 
-/** The Claude MCP config (/home/bot/.agenta/mcp.json) with Playwright set; other servers (F17, F35) are kept. */
-export function withPlaywrightServer(existing: string | undefined): string {
+/** The Platform MCP server (F17) as bots reach it, authenticated with the bot's own token. */
+export function platformMcpServer(url: string, token: string) {
+  return { type: 'http', url, headers: { Authorization: `Bearer ${token}` } };
+}
+
+/**
+ * The Claude MCP config (/home/bot/.agenta/mcp.json) with the servers the runner manages set: Playwright always, the
+ * Platform MCP server when given. Other servers (F35) are kept.
+ */
+export function withManagedServers(
+  existing: string | undefined,
+  platform?: { url: string; token: string },
+): string {
   let config: { mcpServers?: Record<string, unknown> } = {};
   try {
     const parsed = existing ? (JSON.parse(existing) as unknown) : {};
@@ -25,5 +37,9 @@ export function withPlaywrightServer(existing: string | undefined): string {
     typeof config.mcpServers === 'object' && config.mcpServers !== null && !Array.isArray(config.mcpServers)
       ? config.mcpServers
       : {};
-  return `${JSON.stringify({ ...config, mcpServers: { ...servers, playwright: PLAYWRIGHT_MCP_SERVER } }, null, 2)}\n`;
+  const managed = {
+    ...(platform ? { [PLATFORM_MCP_SERVER]: platformMcpServer(platform.url, platform.token) } : {}),
+    playwright: PLAYWRIGHT_MCP_SERVER,
+  };
+  return `${JSON.stringify({ ...config, mcpServers: { ...servers, ...managed } }, null, 2)}\n`;
 }

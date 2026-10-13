@@ -7,6 +7,8 @@ import { z } from 'zod';
 const configSchema = z.object({
   host: z.string().min(1),
   port: z.coerce.number().int().min(1).max(65535),
+  /** Platform MCP server (F17): 127.0.0.1 plus the bot network gateway. 0 picks a free port (tests). */
+  mcpPort: z.coerce.number().int().min(0).max(65535),
   webOrigin: z.string().url(),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']),
   engineOverride: z.enum(['mock']).optional(),
@@ -34,6 +36,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
   return configSchema.parse({
     host: env.AGENTA_RUNNER_HOST ?? DEFAULT_BIND_HOST,
     port: env.AGENTA_RUNNER_PORT ?? DEFAULT_PORTS.runner,
+    mcpPort: env.AGENTA_MCP_PORT ?? DEFAULT_PORTS.mcp,
     webOrigin: env.AGENTA_WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
     logLevel: env.LOG_LEVEL ?? 'info',
     engineOverride: env.AGENTA_ENGINE_OVERRIDE || undefined,

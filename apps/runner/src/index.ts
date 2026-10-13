@@ -11,6 +11,8 @@ import { EngineAuth } from './engines/auth';
 import { ClaudeEngine } from './engines/claude';
 import { CodexEngine } from './engines/codex';
 import { MockEngine } from './engines/mock';
+import { PlatformMcpServer } from './mcp/server';
+import { PlatformTools } from './mcp/tools';
 import { ContainerLauncher } from './engines/process';
 import { FilesService } from './files/service';
 import { EngineRegistry } from './engines/registry';
@@ -55,7 +57,18 @@ const engineAuth: EngineAuth = new EngineAuth({
   exec: containers && ((botId, opts) => containers.exec(botId, opts)),
   log: rootLog.child({ module: 'engine-auth' }),
 });
-const engineAdapters: ConstructorParameters<typeof EngineRegistry>[0] = [new MockEngine()];
+// The mock engine calls the same Platform MCP tools in-process (`platformTools` is created below, before any run).
+const engineAdapters: ConstructorParameters<typeof EngineRegistry>[0] = [
+  new MockEngine({
+    platform: {
+      call: async (name, input, botId) => {
+        const bot = repos.bots.get(botId);
+        if (!bot) throw new Error(`Bot ${botId} not found`);
+        return JSON.stringify(await platformTools.call(bot, name, input), null, 2);
+      },
+    },
+  }),
+];
 if (containers) {
   const launcher = new ContainerLauncher((id, o) => containers.exec(id, o), config.botsDir);
   engineAdapters.push(
@@ -82,6 +95,7 @@ const runs = new RunService({
     containers,
     botsDir: config.botsDir,
     ensureToken: (botId) => void ensureMcpToken(repos, config.botsDir, botId),
+    platformMcpUrl: `http://host.docker.internal:${config.mcpPort}/mcp`,
   }),
 });
 const bots = new BotService({
@@ -99,6 +113,12 @@ const threads = new ThreadService({
   botsDir: config.botsDir,
   bots,
   runs,
+});
+const platformTools = new PlatformTools({ repos, threads, log: rootLog.child({ module: 'platform-tools' }) });
+const platformMcp = new PlatformMcpServer({
+  repos,
+  tools: platformTools,
+  log: rootLog.child({ module: 'platform-mcp' }),
 });
 const files = new FilesService({
   repos,
@@ -127,6 +147,7 @@ const app = await buildServer(config, {
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
+  await platformMcp.close();
   // Stops running engines and records them as failed ("runner stopped") before the DB closes.
   await runs.shutdown();
   // Bot containers keep running across runner restarts; the reconcile loop adopts them on start.
@@ -156,10 +177,21 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 // Recover runs a previous process left `running`, then start scheduling queued work.
 runs.start();
 await app.listen({ host: config.host, port: config.port });
+await platformMcp.listen(config.host, config.mcpPort);
 if (containers) {
   const docker = await containers.dockerHealth();
-  if (docker.ok) app.log.info({ docker: docker.version, image: docker.image }, 'docker ready');
-  else app.log.warn({ error: docker.error }, 'docker unreachable: bot computers unavailable');
+  if (docker.ok) {
+    app.log.info({ docker: docker.version, image: docker.image }, 'docker ready');
+    // Bots reach the Platform MCP server as host.docker.internal = the bot network's gateway (DECISIONS F05).
+    try {
+      await platformMcp.listen(await containers.networkGateway(), config.mcpPort);
+    } catch (err) {
+      app.log.error(
+        { err },
+        'platform MCP unreachable from bots: could not listen on the bot network gateway',
+      );
+    }
+  } else app.log.warn({ error: docker.error }, 'docker unreachable: bot computers unavailable');
   containers.startLoops();
   dockerMonitor?.start();
 }

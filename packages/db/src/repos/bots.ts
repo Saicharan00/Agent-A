@@ -67,6 +67,11 @@ export function makeBotsRepo(db: Db) {
 
     getBySlug,
 
+    /** The bot a Platform MCP token belongs to (looked up by the token's SHA-256). */
+    getByMcpTokenHash(hash: string): Bot | undefined {
+      return db.select().from(bots).where(eq(bots.mcpTokenHash, hash)).get();
+    },
+
     list(opts: { includeArchived?: boolean } = {}): Bot[] {
       return db
         .select()

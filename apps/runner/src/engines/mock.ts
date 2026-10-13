@@ -61,8 +61,8 @@ function abortError(): Error {
   return Object.assign(new Error('aborted'), { name: 'AbortError' });
 }
 
-/** Platform MCP tools (F17). Until then the mock answers with a stub result. */
-export type MockPlatform = { call(name: string, input: unknown): Promise<string> };
+/** The Platform MCP tools (F17), called as the bot whose turn this is. Unset: the mock answers with a stub. */
+export type MockPlatform = { call(name: string, input: unknown, botId: string): Promise<string> };
 
 export type MockEngineOptions = {
   clock?: MockClock;
@@ -258,7 +258,7 @@ export class MockEngine implements EngineAdapter {
             input: { title: 'Mock subtask', description: 'Created by [mock:delegate]', assignee: 'self' },
           },
           {
-            name: 'mcp__agenta__message_bot',
+            name: 'mcp__agenta__ask_bot',
             input: { bot: 'agent-a', message: 'I created a subtask for this.' },
           },
         ];
@@ -272,8 +272,8 @@ export class MockEngine implements EngineAdapter {
           let isError = false;
           try {
             output = this.opts.platform
-              ? await this.opts.platform.call(call.name, call.input)
-              : 'Platform MCP is not wired yet (F17); call recorded by the mock engine.';
+              ? await this.opts.platform.call(call.name, call.input, input.bot.id)
+              : 'Platform MCP is not connected; call recorded by the mock engine.';
           } catch (err) {
             output = (err as Error).message;
             isError = true;

@@ -464,3 +464,25 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Chromium trusts the sandbox proxy CA through the bot's NSS db**, filled by the entrypoint with `certutil`
   (`libnss3-tools`, new image package, its own layer to keep the large layers cached). Not
   `--ignore-certificate-errors`: that would also hide real certificate problems.
+
+## F17 — Platform MCP server (session 1)
+- **New dependency `@modelcontextprotocol/sdk`** (runner; the stack's MCP library) for the Streamable HTTP server.
+- **Stateless server, own `node:http` listeners.** Each request builds an `McpServer` bound to the token's bot, so no
+  MCP sessions to track and identity can't leak between bots. One `http.Server` per address: 127.0.0.1 and the
+  `agenta-net` gateway (DECISIONS F05), never 0.0.0.0. Port `AGENTA_MCP_PORT` (default 3002).
+- **Token lookup by hash** (`bots.getByMcpTokenHash`): the token is 256 random bits, so indexing its SHA-256 is safe and
+  needs no constant-time loop over bots. Archived bots are rejected.
+- **Rate limit:** fixed window, 120 requests per minute per bot, 429 with `Retry-After`. In memory; resets on restart.
+- **Token in `mcp.json`** (Authorization header, file mode 600), not an env var: both engines read it from that one
+  file (Codex via the existing TOML translation), and the token file next to it is already readable by the bot.
+- **Tool calls are logged by the engines' own `tool.call` events** on the calling run (Claude and Codex already emit
+  `mcp__agenta__*`); the runner adds an info log per call (inputs at debug). The calling run = the bot's `running` run
+  (a bot runs one turn at a time); `ask_bot` uses it as parent run and hop count + 1.
+- **ask_bot default thread = the target's DM with the owner** (the owner watches there); other threads need both bots as
+  members. The ask message is a bot message mentioning the target, with no `run_id` (a bot message's run id marks the
+  reply of that run). Prompts name any bot author, not just members.
+- **read_thread / post_message: members only.** post_message starts no runs; @mention routing is F18.
+- **search_memory:** keyword scoring over the bot's own + shared memories (`shortcut:` comment; F22 may use FTS).
+- **Mock engine uses the same `PlatformTools` in-process** (`MockPlatform.call(name, input, botId)`), so
+  `[mock:delegate]` exercises the real tools without HTTP.
+
