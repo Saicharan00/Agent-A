@@ -530,3 +530,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Per-group notifications:** `threads.notifications` (`all|mentions|none`, the bots' enum). For now it filters the
   sidebar unread count: `mentions` counts system messages and messages containing `@owner` (group prompts tell bots
   to write `@owner` for the owner's attention); `none` mutes. F27 reuses the setting for the notification inbox.
+
+## F19 — task board
+- **Starting a task = a `task` run in the task's own thread.** Assigning a bot (create with an assignee, or a new
+  assignee in PATCH) starts it unless `executedBy` is `human` or the task is done; `POST /tasks/:id/start` starts it
+  again. The first start creates a `task` thread (title = task title) and adds the assignee; the owner's message
+  ("Please start on this task." or the request-changes feedback) is posted there and the prompt carries the task brief
+  (`buildPrompt` with the task). A task with a queued/running run refuses another start (`task_running`). Todo or
+  blocked tasks move to in_progress on start. Task threads stay read-only in the chat UI.
+- **Owner review endpoints:** `approve` (in_review → done) and `request-changes` (→ changes_requested, revision + 1,
+  and the assignee's next turn starts with the feedback). F20 adds the lead's automated review on top.
+- **Owner status changes are unrestricted** (drag & drop can move a task to any column); bots stay bound by the F17
+  tool rules. Every owner change writes a `task_events` row with actor `user`.
+- **Live:** one `task.changed {taskId}` event on `global`, published by the task service and by every Platform MCP
+  task tool (via its `event()` helper). The web invalidates all `['tasks']` queries on it.
+- **Filters are client-side** (`GET /api/tasks` returns every task): fine for one owner's board.
+- **Drag & drop uses native HTML5 DnD** (no new dependency); the drawer's status select is the keyboard alternative.
+- Mock engine `[mock:task]`: in a task turn, adds a note (`update_task`) and hands in a result
+  (`submit_task_result`, artifact `/shared/mock-result.md`).

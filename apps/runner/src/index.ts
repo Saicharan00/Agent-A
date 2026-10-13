@@ -22,6 +22,7 @@ import { computerPreparer } from './runs/prepare';
 import { RunService } from './runs/service';
 import { TerminalService } from './terminal/service';
 import { DesktopService } from './desktop/service';
+import { TaskService } from './tasks/service';
 import { ThreadService } from './threads/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
@@ -115,7 +116,13 @@ const threads = new ThreadService({
   runs,
 });
 runs.onReply = (run, reply) => void threads.routeBotMessage(reply, run);
-const platformTools = new PlatformTools({ repos, threads, log: rootLog.child({ module: 'platform-tools' }) });
+const platformTools = new PlatformTools({
+  repos,
+  threads,
+  bus,
+  log: rootLog.child({ module: 'platform-tools' }),
+});
+const tasks = new TaskService({ repos, bus, runs, threads, log: rootLog.child({ module: 'tasks' }) });
 const platformMcp = new PlatformMcpServer({
   repos,
   tools: platformTools,
@@ -145,6 +152,7 @@ const app = await buildServer(config, {
   terminals,
   desktops,
   files,
+  tasks,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

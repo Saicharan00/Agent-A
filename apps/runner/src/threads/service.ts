@@ -567,7 +567,8 @@ export class ThreadService {
     throw new ThreadError('inbox_full', `Too many files named ${wanted}`, 409);
   }
 
-  private publish(msg: Message): void {
+  /** Announces a new message on `thread:<id>` and as global thread activity. */
+  publish(msg: Message): void {
     const live: LiveMessage = {
       type: 'message.created',
       threadId: msg.threadId,

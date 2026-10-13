@@ -25,7 +25,7 @@ The owner is learning from you. Alongside doing the work:
 - Name the trade-offs you considered and why you picked this option.
 - Afterwards, list the key takeaways a strong engineer would remember from this turn.
 
-Work on the task above and report what you did."
+Work on the task above and report what you did. When it meets the acceptance criteria, hand it in with \`submit_task_result\` (id tsk_1, a summary and your artifacts' paths)."
 `;
 
 exports[`buildPrompt > group thread: messages since last turn, bot authors, mentions 1`] = `
@@ -64,7 +64,7 @@ Check the new OAuth callback handler.
 - No secrets logged
 - Tests cover the error path
 
-Work on the task above and report what you did.
+Work on the task above and report what you did. When it meets the acceptance criteria, hand it in with \`submit_task_result\` (id tsk_1, a summary and your artifacts' paths).
 
 Reply as Code Reviewer. Others only see your final message in the thread; mention a teammate with @slug only when you need them."
 `;

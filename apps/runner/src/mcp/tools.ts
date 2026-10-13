@@ -6,6 +6,8 @@ import {
   platformToolInputs,
 } from '@agenta/shared';
 import { z } from 'zod';
+import type { EventBus } from '../bus';
+import { publishTaskChanged } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
 
 type Log = { info(obj: object, msg?: string): void; debug(obj: object, msg?: string): void };
@@ -62,6 +64,8 @@ type Handlers = { [N in PlatformToolName]: (bot: Bot, input: PlatformToolInput<N
 export type PlatformToolsOptions = {
   repos: Repos;
   threads: Pick<ThreadService, 'postAsBot' | 'askBot'>;
+  /** Live `task.changed` events for the board (F19). */
+  bus?: EventBus;
   log: Log;
 };
 
@@ -131,6 +135,8 @@ export class PlatformTools {
 
   private event(task: Task, bot: Bot, kind: string, payload: Record<string, unknown> = {}): void {
     this.opts.repos.tasks.addEvent({ taskId: task.id, kind, actor: bot.id, payload });
+    // Every task change made by a tool writes an event, so this is where the board hears about it.
+    if (this.opts.bus) publishTaskChanged(this.opts.bus, task.id);
   }
 
   private handle(botId: string | null): string {

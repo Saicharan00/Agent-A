@@ -13,3 +13,4 @@ export * from './threads';
 export * from './terminal';
 export * from './files';
 export * from './mcp';
+export * from './tasks';

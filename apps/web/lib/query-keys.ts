@@ -20,4 +20,8 @@ export const queryKeys = {
   /** Group chats (sidebar). */
   groups: ['threads', 'groups'] as const,
   run: (id: string) => ['runs', 'detail', id] as const,
+  /** Prefix of every task query (refetched on task.changed). */
+  tasks: ['tasks'] as const,
+  taskList: ['tasks', 'list'] as const,
+  task: (id: string) => ['tasks', 'detail', id] as const,
 };

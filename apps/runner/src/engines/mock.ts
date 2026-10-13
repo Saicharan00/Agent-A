@@ -3,7 +3,7 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong];
+// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task];
 // anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
@@ -16,6 +16,7 @@ export const MOCK_SCENARIOS = [
   'browser',
   'moderate',
   'pingpong',
+  'task',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -298,6 +299,30 @@ export class MockEngine implements EngineAdapter {
         for (const [i, call] of calls.entries())
           yield* this.platformCall(`mock-mcp-${i + 1}`, call, input, emit);
         const done = 'Delegated: one subtask created and Agent A notified.';
+        yield* stream(done);
+        emit({ type: 'text.final', text: intro + done });
+        usage(intro + done);
+        return 'succeeded';
+      }
+      case 'task': {
+        // A task turn (its brief names the task): note progress, then hand in a result for review.
+        const id = /^## Task (tsk_[A-Za-z0-9_-]+):/m.exec(input.prompt)?.[1];
+        if (!id) {
+          yield* reply('There is no task in this turn.');
+          return 'succeeded';
+        }
+        const intro = 'Working on the task. ';
+        yield* stream(intro);
+        const calls: { name: string; input: unknown }[] = [
+          { name: 'mcp__agenta__update_task', input: { id, note: 'Started work (mock).' } },
+          {
+            name: 'mcp__agenta__submit_task_result',
+            input: { id, summary: 'Done by the mock engine.', artifacts: ['/shared/mock-result.md'] },
+          },
+        ];
+        for (const [i, call] of calls.entries())
+          yield* this.platformCall(`mock-mcp-${i + 1}`, call, input, emit);
+        const done = 'Handed in for review.';
         yield* stream(done);
         emit({ type: 'text.final', text: intro + done });
         usage(intro + done);

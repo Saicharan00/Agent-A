@@ -127,6 +127,10 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
         void cache.invalidateQueries({ queryKey: queryKeys.groups });
       }
       return;
+    case 'task.changed':
+      // Lists and the open drawer; cheap at single-owner scale.
+      void cache.invalidateQueries({ queryKey: queryKeys.tasks });
+      return;
     case 'run.event':
       return;
   }

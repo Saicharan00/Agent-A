@@ -147,7 +147,11 @@ export function buildPrompt(input: BuildPromptInput): string {
   }
   if (task) parts.push(renderTask(task));
   if (explain) parts.push(EXPLAIN_MODE_TEXT);
-  if (task) parts.push('Work on the task above and report what you did.');
+  if (task) {
+    parts.push(
+      `Work on the task above and report what you did. When it meets the acceptance criteria, hand it in with \`submit_task_result\` (id ${task.id}, a summary and your artifacts' paths).`,
+    );
+  }
   if (thread.kind !== 'dm') {
     parts.push(
       `Reply as ${bot.name}. Others only see your final message in the thread; mention a teammate with @slug only when you need them.`,

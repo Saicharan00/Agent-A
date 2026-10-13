@@ -4,6 +4,7 @@ import type { BotStatusEvent } from './computer';
 import { AUTHOR_TYPES, ENGINES, RUN_STATUSES } from './enums';
 import { engineEventSchema } from './events';
 import type { LiveFilesChanged } from './files';
+import type { LiveTaskChanged } from './tasks';
 import type { LiveThreadActivity } from './threads';
 
 // What the runner publishes on the event bus for runs (F10). F11 fans these out over WebSocket on the
@@ -74,7 +75,8 @@ export type LiveEvent =
   | BotStatusEvent
   | LiveBotsChanged
   | LiveThreadActivity
-  | LiveFilesChanged;
+  | LiveFilesChanged
+  | LiveTaskChanged;
 
 // ---------- WebSocket wire protocol (GET /ws, F11) ----------
 // One socket per browser tab carries any number of channel subscriptions. Every frame is one JSON object.

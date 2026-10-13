@@ -21,6 +21,8 @@ import { registerDesktopRoutes } from './desktop/routes';
 import type { DesktopService } from './desktop/service';
 import { registerTerminalRoutes } from './terminal/routes';
 import type { TerminalService } from './terminal/service';
+import { registerTaskRoutes } from './tasks/routes';
+import type { TaskService } from './tasks/service';
 import { registerThreadRoutes } from './threads/routes';
 import type { ThreadService } from './threads/service';
 
@@ -51,6 +53,8 @@ export type ServerDeps = {
   desktops?: DesktopService;
   /** Files & shared workspace (F15): /api/bots/:id/files*. */
   files?: FilesService;
+  /** Task board (F19): /api/tasks*. */
+  tasks?: TaskService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -101,6 +105,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
   if (deps.threads) await registerThreadRoutes(app, deps.threads);
   if (deps.files) await registerFileRoutes(app, deps.files);
+  if (deps.tasks) registerTaskRoutes(app, deps.tasks);
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
