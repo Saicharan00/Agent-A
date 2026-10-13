@@ -35,6 +35,8 @@ export const engineEventSchema = z.discriminatedUnion('type', [
     raw: z.string(),
   }),
   z.object({ type: z.literal('error'), message: z.string(), raw: z.string().optional() }),
+  /** A note from the platform about the run itself (e.g. "previous session not found, started a new one"). */
+  z.object({ type: z.literal('system'), message: z.string() }),
   z.object({
     type: z.literal('run.finished'),
     status: z.enum(RUN_FINISH_STATUSES),

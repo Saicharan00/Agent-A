@@ -190,3 +190,25 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   computer layout, memory + team knowledge; memory empty until F22) and are rewritten atomically before each run.
 - `pnpm mock:run "<prompt>"` prints a scenario's event stream (manual check; Ctrl+C → cancelled).
 - No new dependencies.
+
+## F08 — Claude Code adapter (2026-10-13)
+- **Prompt via stdin from a per-run file**, system text via `--append-system-prompt-file` (both under
+  `/home/bot/.agenta/runs/<uuid>/`, mode 600, deleted after the run): no argv length/escaping limits, prompt not in `ps`.
+- **New sessions get `--session-id <uuid>`** chosen by the runner, so `run.started` carries the id immediately;
+  `run.finished.sessionId` is the id the CLI reported (authoritative for `bot_thread_sessions`).
+- **Process groups for cancel.** Docker has no "kill exec" API, so engine CLIs run under `setsid -w` and write their
+  pgid to `/tmp`; `ContainerLauncher.signal()` kills the group with a second exec. Cancel = SIGINT, SIGKILL after 5 s,
+  and always a final group SIGKILL (background tool processes ignore SIGINT). If the stream still doesn't close 3 s
+  after SIGKILL the adapter stops waiting. A consumer that stops iterating early also reaps the group.
+  `process.ts` is engine-agnostic so F09 reuses it.
+- **New `system` EngineEvent** (`{ type: 'system', message }`, additive) for platform notes about a run, first used
+  when `--resume` fails because the session is gone (retry once without resume).
+- **Mapping choices:** sub-agent (Task) text/thinking is dropped (not the bot's reply), sub-agent tool calls are kept;
+  `usage.inputTokens` = input + cache-creation + cache-read tokens (what the turn really processed);
+  `costUsdEquivalent` = `total_cost_usd`; `is_error` beats `subtype` (API errors arrive as `subtype: "success"`).
+- **MCP config** is passed only when the file exists (rendered in F17), so runs work before then.
+- **Limit detection** prefers the structured `rate_limit_event` (`status: "rejected"`, `resetsAt` epoch seconds),
+  then `error: "rate_limit"`, then wording; `limits.ts` parses epoch/ISO/relative/wall-clock+IANA-zone reset times and
+  will be reused by Codex. The limit fixture is synthesized from observed shapes (no real limit hit yet).
+- Smoke test `SMOKE=1 pnpm smoke:claude` (tests/smoke now resolves `@agenta/*` via tsconfig paths).
+- No new dependencies (`setsid` is util-linux, already in the bot image).
