@@ -103,9 +103,11 @@ export function ComputerPanel() {
         )}
         {/* Always mounted while the panel is open, so shells survive switching tabs and bots. */}
         <TerminalPanel bot={bot} bots={bots} visible={computerTab === 'terminal'} />
-        {bot && filesMounted && <FilesPanel key={bot.id} bot={bot} visible={computerTab === 'files'} />}
+        {bot && filesMounted && (
+          <FilesPanel key={`files-${bot.id}`} bot={bot} visible={computerTab === 'files'} />
+        )}
         {/* Mounted only while shown: a watched desktop keeps the computer awake. */}
-        {bot && computerTab === 'desktop' && <DesktopView key={bot.id} bot={bot} />}
+        {bot && computerTab === 'desktop' && <DesktopView key={`desktop-${bot.id}`} bot={bot} />}
         {computerTab !== 'terminal' && !((computerTab === 'files' || computerTab === 'desktop') && bot) && (
           <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
             {computerTab === 'files' ? (

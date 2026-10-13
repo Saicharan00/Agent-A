@@ -18,6 +18,10 @@ test.describe('live desktop', () => {
     const bot = (await res.json()) as BotView;
     const problems: string[] = [];
     page.on('pageerror', (e) => problems.push(e.message));
+    // React reports render problems (e.g. duplicate keys) as console errors, not page errors.
+    page.on('console', (m) => {
+      if (m.type() === 'error') problems.push(m.text());
+    });
     try {
       await page.setViewportSize({ width: 1400, height: 900 });
       await page.goto('/bots');
