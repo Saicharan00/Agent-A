@@ -110,7 +110,8 @@ const files = new FilesService({
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const terminals =
   containers && new TerminalService({ containers, log: rootLog.child({ module: 'terminal' }) });
-const desktops = containers && new DesktopService({ containers, log: rootLog.child({ module: 'desktop' }) });
+const desktops =
+  containers && new DesktopService({ containers, bus, log: rootLog.child({ module: 'desktop' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
 const app = await buildServer(config, {
   repos,

@@ -150,7 +150,7 @@ export function renderInstructionFiles(
       '- `/home/bot/work`: your working directory (persists between runs).',
       '- `/home/bot/notes`: your own notes; write down anything worth remembering.',
       '- `/shared`: files shared with the whole team; `/shared/knowledge` holds team knowledge.',
-      '- A desktop (DISPLAY=:99) with Chromium is available through the Playwright MCP tools.',
+      '- A desktop (DISPLAY=:99) with Chromium. Use the Playwright MCP browser for web tasks; the owner can watch it live. Your browser profile (`/home/bot/.browser-profile`) keeps sign-ins between runs.',
     ].join('\n'),
     '## Memory',
     mem(own),

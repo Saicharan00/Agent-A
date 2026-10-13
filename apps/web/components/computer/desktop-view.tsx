@@ -1,12 +1,14 @@
 'use client';
 
-import type { BotView } from '@agenta/shared';
+import { type BotView, containerPath } from '@agenta/shared';
 import type RFB from '@novnc/novnc';
-import { Eye, Maximize, Minimize, MousePointerClick, RotateCcw } from 'lucide-react';
+import { Camera, Eye, Maximize, Minimize, MousePointerClick, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useShell } from '@/components/shell/shell-context';
 import { botsApi } from '@/lib/bots';
 import { type DesktopStatus, describeDesktopStatus, desktopUrl } from '@/lib/desktop';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 /**
@@ -24,6 +26,8 @@ export function DesktopView({ bot }: { bot: BotView }) {
   controlRef.current = control;
   const [fullscreen, setFullscreen] = useState(false);
   const [generation, setGeneration] = useState(0);
+  const [shooting, setShooting] = useState(false);
+  const { openFile } = useShell();
   const running = bot.status === 'running';
   const runningRef = useRef(running);
   runningRef.current = running;
@@ -85,6 +89,21 @@ export function DesktopView({ bot }: { bot: BotView }) {
     else void frameRef.current?.requestFullscreen();
   }
 
+  async function screenshot() {
+    setShooting(true);
+    try {
+      const shot = await botsApi.screenshot(bot.id);
+      const path = containerPath(shot.root, shot.path);
+      toast.success(`Screenshot saved to ~/${shot.path}`, {
+        action: { label: 'Open', onClick: () => openFile(bot.id, path) },
+      });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setShooting(false);
+    }
+  }
+
   const ended = status.state === 'disconnected' || status.state === 'error';
   return (
     <div ref={frameRef} className="flex min-h-0 flex-1 flex-col bg-panel">
@@ -132,6 +151,17 @@ export function DesktopView({ bot }: { bot: BotView }) {
               <Eye className="size-3.5" aria-hidden />
             )}
             {control ? 'In control' : 'Take control'}
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="size-6"
+            aria-label="Screenshot"
+            title="Save a screenshot to the bot's files"
+            disabled={status.state !== 'connected' || shooting}
+            onClick={() => void screenshot()}
+          >
+            <Camera className="size-3.5" />
           </Button>
           <Button
             size="icon-sm"

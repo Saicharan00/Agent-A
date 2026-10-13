@@ -2,7 +2,7 @@
   "browser": {
     "browserName": "chromium",
     "isolated": false,
-    "userDataDir": "/home/bot/.cache/agenta-browser",
+    "userDataDir": "/home/bot/.browser-profile",
     "launchOptions": {
       "headless": false
     }

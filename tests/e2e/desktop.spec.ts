@@ -8,7 +8,10 @@ import { expect, test } from '@playwright/test';
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 test.describe('live desktop', () => {
-  test('connects, renders the screen, shows a new window, and toggles control', async ({ page, request }) => {
+  test('connects, renders the screen, shows a new window, toggles control, and saves a screenshot', async ({
+    page,
+    request,
+  }) => {
     test.setTimeout(240_000);
     const res = await request.post('/api/bots', { data: { name: `Desk Bot ${uid()}`, engine: 'mock' } });
     expect(res.status()).toBe(201);
@@ -65,6 +68,27 @@ test.describe('live desktop', () => {
       await panel.getByRole('button', { name: 'In control' }).click();
       await expect(panel.getByRole('button', { name: 'Take control' })).toBeVisible();
       await expect(panel.getByRole('button', { name: 'Full screen' })).toBeVisible();
+
+      // Screenshot → saved in the bot's files, opened from the toast.
+      await panel.getByRole('button', { name: 'Screenshot' }).click();
+      const toast = page.getByText(/Screenshot saved to ~\/screenshots\/desktop-.*\.png/);
+      await expect(toast).toBeVisible({ timeout: 20_000 });
+      await page.getByRole('button', { name: 'Open' }).click();
+      await expect(panel.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByTestId('computer-file-path')).toHaveText(
+        /^\/home\/bot\/screenshots\/desktop-.*\.png$/,
+      );
+      await expect(page.getByTestId('file-viewer').locator('img')).toBeVisible();
+      const shot = (await page.getByTestId('computer-file-path').textContent())!.replace('/home/bot/', '');
+      const png = await request.get(
+        `/api/bots/${bot.id}/files/raw?root=home&path=${encodeURIComponent(shot)}`,
+      );
+      expect(png.status()).toBe(200);
+      expect((await png.body()).subarray(1, 4).toString()).toBe('PNG');
+      await panel.getByRole('tab', { name: 'Desktop' }).click();
+      await expect(panel.getByTestId('desktop-status')).toHaveAttribute('data-state', 'connected', {
+        timeout: 30_000,
+      });
 
       // Leaving the tab disconnects.
       await panel.getByRole('tab', { name: 'Files' }).click();

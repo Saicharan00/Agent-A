@@ -3,9 +3,18 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate]; anything else echoes the prompt.
+// [mock:slow] [mock:delegate] [mock:browser]; anything else echoes the prompt.
 
-export const MOCK_SCENARIOS = ['hello', 'tools', 'error', 'limit', 'slow', 'delegate', 'echo'] as const;
+export const MOCK_SCENARIOS = [
+  'hello',
+  'tools',
+  'error',
+  'limit',
+  'slow',
+  'delegate',
+  'browser',
+  'echo',
+] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
 
 /** Time source. Tests inject a fake whose sleep resolves immediately and advances `now`. */
@@ -183,6 +192,29 @@ export class MockEngine implements EngineAdapter {
         emit({ type: 'file.changed', path, change: 'created' });
         yield tick;
         const done = 'The folder was empty, so I created hello.txt with a greeting.';
+        yield* stream(done);
+        emit({ type: 'text.final', text: intro + done });
+        usage(intro + done);
+        return 'succeeded';
+      }
+      case 'browser': {
+        // The Playwright MCP calls a real engine makes for "open example.com" (the mock never touches the desktop).
+        const intro = 'Opening the page in the browser. ';
+        yield* stream(intro);
+        emit({
+          type: 'tool.call',
+          callId: 'mock-browser-1',
+          name: 'mcp__playwright__browser_navigate',
+          input: { url: 'https://example.com/' },
+        });
+        yield tick * 2;
+        emit({
+          type: 'tool.result',
+          callId: 'mock-browser-1',
+          output: '### Page state\n- Page URL: https://example.com/\n- Page Title: Example Domain',
+        });
+        yield tick;
+        const done = 'The page title is "Example Domain".';
         yield* stream(done);
         emit({ type: 'text.final', text: intro + done });
         usage(intro + done);

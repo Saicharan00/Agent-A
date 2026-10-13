@@ -63,7 +63,13 @@ RUN groupmod -n bot node \
  && chmod 1777 /tmp/.X11-unix \
  && chown -R bot:bot /home/bot /shared
 
+# certutil: Chromium trusts only its own NSS db, so the entrypoint adds the extra CAs above to the bot's.
+# (A separate layer so the big package layer above stays cached.)
+RUN apt-get update && apt-get install -y --no-install-recommends libnss3-tools && rm -rf /var/lib/apt/lists/*
+
+# World-readable whatever mode the files have on the host (the bot user reads them at run time).
 COPY defaults/ /opt/agenta/defaults/
+RUN chmod -R a+rX /opt/agenta/defaults
 COPY --chmod=755 entrypoint.sh /usr/local/bin/agenta-entrypoint
 
 ENV DISPLAY=:99 \

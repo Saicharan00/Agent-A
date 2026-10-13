@@ -1,5 +1,7 @@
-import { newId } from '@agenta/shared';
+import { type DesktopScreenshot, newId, SCREENSHOTS_DIR } from '@agenta/shared';
+import type { EventBus } from '../bus';
 import { ContainerError, type ContainerManager } from '../containers/manager';
+import { publishFilesChanged } from '../files/service';
 import type { TerminalSocket } from '../terminal/service';
 
 type Log = {
@@ -8,7 +10,7 @@ type Log = {
   warn(obj: object, msg?: string): void;
 };
 
-export type DesktopHost = Pick<ContainerManager, 'ensureRunning' | 'acquire' | 'touch'>;
+export type DesktopHost = Pick<ContainerManager, 'ensureRunning' | 'acquire' | 'touch' | 'status' | 'exec'>;
 
 /** The slice of a WebSocket client the proxy uses for the upstream (websockify) side. */
 export type UpstreamSocket = {
@@ -25,6 +27,8 @@ export type UpstreamSocket = {
 export type DesktopServiceOptions = {
   containers: DesktopHost;
   log: Log;
+  /** Screenshots announce themselves to the Files tab. */
+  bus?: EventBus;
   /** Opens the upstream socket; defaults to Node's global WebSocket. */
   connect?: (url: string) => UpstreamSocket;
   /** websockify needs a moment after a fresh start: keep retrying the upstream for this long. */
@@ -55,6 +59,34 @@ export class DesktopService {
 
   get count(): number {
     return this.sessions.size;
+  }
+
+  /**
+   * Saves the bot's screen (Xvfb :99) to ~/screenshots/desktop-<UTC time>.png with ImageMagick `import`. Never
+   * starts a stopped computer: its screen would be an empty desktop.
+   */
+  async screenshot(botId: string): Promise<DesktopScreenshot> {
+    const { containers } = this.opts;
+    const status = await containers.status(botId);
+    if (status.status !== 'running')
+      throw new ContainerError('computer_stopped', 'Start the computer to take a screenshot', 409);
+    const path = `${SCREENSHOTS_DIR}/desktop-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+    const h = await containers.exec(botId, {
+      cmd: ['sh', '-c', 'mkdir -p "$(dirname "$0")" && import -display :99 -window root "$0"', path],
+      workdir: '/home/bot',
+    });
+    let stderr = '';
+    h.stdout.resume();
+    h.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+    const code = await h.wait();
+    if (code !== 0)
+      throw new ContainerError(
+        'screenshot_failed',
+        `Screenshot failed: ${stderr.trim() || `exit ${code}`}`,
+        500,
+      );
+    if (this.opts.bus) publishFilesChanged(this.opts.bus, botId, 'home', path, 'created');
+    return { root: 'home', path };
   }
 
   async close(): Promise<void> {

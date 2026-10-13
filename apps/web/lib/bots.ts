@@ -10,6 +10,7 @@ import {
   botCreateRequestSchema,
   botUpdateResponseSchema,
   botViewSchema,
+  desktopScreenshotSchema,
 } from '@agenta/shared';
 import { z } from 'zod';
 import { apiRequest } from './api';
@@ -237,4 +238,8 @@ export const botsApi = {
     apiRequest(`/bots/${encodeURIComponent(id)}/computer/stop`, noContent, { method: 'POST' }),
   startComputer: (id: string) =>
     apiRequest(`/bots/${encodeURIComponent(id)}/computer/start`, noContent, { method: 'POST' }),
+  screenshot: (id: string) =>
+    apiRequest(`/bots/${encodeURIComponent(id)}/computer/screenshot`, desktopScreenshotSchema, {
+      method: 'POST',
+    }),
 };

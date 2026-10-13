@@ -161,3 +161,8 @@ export function locateContainerPath(p: string): FileLocation | null {
 export function containerPath(root: FileRoot, path: string): string {
   return path ? `${FILE_ROOT_MOUNTS[root]}/${path}` : FILE_ROOT_MOUNTS[root];
 }
+
+/** POST /api/bots/:id/computer/screenshot (F16): the desktop saved as a PNG in the bot's home. */
+export const SCREENSHOTS_DIR = 'screenshots';
+export const desktopScreenshotSchema = z.object({ root: z.literal('home'), path: z.string() });
+export type DesktopScreenshot = z.infer<typeof desktopScreenshotSchema>;

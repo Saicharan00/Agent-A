@@ -1,8 +1,11 @@
+import { PassThrough } from 'node:stream';
+import type { ComputerStatus } from '@agenta/shared';
 import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../../src/config';
-import type { ContainerInfo } from '../../src/containers/docker';
+import { EventBus } from '../../src/bus';
+import type { ContainerInfo, ExecHandle, ExecOptions } from '../../src/containers/docker';
 import { ContainerError } from '../../src/containers/manager';
 import { type DesktopHost, DesktopService } from '../../src/desktop/service';
 import { buildServer } from '../../src/server';
@@ -31,6 +34,23 @@ class FakeHost implements DesktopHost {
 
   touch(botId: string): void {
     this.touched.push(botId);
+  }
+
+  status_: ComputerStatus['status'] = 'running';
+  execs: ExecOptions[] = [];
+  execExit = 0;
+
+  async status(botId: string): Promise<ComputerStatus> {
+    return { botId, status: this.status_, containerId: 'c1', novncPort: this.port, health: null };
+  }
+
+  async exec(_botId: string, opts: ExecOptions): Promise<ExecHandle> {
+    this.execs.push(opts);
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    stdout.end();
+    stderr.end(this.execExit ? 'import: unable to open X server' : '');
+    return { stdout, stderr, wait: async () => this.execExit };
   }
 }
 
@@ -174,5 +194,47 @@ describe('GET /ws/desktop/:botId', () => {
     await app.close();
     await c.closed;
     expect(host.leases).toBe(0);
+  });
+});
+
+describe('POST /api/bots/:id/computer/screenshot', () => {
+  const config = { ...loadConfig({}), logLevel: 'silent' as const };
+
+  it('saves the screen into ~/screenshots and tells the Files tab', async () => {
+    const host = new FakeHost();
+    const bus = new EventBus();
+    const events: unknown[] = [];
+    bus.subscribe('bot:bot_a', (e) => events.push(e));
+    const app = await buildServer(config, {
+      desktops: new DesktopService({ containers: host, bus, log: silent }),
+    });
+    try {
+      const res = await app.inject({ method: 'POST', url: '/api/bots/bot_a/computer/screenshot' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { root: string; path: string };
+      expect(body.root).toBe('home');
+      expect(body.path).toMatch(/^screenshots\/desktop-\d{4}-\d\d-\d\dT[\d-]+Z\.png$/);
+      expect(host.execs[0]!.cmd).toEqual([
+        'sh',
+        '-c',
+        'mkdir -p "$(dirname "$0")" && import -display :99 -window root "$0"',
+        body.path,
+      ]);
+      expect(events).toEqual([
+        { type: 'files.changed', botId: 'bot_a', root: 'home', path: body.path, change: 'created' },
+      ]);
+
+      host.execExit = 1;
+      const failed = await app.inject({ method: 'POST', url: '/api/bots/bot_a/computer/screenshot' });
+      expect(failed.statusCode).toBe(500);
+      expect(failed.json()).toMatchObject({ error: { code: 'screenshot_failed' } });
+
+      host.status_ = 'stopped';
+      const stopped = await app.inject({ method: 'POST', url: '/api/bots/bot_a/computer/screenshot' });
+      expect(stopped.statusCode).toBe(409);
+      expect(stopped.json()).toMatchObject({ error: { code: 'computer_stopped' } });
+    } finally {
+      await app.close();
+    }
   });
 });

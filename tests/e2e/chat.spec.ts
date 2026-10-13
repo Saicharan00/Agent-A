@@ -227,6 +227,18 @@ test.describe('direct chat', () => {
     await expect(page.getByTestId('computer-bot')).toContainText(bot.name);
   });
 
+  test('[mock:browser] shows the browser tool card with its URL', async ({ page, request }) => {
+    const bot = await createBot(request);
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    await send(page, '[mock:browser] open example.com');
+    const turn = lastTurn(page);
+    await expect(turn).toHaveAttribute('data-run-status', 'succeeded');
+    const card = turn.getByTestId('tool-card');
+    await expect(card).toContainText('Opened a page');
+    await expect(card).toContainText('https://example.com/');
+    await expect(turn.getByTestId('turn-text').last()).toContainText('Example Domain');
+  });
+
   test('retry the last turn, copy a reply, edit and resend the last message', async ({
     page,
     request,

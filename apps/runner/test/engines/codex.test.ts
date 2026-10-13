@@ -261,7 +261,7 @@ describe('Codex config', () => {
         '',
         '[mcp_servers.playwright]',
         'command = "playwright-mcp"',
-        'args = ["--config", "/opt/agenta/defaults/playwright-mcp.json"]',
+        'args = ["--config", "/opt/agenta/defaults/playwright-mcp.json", "--user-data-dir", "/home/bot/.browser-profile"]',
         '',
         '[mcp_servers.agenta]',
         'url = "http://172.19.0.1:3002/mcp"',

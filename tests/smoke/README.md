@@ -8,3 +8,6 @@ They only run when `SMOKE=1` is set and are never part of `pnpm test` or `pnpm e
   then reply DONE") in a throwaway bot computer; saves the raw transcript to `data/smoke/claude-F08.jsonl`.
 - `SMOKE=1 pnpm smoke:codex` (F09): the same turn through the Codex adapter with the shared ChatGPT login
   (copied in and back like the runner does); saves `data/smoke/codex-F09.jsonl`.
+- `SMOKE=1 pnpm smoke:browser` (F16): one real Claude Code turn, "Open example.com in the browser and tell me the page
+  title", through the Playwright MCP browser (headed on the bot's desktop, profile in `~/.browser-profile`); saves the
+  events to `data/smoke/browser-F16.events.json`.

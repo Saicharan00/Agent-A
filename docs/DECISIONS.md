@@ -452,3 +452,15 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   `lib/` contains top-level await and does not bundle. Types are a small local `types/novnc.d.ts`.
 - **Desktop mounts only while its tab is shown.** A watched desktop holds a container lease (no idle stop); leaving the
   tab disconnects so an unwatched computer can still idle-stop.
+
+## F16 — Browser & live desktop (session 2)
+- **One Playwright MCP definition for both engines** (`engines/mcp-config.ts`). The per-bot profile is passed as
+  `--user-data-dir /home/bot/.browser-profile` on the command line (it overrides the image config), so existing images
+  get it without a rebuild. Runs are one-per-bot, so the profile lock is never contended by the bot itself.
+- **The runner writes `/home/bot/.agenta/mcp.json` now** (Playwright only, other servers preserved) instead of waiting
+  for F17, so Claude bots get the browser today. F17 adds the `agenta` server to the same file.
+- **Screenshot = ImageMagick `import -window root` on :99** (already in the image), saved under `~/screenshots/` so it
+  shows in Files. A stopped computer is not started for it (409): its screen would be empty.
+- **Chromium trusts the sandbox proxy CA through the bot's NSS db**, filled by the entrypoint with `certutil`
+  (`libnss3-tools`, new image package, its own layer to keep the large layers cached). Not
+  `--ignore-certificate-errors`: that would also hide real certificate problems.

@@ -73,6 +73,20 @@ Flags seen: `--config <path>`, `--browser <browser|channel>`, `--headless` (head
 transport, default stdio), `--host <host>`. With `--port`, it serves streamable HTTP at `/mcp` (legacy `/sse`).
 Verified: starts with `docker/bot/defaults/playwright-mcp.json`; headed Chromium launches on `DISPLAY=:99`.
 
+F16 wiring (observed 2026-10-13, `@playwright/mcp` 0.0.83):
+- Both engines run `playwright-mcp --config /opt/agenta/defaults/playwright-mcp.json --user-data-dir /home/bot/.browser-profile`
+  (`apps/runner/src/engines/mcp-config.ts`). Claude gets it from `/home/bot/.agenta/mcp.json` (written before every run,
+  other servers kept) via `--mcp-config`; Codex from the rendered `config.toml`. The exec env has `DISPLAY=:99`, so the
+  browser is headed on the desktop (Chromium argv has no `--headless`; `--user-data-dir=/home/bot/.browser-profile`).
+- Over stdio, `tools/call browser_navigate {url}` returns text with `- Page URL: …` and `- Page Title: …`. Claude reports
+  the call as `mcp__playwright__browser_navigate` with input `{url}`.
+- The config file must be readable by `bot`: an unreadable one fails with `EACCES … playwright-mcp.json` and the server
+  never starts (the Dockerfile now `chmod -R a+rX`es `/opt/agenta/defaults`).
+- Chromium trusts only `~/.pki/nssdb`, not `/etc/ssl`: without the sandbox proxy CA there, HTTPS pages fail with
+  `net::ERR_CERT_AUTHORITY_INVALID`. The entrypoint adds the image's extra CAs with `certutil` (`libnss3-tools`).
+- Sites a bot browses go through the Docker Sandbox network policy like everything else: an unapproved host gets a 403
+  "Approval required for <host>" page.
+
 ## Authentication (F06, observed 2026-10-12)
 
 ### Claude Code

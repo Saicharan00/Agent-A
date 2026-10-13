@@ -135,6 +135,18 @@ describe('MockEngine scenarios', () => {
     expect(finished(es)).toMatchObject({ status: 'cancelled' });
   });
 
+  it('browser: a Playwright MCP navigate with its URL', async () => {
+    const es = await collect(engine(), '[mock:browser] open example.com');
+    checkShape(es);
+    expect(es).toContainEqual({
+      type: 'tool.call',
+      callId: 'mock-browser-1',
+      name: 'mcp__playwright__browser_navigate',
+      input: { url: 'https://example.com/' },
+    });
+    expect(finished(es)).toMatchObject({ status: 'succeeded' });
+  });
+
   it('delegate: platform MCP tool calls (stub result until F17, injectable)', async () => {
     const stub = await collect(engine(), '[mock:delegate]');
     checkShape(stub);

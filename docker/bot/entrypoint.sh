@@ -18,6 +18,16 @@ for d in "$HOME/work" "$HOME/.claude" "$HOME/.codex"; do
   mkdir -p "$d" 2>/dev/null || log "warning: cannot create $d (is the home mount writable by uid $(id -u)?)"
 done
 
+# Chromium (Playwright MCP) ignores /etc/ssl and trusts only ~/.pki/nssdb: add the image's extra CAs (the Docker
+# Sandbox proxy intercepts TLS) there, or every HTTPS page fails with ERR_CERT_AUTHORITY_INVALID.
+NSSDB="sql:$HOME/.pki/nssdb"
+if command -v certutil >/dev/null && mkdir -p "$HOME/.pki/nssdb" 2>/dev/null; then
+  [ -f "$HOME/.pki/nssdb/cert9.db" ] || certutil -d "$NSSDB" -N --empty-password
+  for crt in /usr/local/share/ca-certificates/agenta/*.crt; do
+    [ -f "$crt" ] && certutil -d "$NSSDB" -A -t "C,," -n "agenta-$(basename "$crt" .crt)" -i "$crt"
+  done
+fi
+
 # keep NAME CMD...: run CMD forever, restarting it after a short pause if it exits.
 keep() {
   local name="$1"; shift

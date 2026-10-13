@@ -1,6 +1,7 @@
 import type { EngineEvent, RunFinishStatus } from '@agenta/shared';
 import { CliEngine, type CliEngineOptions, type CliStreamMapper, type CliTurn } from './cli';
 import { parseResetTime } from './limits';
+import { PLAYWRIGHT_MCP_SERVER } from './mcp-config';
 import { CONTAINER_HOME, type EngineLauncher } from './process';
 import type { EngineRunInput } from './types';
 
@@ -268,10 +269,8 @@ type McpServer = {
   headers?: Record<string, string>;
 };
 
-/** Always available to Codex bots (same as the image default docker/bot/defaults/codex-config.toml). */
-const DEFAULT_SERVERS: Record<string, McpServer> = {
-  playwright: { command: 'playwright-mcp', args: ['--config', '/opt/agenta/defaults/playwright-mcp.json'] },
-};
+/** Always available to Codex bots (the same server as in the Claude MCP config). */
+const DEFAULT_SERVERS: Record<string, McpServer> = { playwright: PLAYWRIGHT_MCP_SERVER };
 
 /** Reads a Claude-style MCP config (`{ "mcpServers": { name: {...} } }`); invalid → {}. */
 export function parseMcpConfig(json: string | undefined): Record<string, McpServer> {
