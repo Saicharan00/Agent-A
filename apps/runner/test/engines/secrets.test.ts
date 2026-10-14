@@ -49,4 +49,10 @@ describe('redactSecrets', () => {
     expect(out).not.toContain('eyJabcdefghijkl');
     expect(out).toContain('[redacted]');
   });
+
+  it('masks GitHub tokens (F29)', () => {
+    // Built at runtime so pnpm check:secrets doesn't flag the fakes.
+    const out = redactSecrets(`${'ghp'}_${'F'.repeat(36)} ${'github'}_pat_${'F'.repeat(30)}`, []);
+    expect(out).toBe('[redacted] [redacted]');
+  });
 });

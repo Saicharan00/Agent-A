@@ -68,6 +68,23 @@ export function makeConnectorsRepo(db: Db) {
         .all()
         .map((r) => r.connector);
     },
+
+    botIds(connectorId: string): string[] {
+      return db
+        .select({ botId: botConnectors.botId })
+        .from(botConnectors)
+        .where(eq(botConnectors.connectorId, connectorId))
+        .all()
+        .map((r) => r.botId);
+    },
+
+    /** Replaces the connector's bots in one transaction. */
+    setBots(connectorId: string, botIds: string[]): void {
+      db.transaction((tx) => {
+        tx.delete(botConnectors).where(eq(botConnectors.connectorId, connectorId)).run();
+        for (const botId of new Set(botIds)) tx.insert(botConnectors).values({ botId, connectorId }).run();
+      });
+    },
   };
 }
 export type ConnectorsRepo = ReturnType<typeof makeConnectorsRepo>;

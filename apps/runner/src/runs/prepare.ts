@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { type Bot, type TeamSkill, loadSkills } from '@agenta/db';
-import type { Engine } from '@agenta/shared';
+import type { ConnectorType, Engine } from '@agenta/shared';
 import { bootstrapHome, botHomeDir } from '../containers/home';
 import type { ContainerManager } from '../containers/manager';
 import { MCP_TOKEN_FILE } from '../bots/mcp-token';
@@ -36,6 +36,8 @@ export function computerPreparer(opts: {
   skillsDir?: string;
   /** The memory rendered into the bot's instruction files (F22); unset: none. */
   memories?: (botId: string) => InstructionMemory[];
+  /** The bot's usable connectors, for its instruction files (F29); unset: none. */
+  connectors?: (botId: string) => ConnectorType[];
 }): PrepareComputer {
   return async (bot: Bot, engine: Engine) => {
     if (engine === 'mock') return () => undefined;
@@ -47,7 +49,7 @@ export function computerPreparer(opts: {
       const home = botHomeDir(opts.botsDir, bot.id);
       bootstrapHome(home);
       opts.ensureToken?.(bot.id);
-      renderHome(home, bot, opts.skillsDir, opts.memories?.(bot.id));
+      renderHome(home, bot, opts.skillsDir, opts.memories?.(bot.id), opts.connectors?.(bot.id));
       writeMcpConfig(home, opts.platformMcpUrl);
     } catch (err) {
       release();
@@ -66,10 +68,11 @@ export function renderHome(
   bot: Bot,
   skillsDir?: string,
   memories: InstructionMemory[] = [],
+  connectors: ConnectorType[] = [],
 ): void {
   const all = skillsDir ? loadSkills(skillsDir) : new Map<string, TeamSkill>();
   const skills = (bot.settings.skills ?? []).flatMap((n) => all.get(n) ?? []);
-  writeInstructionFiles(home, renderInstructionFiles(bot, memories, skills));
+  writeInstructionFiles(home, renderInstructionFiles(bot, memories, skills, connectors));
   writeSkills(home, skills);
 }
 

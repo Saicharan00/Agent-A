@@ -64,3 +64,43 @@ test.describe('settings: team (F21)', () => {
     expect(problems).toEqual([]);
   });
 });
+
+test.describe('settings: connectors (F29)', () => {
+  test('GitHub shows the missing token with set-up steps and saves which bots may use it', async ({
+    page,
+    request,
+  }) => {
+    const problems: string[] = [];
+    page.on('console', (m) => {
+      if (m.type() === 'error' || m.type() === 'warning') problems.push(m.text());
+    });
+    const name = `Gh Bot ${Date.now()}`;
+    const bot = (await (await request.post('/api/bots', { data: { name, engine: 'mock' } })).json()) as {
+      id: string;
+    };
+
+    await page.goto('/settings');
+    const card = page.getByTestId('connector-github');
+    await expect(card.getByTestId('connector-github-token')).toHaveText('token missing');
+    await expect(card).toContainText('GITHUB_TOKEN=');
+    // click + retrying expect, not check(): the query cache re-renders a tick after the click.
+    const enable = card.getByLabel('Enable GitHub');
+    const botBox = card.getByLabel(name);
+    await enable.click();
+    await expect(enable).toBeChecked();
+    await botBox.click();
+    await expect(botBox).toBeChecked();
+
+    await page.reload();
+    await expect(enable).toBeChecked();
+    await expect(botBox).toBeChecked();
+    const all = (await (await request.get('/api/connectors')).json()) as { type: string; botIds: string[] }[];
+    expect(all.find((c) => c.type === 'github')!.botIds).toContain(bot.id);
+
+    await botBox.click();
+    await expect(botBox).not.toBeChecked();
+    await enable.click();
+    await expect(enable).not.toBeChecked();
+    expect(problems).toEqual([]);
+  });
+});

@@ -725,3 +725,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Per-goal budgets reuse `goals.max_runs`** (F20); new `PATCH /api/goals/:id {maxRuns}` lets the owner change it.
 - **Limit-hit history** reads limited runs; the reset time is parsed back from the run error the scheduler writes
   (`limitedRunError` / `limitResetOf` sit side by side so the format cannot drift).
+
+## F29 — Connector framework + GitHub
+- **One GitHub connector row, created disabled on first read** (`GET /api/connectors`). Per-bot enablement is the
+  existing `bot_connectors` table; `PATCH /api/connectors/:id {enabled?, botIds?}` replaces the bot list in one
+  transaction. No per-bot UI on the bot page: Settings → Connectors lists every bot with a checkbox.
+- **The token stays in `.env.local` (`GITHUB_TOKEN`)** and is read per exec through the same `envFileSource` as the
+  Claude token, so a pasted token works without a restart. It reaches a bot only as `GH_TOKEN` in the exec env of its
+  engine runs (Claude and Codex) and its terminals, and only when the connector is on, the bot is ticked and the token
+  is set. Never on the container, in the DB, in a file or in an API response. `CliEngineOptions.env` now takes the bot id.
+- **Instruction files get a `## GitHub` section only for those bots:** use `gh`, run `gh auth setup-git` once, read
+  freely, `request_approval` before `git push`, opening/merging/closing PRs, comments, reviews, issues, releases or repos.
+  The general approval rule ("push to a remote git repository") still applies to every bot.
+- **Log redaction** covers `GH_TOKEN` paths and `redactSecrets` masks `ghp_…`/`github_pat_…` shapes.
+- **Known gap (sandbox, not app):** the Docker Sandbox proxy injects the owner's own GitHub credential into HTTPS
+  traffic to github.com from inside the VM, including bot containers (a bot with no token got HTTP 200 from the
+  private repo's `info/refs`). So any bot can probably clone, and maybe push to, the owner's repos without the connector.
+  Not patched in the app: a per-exec `NO_PROXY` block would be trivially undone by the bot itself. Pushes still need
+  approval for every bot. The owner-side fix is in HUMAN_TODO (narrow or remove the sandbox's github secret).

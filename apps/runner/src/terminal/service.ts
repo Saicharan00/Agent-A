@@ -37,6 +37,8 @@ export type TerminalServiceOptions = {
   highWaterBytes?: number;
   /** How long to wait for the exit code after the shell's stream ended. */
   exitWaitMs?: number;
+  /** Extra exec env for the bot's shell (its connector tokens, F29). */
+  env?: (botId: string) => Record<string, string>;
 };
 
 const OPEN = 1;
@@ -150,6 +152,7 @@ export class TerminalService {
         workdir: TERMINAL_CWD,
         // Docker sets HOME for the exec user but not USER/LOGNAME.
         env: {
+          ...this.opts.env?.(botId),
           TERM: 'xterm-256color',
           COLORTERM: 'truecolor',
           USER: 'bot',

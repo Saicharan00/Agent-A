@@ -38,5 +38,6 @@ export function redactSecrets(text: string, secrets: (string | undefined)[]): st
   for (const s of secrets) if (s && s.length >= 8) out = out.split(s).join('[redacted]');
   return out
     .replace(/sk-ant-[A-Za-z0-9_-]{8,}/g, '[redacted]')
+    .replace(/\b(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[redacted]');
 }

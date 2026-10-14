@@ -25,6 +25,8 @@ export default defineConfig({
       AGENTA_WEB_HOST: '127.0.0.1',
       // Engines always look "not set up" in e2e, whatever the owner has in .env.local / data/secrets.
       CLAUDE_CODE_OAUTH_TOKEN: '',
+      // The owner's GitHub token never reaches e2e bots; the connector shows "token missing".
+      GITHUB_TOKEN: '',
       AGENTA_SECRETS_DIR: 'data/e2e/secrets',
       // Bots created by e2e get their home folders (and MCP tokens) here, never in the owner's data/bots.
       AGENTA_BOTS_DIR: 'data/e2e/bots',

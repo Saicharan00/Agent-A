@@ -33,6 +33,7 @@ import { ApprovalService } from './approvals/service';
 import { ScheduleService } from './schedules/service';
 import { NotificationService } from './notifications/service';
 import { envFileSource } from './engines/secrets';
+import { ConnectorService } from './connectors/service';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
 
@@ -45,6 +46,8 @@ const rootLog = pino({ level: config.logLevel, redact: LOG_REDACT });
 const db = openDb(config.dbPath);
 const repos = createRepos(db);
 const bus = new EventBus();
+const secrets = envFileSource({ shellEnv, envFile: config.envFile });
+const connectors = new ConnectorService({ repos, secrets });
 const guard = new GuardService({ repos, log: rootLog.child({ module: 'guard' }) });
 const memories = new MemoryService({
   repos,
@@ -67,12 +70,12 @@ const containers = config.dockerEnabled
         await engineAuth.prepareHome(botId, home);
         // Instruction files and skills are in the home from the first start, not only after the first run.
         const bot = repos.bots.get(botId);
-        if (bot) renderHome(home, bot, skillsDir, memories.forRender(botId));
+        if (bot) renderHome(home, bot, skillsDir, memories.forRender(botId), connectors.forBot(botId));
       },
     })
   : undefined;
 const engineAuth: EngineAuth = new EngineAuth({
-  secrets: envFileSource({ shellEnv, envFile: config.envFile }),
+  secrets,
   secretsDir: config.secretsDir,
   botsDir: config.botsDir,
   repos,
@@ -96,12 +99,12 @@ if (containers) {
   engineAdapters.push(
     new ClaudeEngine({
       launcher,
-      env: () => engineAuth.execEnv('claude'),
+      env: (botId) => ({ ...engineAuth.execEnv('claude'), ...connectors.execEnv(botId) }),
       log: rootLog.child({ module: 'engine-claude' }),
     }),
     new CodexEngine({
       launcher,
-      env: () => ({}),
+      env: (botId) => connectors.execEnv(botId),
       log: rootLog.child({ module: 'engine-codex' }),
       beforeRun: (id) => engineAuth.beforeCodexRun(id),
       afterRun: (id) => engineAuth.afterCodexRun(id),
@@ -121,6 +124,7 @@ const runs = new RunService({
     platformMcpUrl: `http://host.docker.internal:${config.mcpPort}/mcp`,
     skillsDir,
     memories: (botId) => memories.forRender(botId),
+    connectors: (botId) => connectors.forBot(botId),
   }),
 });
 const bots = new BotService({
@@ -197,7 +201,12 @@ const files = new FilesService({
 });
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const terminals =
-  containers && new TerminalService({ containers, log: rootLog.child({ module: 'terminal' }) });
+  containers &&
+  new TerminalService({
+    containers,
+    log: rootLog.child({ module: 'terminal' }),
+    env: (botId) => connectors.execEnv(botId),
+  });
 const desktops =
   containers && new DesktopService({ containers, bus, log: rootLog.child({ module: 'desktop' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
@@ -220,6 +229,7 @@ const app = await buildServer(config, {
   approvals,
   schedules,
   notifications,
+  connectors,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

@@ -16,8 +16,8 @@ export type Log = {
 
 export type CliEngineOptions = {
   launcher: EngineLauncher;
-  /** Exec-time credentials; read per run so a new token works at once. */
-  env: () => Record<string, string>;
+  /** Exec-time credentials (engine token, the bot's connector tokens); read per run so a new token works at once. */
+  env: (botId: string) => Record<string, string>;
   log: Log;
   /** SIGINT → SIGKILL grace period on cancel. Default 5 s. */
   killGraceMs?: number;
@@ -155,7 +155,7 @@ export abstract class CliEngine implements EngineAdapter {
     const mapper = this.newMapper();
     const proc = await this.opts.launcher.spawn(botId, {
       cmd: this.command(turn, input),
-      env: { ...this.opts.env(), DISPLAY: ':99' },
+      env: { ...this.opts.env(botId), DISPLAY: ':99' },
       workdir: input.cwd,
       stdinFile: turn.promptFile,
     });

@@ -11,3 +11,5 @@ They only run when `SMOKE=1` is set and are never part of `pnpm test` or `pnpm e
 - `SMOKE=1 pnpm smoke:browser` (F16): one real Claude Code turn, "Open example.com in the browser and tell me the page
   title", through the Playwright MCP browser (headed on the bot's desktop, profile in `~/.browser-profile`); saves the
   events to `data/smoke/browser-F16.events.json`.
+- `SMOKE=1 pnpm smoke:github` (F29): `gh auth status` in a throwaway bot container with `GH_TOKEN` from `GITHUB_TOKEN`
+  in `.env.local`. Calls only the GitHub API, no engine. Skips if the token is missing.

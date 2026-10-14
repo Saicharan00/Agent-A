@@ -1,7 +1,7 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Bot, Goal, Message, Task, Thread } from '@agenta/db';
-import { MAX_REVISION_ROUNDS, goalArtifactsDir } from '@agenta/shared';
+import { type ConnectorType, MAX_REVISION_ROUNDS, goalArtifactsDir } from '@agenta/shared';
 
 // Turns platform state into what an engine reads: the per-turn prompt, a system-prompt addition, and the
 // instruction files the CLIs load on their own (/home/bot/CLAUDE.md for Claude Code, AGENTS.md for Codex).
@@ -314,6 +314,7 @@ export function renderInstructionFiles(
   bot: Pick<Bot, 'name' | 'role' | 'instructions' | 'isLead'>,
   memories: InstructionMemory[] = [],
   skills: InstructionSkill[] = [],
+  connectors: ConnectorType[] = [],
 ): InstructionFiles {
   const own = memories.filter((m) => m.scope === 'bot');
   const shared = memories.filter((m) => m.scope === 'shared');
@@ -353,6 +354,7 @@ export function renderInstructionFiles(
       'needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the',
       "owner's note, tell them, and pick another way or stop.",
     ].join(' '),
+    connectors.includes('github') ? GITHUB_SECTION : '',
     '## Memory',
     '_Durable facts you saved (pinned first, then the newest). Save more with `save_memory` (never secrets); find older ones with `search_memory`._',
     mem(own),
@@ -371,6 +373,19 @@ export function renderInstructionFiles(
       .join('\n\n')}\n`,
   };
 }
+
+/** Only for bots with the GitHub connector (F29): GH_TOKEN is in their exec env, never in a file. */
+const GITHUB_SECTION = [
+  '## GitHub',
+  [
+    "You can use GitHub with the `gh` CLI, signed in with the owner's token through `GH_TOKEN`. Never print, save or",
+    'share the token. Run `gh auth setup-git` once so `git` over HTTPS uses it too. Reading needs no approval (clone,',
+    'fetch, `gh repo view`, `gh issue list`, `gh pr view`, `gh pr diff`). Call `request_approval` and wait until',
+    '`check_approval` says approved before you: `git push`; open, merge or close a pull request; comment on or review',
+    'an issue or pull request; create or edit issues, releases or repositories. Work on a branch; never push to the',
+    'default branch unless the owner asked for it.',
+  ].join(' '),
+].join('\n\n');
 
 /** Writes the rendered files into the bot's home on the host (atomic replace). */
 export function writeInstructionFiles(home: string, files: InstructionFiles): void {

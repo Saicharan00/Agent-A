@@ -20,6 +20,8 @@ import type { NotificationService } from './notifications/service';
 import { registerScheduleRoutes } from './schedules/routes';
 import type { ScheduleService } from './schedules/service';
 import type { ApprovalService } from './approvals/service';
+import { registerConnectorRoutes } from './connectors/routes';
+import type { ConnectorService } from './connectors/service';
 import { registerGuardRoutes } from './guard/routes';
 import type { GuardService } from './guard/service';
 import { registerLearnRoutes } from './learn/routes';
@@ -83,6 +85,8 @@ export type ServerDeps = {
   schedules?: ScheduleService;
   /** Notifications inbox (F27): /api/notifications*. */
   notifications?: NotificationService;
+  /** Connectors (F29): /api/connectors*. */
+  connectors?: ConnectorService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -93,6 +97,10 @@ export const LOG_REDACT = [
   '*.env.CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
   '*.CLAUDE_CODE_OAUTH_TOKEN',
+  'env.GH_TOKEN',
+  '*.env.GH_TOKEN',
+  'GH_TOKEN',
+  '*.GH_TOKEN',
 ];
 
 export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): Promise<FastifyInstance> {
@@ -142,6 +150,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.approvals) registerApprovalRoutes(app, deps.approvals);
   if (deps.schedules) registerScheduleRoutes(app, deps.schedules);
   if (deps.notifications) registerNotificationRoutes(app, deps.notifications);
+  if (deps.connectors) registerConnectorRoutes(app, deps.connectors);
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
