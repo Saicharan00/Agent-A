@@ -47,4 +47,8 @@ export const queryKeys = {
   /** Prefix of every notification query (refetched on notification.changed). */
   notifications: ['notifications'] as const,
   notificationList: (unread: boolean, limit: number) => ['notifications', 'list', { unread, limit }] as const,
+  /** Prefix of every usage query (refetched on run.updated and goal.changed). */
+  usage: ['usage'] as const,
+  usageReport: (days: number) => ['usage', 'report', days] as const,
+  usageSettings: ['usage', 'settings'] as const,
 };

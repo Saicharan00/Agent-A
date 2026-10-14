@@ -38,6 +38,7 @@ import type { TerminalService } from './terminal/service';
 import { registerTaskRoutes } from './tasks/routes';
 import type { TaskService } from './tasks/service';
 import { registerThreadRoutes } from './threads/routes';
+import { registerUsageRoutes } from './usage/routes';
 import type { ThreadService } from './threads/service';
 
 declare module 'fastify' {
@@ -129,6 +130,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.containers) registerComputerRoutes(app, deps.containers);
   if (deps.engineAuth) registerEngineRoutes(app, deps.engineAuth);
   if (deps.runs && deps.repos) registerRunRoutes(app, deps.runs);
+  if (deps.runs && deps.repos) registerUsageRoutes(app, deps.runs);
   if (deps.repos) registerEngineStateRoute(app, config.engineOverride);
   if (deps.threads) await registerThreadRoutes(app, deps.threads);
   if (deps.files) await registerFileRoutes(app, deps.files);

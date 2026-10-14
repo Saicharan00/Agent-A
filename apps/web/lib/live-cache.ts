@@ -134,9 +134,11 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
       void cache.invalidateQueries({ queryKey: queryKeys.tasks });
       // Goal progress counts done tasks.
       void cache.invalidateQueries({ queryKey: queryKeys.goals });
+      void cache.invalidateQueries({ queryKey: queryKeys.usage });
       return;
     case 'goal.changed':
       void cache.invalidateQueries({ queryKey: queryKeys.goals });
+      void cache.invalidateQueries({ queryKey: queryKeys.usage });
       return;
     case 'memory.changed':
       void cache.invalidateQueries({ queryKey: queryKeys.memories });

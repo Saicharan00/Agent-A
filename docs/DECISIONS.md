@@ -710,3 +710,18 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   `mentions` = kinds that need the owner (`OWNER_NOTIFICATION_KINDS`), `none` = never. The in-app inbox always lists it.
 - **Desktop permission is asked once,** on the first bell click (a user gesture), remembered in localStorage.
 - **The bell merges approvals and notifications** (dialog "Notifications"); the old approvals-only bell was replaced.
+
+## F28 — Usage & limits dashboard
+- **No chart library.** Runs per day is a stacked bar chart in plain CSS (flex columns, height = share of the peak day).
+  One chart did not justify a new dependency; swap in a library (e.g. uPlot) if more charts arrive.
+- **Report computed from `runs` on request** (`GET /api/usage?days=&tz=`), no rollup table. Queued runs are not counted.
+  Per-day buckets use the browser's IANA zone with calendar-day math (DST never skips a day); an unknown zone
+  (headless Chromium reports `Etc/Unknown`) falls back to UTC and the report says which zone it used.
+- **Daily run budget = runs started in the last 24 hours (rolling),** not a calendar day, so it needs no zone and
+  matches how subscription windows roll. Warn at 80 % (`budgetState`), optional hard stop per engine.
+- **Hard stop holds runs in the queue** (like a usage-limit pause) instead of refusing them, so delegations and schedules
+  never fail; the 5 s scheduler poll starts them once the window frees or the owner raises the budget.
+- **Settings live under `/api/usage/settings`** (`maxConcurrentRuns` 1–8, `engineBudgets`), stored in `settings`.
+- **Per-goal budgets reuse `goals.max_runs`** (F20); new `PATCH /api/goals/:id {maxRuns}` lets the owner change it.
+- **Limit-hit history** reads limited runs; the reset time is parsed back from the run error the scheduler writes
+  (`limitedRunError` / `limitResetOf` sit side by side so the format cannot drift).

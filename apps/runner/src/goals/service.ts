@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { type Bot, type Goal, type Message, type Repos, type Run, type Task, slugify } from '@agenta/db';
 import {
   type GoalCreateRequest,
+  type GoalPatchRequest,
   type GoalView,
   type LiveGoalChanged,
   type LiveTaskChanged,
@@ -281,6 +282,14 @@ export class GoalService {
       body: text.slice(0, 2000),
       link: '/tasks',
     });
+  }
+
+  /** The owner's new run budget (F28). A raised budget lets the goal start runs again. */
+  setBudget(id: string, body: GoalPatchRequest): GoalView {
+    this.goal(id);
+    this.opts.repos.goals.update(id, { maxRuns: body.maxRuns });
+    publishGoalChanged(this.opts.bus, id);
+    return this.get(id);
   }
 
   /** Pause: the goal's queued turns are cancelled and no new ones start (running turns finish). */

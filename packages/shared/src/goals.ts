@@ -33,9 +33,14 @@ export const goalUpdateSchema = z
     pausedAt: z.string().nullable(),
     reportRunId: z.string().nullable(),
     finishedAt: z.string().nullable(),
+    maxRuns: z.number().int().min(1).max(1000),
   })
   .partial();
 export type GoalUpdateInput = z.input<typeof goalUpdateSchema>;
+
+/** PATCH /api/goals/:id — the owner changes the goal's run budget (F28). */
+export const goalPatchRequestSchema = z.object({ maxRuns: z.number().int().min(1).max(1000) });
+export type GoalPatchRequest = z.infer<typeof goalPatchRequestSchema>;
 
 export const goalViewSchema = z.object({
   id: z.string(),

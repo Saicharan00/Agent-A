@@ -10,6 +10,7 @@ import type {
   RunTrigger,
   RunUsage,
 } from '@agenta/shared';
+import { ENGINE_BUDGETS_SETTING, type EngineBudgets, engineBudgetsSchema } from '@agenta/shared';
 import type { EventBus } from '../bus';
 import { EXEC_FAILED, type Log } from '../engines/cli';
 import { CONTAINER_HOME } from '../engines/process';
@@ -34,6 +35,11 @@ export const MCP_CONFIG_PATH = `${CONTAINER_HOME}/.agenta/mcp.json`;
 export const WORK_DIR = `${CONTAINER_HOME}/work`;
 
 export const RUNNER_RESTARTED = 'runner restarted';
+
+/** A limited run's error, and the reset time read back from it (the usage report's limit-hit history, F28). */
+export const limitedRunError = (engine: Engine, until: string) =>
+  `Usage limit reached; ${engine} paused until ${until}`;
+export const limitResetOf = (error: string | null) => error?.match(/paused until (\S+)$/)?.[1] ?? null;
 export const RUNNER_STOPPED = 'runner stopped';
 
 export class RunError extends Error {
@@ -294,9 +300,18 @@ export class RunService {
     return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : DEFAULT_MAX_CONCURRENT_RUNS;
   }
 
+  /** Per-engine daily run budgets (F28); unreadable settings count as none. */
+  engineBudgets(): EngineBudgets {
+    const parsed = engineBudgetsSchema.safeParse(
+      this.opts.repos.settings.get<unknown>(ENGINE_BUDGETS_SETTING),
+    );
+    return parsed.success ? parsed.data : {};
+  }
+
   /**
-   * Starts queued runs FIFO while respecting: the global cap, one running run per bot (its later turns wait)
-   * and engines paused by a usage limit. Synchronous, so two ticks can never pick the same run.
+   * Starts queued runs FIFO while respecting: the global cap, one running run per bot (its later turns wait),
+   * engines paused by a usage limit and engines whose hard daily budget is used up (runs started in the last
+   * 24 hours). Synchronous, so two ticks can never pick the same run.
    */
   tick(): void {
     if (this.stopped) return;
@@ -311,12 +326,22 @@ export class RunService {
       if (!limited.has(e)) limited.set(e, repos.engineState.isLimited(e, nowIso));
       return limited.get(e)!;
     };
+    const budgets = this.engineBudgets();
+    const dayAgo = new Date(this.now().getTime() - 24 * 3_600_000).toISOString();
+    const started = new Map<Engine, number>();
+    const overBudget = (e: Engine) => {
+      const b = budgets[e];
+      if (!b?.hardStop || !b.dailyRuns) return false;
+      if (!started.has(e)) started.set(e, repos.runs.countStartedSince(e, dayAgo));
+      return started.get(e)! >= b.dailyRuns;
+    };
     for (const queued of repos.runs.listQueued()) {
       if (this.active.size >= max) break;
-      if (busyBots.has(queued.botId) || isLimited(queued.engine)) continue;
+      if (busyBots.has(queued.botId) || isLimited(queued.engine) || overBudget(queued.engine)) continue;
       const run = repos.runs.markRunning(queued.id);
       if (!run) continue; // cancelled meanwhile
       busyBots.add(run.botId);
+      if (started.has(run.engine)) started.set(run.engine, started.get(run.engine)! + 1);
       const active: Active = { run, controller: new AbortController(), done: Promise.resolve() };
       this.active.set(run.id, active);
       this.publishRun(run);
@@ -532,7 +557,7 @@ export class RunService {
       ].join(' '),
       link: '/usage',
     });
-    return `Usage limit reached; ${run.engine} paused until ${limitedUntil}`;
+    return limitedRunError(run.engine, limitedUntil);
   }
 
   /** Ends a run that has no engine executing in this process (queued, or orphaned by a restart). */

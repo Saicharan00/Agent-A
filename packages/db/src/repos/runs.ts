@@ -9,7 +9,7 @@ import {
   nowIso,
   runCreateSchema,
 } from '@agenta/shared';
-import { and, asc, desc, eq, gt, inArray, max, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, max, sql } from 'drizzle-orm';
 import type { Db } from '../client';
 import { type Run, type RunEvent, runEvents, runs } from '../schema';
 import { pageSize, rowidOf } from './util';
@@ -89,6 +89,22 @@ export function makeRunsRepo(db: Db) {
           .where(and(eq(runs.status, status), engine ? eq(runs.engine, engine) : undefined))
           .get()?.n ?? 0
       );
+    },
+
+    /** Runs of `engine` that started at or after `since` (the daily run budget, F28). */
+    countStartedSince(engine: Engine, since: string): number {
+      return (
+        db
+          .select({ n: sql<number>`count(*)` })
+          .from(runs)
+          .where(and(eq(runs.engine, engine), gte(runs.startedAt, since)))
+          .get()?.n ?? 0
+      );
+    },
+
+    /** Runs created at or after `since`, oldest first (the usage report, F28). */
+    listCreatedSince(since: string): Run[] {
+      return db.select().from(runs).where(gte(runs.createdAt, since)).orderBy(asc(runs.createdAt)).all();
     },
 
     /** queued → running. Returns undefined if the run was not queued (e.g. cancelled meanwhile). */

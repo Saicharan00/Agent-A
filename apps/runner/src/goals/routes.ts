@@ -1,4 +1,4 @@
-import { apiError, goalCreateRequestSchema } from '@agenta/shared';
+import { apiError, goalCreateRequestSchema, goalPatchRequestSchema } from '@agenta/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { RunError } from '../runs/service';
 import { TaskError } from '../tasks/service';
@@ -24,7 +24,7 @@ async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise
   }
 }
 
-/** GET/POST /api/goals, GET /api/goals/:id, POST /api/goals/:id/{confirm,pause,resume}. */
+/** GET/POST /api/goals, GET/PATCH /api/goals/:id, POST /api/goals/:id/{confirm,pause,resume}. */
 export function registerGoalRoutes(app: FastifyInstance, goals: GoalService): void {
   app.get('/api/goals', async () => goals.list());
 
@@ -42,6 +42,14 @@ export function registerGoalRoutes(app: FastifyInstance, goals: GoalService): vo
   });
 
   app.get<IdParams>('/api/goals/:id', async (req, reply) => handle(reply, () => goals.get(req.params.id)));
+  app.patch<IdParams>('/api/goals/:id', async (req, reply) => {
+    const parsed = goalPatchRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return reply.code(400).send(apiError('invalid_body', `${issue?.path.join('.')}: ${issue?.message}`));
+    }
+    return handle(reply, () => goals.setBudget(req.params.id, parsed.data));
+  });
   app.post<IdParams>('/api/goals/:id/confirm', async (req, reply) =>
     handle(reply, () => goals.confirm(req.params.id)),
   );
