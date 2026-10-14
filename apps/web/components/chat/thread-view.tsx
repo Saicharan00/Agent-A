@@ -16,7 +16,7 @@ import { GoalBar } from '@/components/goals/goal-progress';
 import { useShell } from '@/components/shell/shell-context';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
-import { useBot } from '@/hooks/use-bots';
+import { useBot, useBots } from '@/hooks/use-bots';
 import { useGoalOfThread } from '@/hooks/use-goals';
 import { useLiveChannel } from '@/hooks/use-live-channel';
 import {
@@ -225,12 +225,15 @@ export function ThreadView({ threadId }: { threadId: string }) {
   const liveBot = useBot(member?.id ?? '', { enabled: !!member }).data;
   const bot = liveBot ?? member;
 
+  // Non-members can post too (Agent A answering "Ask Agent A why" in a DM), so fall back to all bots.
+  const allBots = useBots('include').data;
   const botsById = useMemo(() => {
     const map = new Map<string, BotView>();
+    for (const b of allBots ?? []) map.set(b.id, b);
     for (const b of thread.data?.members ?? []) map.set(b.id, b);
     if (liveBot) map.set(liveBot.id, liveBot);
     return map;
-  }, [thread.data, liveBot]);
+  }, [allBots, thread.data, liveBot]);
 
   const active = useMemo(() => stoppableRuns(runs.data ?? []).map((r) => r.id), [runs.data]);
   const onStopOne = useCallback((runId: string) => stop([runId]), [stop]);

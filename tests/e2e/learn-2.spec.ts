@@ -67,7 +67,7 @@ test.describe('learn: work split and briefs', () => {
     await page.getByLabel('Brief source').selectOption(`task:${task.id}`);
     await page.getByRole('button', { name: 'Ask Agent A for a brief' }).click();
     await expect(page).toHaveURL(/\/threads\//);
-    await expect(page.getByText('Saved the carry-over brief to /shared/handoff.')).toBeVisible({
+    await expect(page.getByText('Saved the carry-over brief to /shared/handoff.').last()).toBeVisible({
       timeout: 20_000,
     });
 
@@ -81,5 +81,25 @@ test.describe('learn: work split and briefs', () => {
     const item = page.getByRole('listitem', { name: 'Carry-over brief' }).first();
     await item.getByRole('button', { name: 'Copy' }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('What to do');
+  });
+
+  test('ask Agent A why: the lead answers in the bot DM under its own name', async ({ page, request }) => {
+    const res = await request.post('/api/bots', { data: { name: `Why Bot ${uid()}`, engine: 'mock' } });
+    const bot = (await res.json()) as { dmThreadId: string };
+    await request.post(`/api/threads/${bot.dmThreadId}/messages`, { data: { content: '[mock:hello] ping' } });
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    await expect(page.getByText(/^Hello! I'm Why Bot/)).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Ask Agent A why' }).first().click();
+    await expect(page.getByText('Asked Agent A why')).toBeVisible();
+    await expect(page.getByText('Agent A', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Deleted bot')).toHaveCount(0);
+  });
+
+  test('weekly review: Agent A gets the week in its DM and replies', async ({ page }) => {
+    await page.goto('/learn');
+    await page.getByRole('button', { name: 'Weekly review' }).click();
+    await expect(page).toHaveURL(/\/threads\//);
+    await expect(page.getByText(/Work split this week/).last()).toBeVisible();
+    await expect(page.getByText('Mock ·', { exact: false }).last()).toBeVisible({ timeout: 15_000 });
   });
 });

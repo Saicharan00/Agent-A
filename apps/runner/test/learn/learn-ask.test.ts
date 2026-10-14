@@ -106,11 +106,9 @@ describe('learn session 2: work split, weekly review, briefs, ask why (F23)', ()
 
     const tools = new PlatformTools({ repos: h.repos, threads, bus: h.bus, log: silent, learn });
     const lead = h.repos.bots.get(leadId)!;
-    expect(
-      await tools.call(lead, 'save_handoff_brief', { title: 'Login', content: `Use ${FAKE_KEY}` }),
-    ).toMatchObject({
-      error: expect.stringContaining('Anthropic API key'),
-    });
+    await expect(
+      tools.call(lead, 'save_handoff_brief', { title: 'Login', content: `Use ${FAKE_KEY}` }),
+    ).rejects.toThrow(/Anthropic API key/);
     expect(
       await tools.call(lead, 'save_handoff_brief', { title: 'Login', content: '**What to do:** build it.' }),
     ).toEqual({
