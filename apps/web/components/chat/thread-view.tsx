@@ -23,6 +23,7 @@ import {
   useCancelRuns,
   useEngineState,
   useMarkRead,
+  usePageVisible,
   usePauseGroup,
   useRetryTurn,
   useThread,
@@ -217,6 +218,8 @@ export function ThreadView({ threadId }: { threadId: string }) {
 
   // Thread events (messages, run status) update the cache in LiveProvider.
   useLiveChannel(`thread:${threadId}`);
+  // Tells the runner the owner sees this thread (no notification for its runs) only while the tab is visible.
+  useLiveChannel(`watch:${threadId}`, { enabled: usePageVisible() });
   const isGroup = thread.data?.kind === 'group';
   const goal = useGoalOfThread(threadId, thread.data?.kind === 'goal');
   const member = isGroup ? undefined : thread.data?.members[0];

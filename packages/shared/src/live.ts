@@ -93,8 +93,11 @@ export type LiveEvent =
 // ---------- WebSocket wire protocol (GET /ws, F11) ----------
 // One socket per browser tab carries any number of channel subscriptions. Every frame is one JSON object.
 
-/** `run:<id>`, `thread:<id>`, `bot:<id>` or `global`. */
-export const LIVE_CHANNEL_RE = /^(?:(?:run|thread|bot):[A-Za-z0-9_-]{1,64}|global)$/;
+/**
+ * `run:<id>`, `thread:<id>`, `bot:<id>` or `global`. `watch:<threadId>` carries no events: a tab joins it while the
+ * thread is on screen, so the runner knows the owner sees that thread (F27 notifications).
+ */
+export const LIVE_CHANNEL_RE = /^(?:(?:run|thread|bot|watch):[A-Za-z0-9_-]{1,64}|global)$/;
 export const liveChannelSchema = z.string().regex(LIVE_CHANNEL_RE, 'unknown channel');
 
 export function isLiveChannel(channel: string): boolean {

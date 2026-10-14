@@ -10,7 +10,7 @@ import type {
   UnreadCounts,
 } from '@agenta/shared';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { useLiveChannel } from '@/hooks/use-live-channel';
 import { ApiClientError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -183,6 +183,18 @@ export function useMarkRead(threadId: string, latestMessageId: string | undefine
     document.addEventListener('visibilitychange', mark);
     return () => document.removeEventListener('visibilitychange', mark);
   }, [qc, threadId, latestMessageId, enabled]);
+}
+
+/** True while the tab is visible (document.visibilityState). */
+export function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const update = () => setVisible(document.visibilityState === 'visible');
+    update();
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+  return visible;
 }
 
 // ---------- group chats (F18) ----------

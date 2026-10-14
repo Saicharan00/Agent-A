@@ -55,7 +55,7 @@ test.describe('notifications', () => {
     await page.goto(`/threads/${here.dmThreadId}`);
     // The runner counts the thread as watched once the page subscribed to its live channel.
     await expect
-      .poll(() => frames.some((f) => f.includes('"subscribed"') && f.includes(`thread:${here.dmThreadId}`)))
+      .poll(() => frames.some((f) => f.includes('"subscribed"') && f.includes(`watch:${here.dmThreadId}`)))
       .toBe(true);
     const bell = page.getByTestId('notifications-bell');
 
@@ -88,6 +88,25 @@ test.describe('notifications', () => {
     await expect(row).not.toHaveAttribute('data-unread');
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Recent activity' })).toBeVisible();
+  });
+
+  test('a thread open in a hidden tab still notifies', async ({ page, request }) => {
+    const bot = await createBot(request, 'Hidden');
+    const frames: string[] = [];
+    page.on('websocket', (ws) => {
+      if (ws.url().endsWith('/ws')) ws.on('framereceived', (f) => frames.push(String(f.payload)));
+    });
+    const watched = (type: string) =>
+      frames.some((f) => f.includes(`"${type}"`) && f.includes(`watch:${bot.dmThreadId}`));
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    await expect.poll(() => watched('subscribed')).toBe(true);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await expect.poll(() => watched('unsubscribed')).toBe(true);
+    await request.post(`/api/threads/${bot.dmThreadId}/messages`, { data: { content: 'while away' } });
+    await expect.poll(() => titles(request), { timeout: 15_000 }).toContain(`${bot.name} finished`);
   });
 
   test('mark all read from the inbox page and the unread filter', async ({ page, request }) => {

@@ -15,7 +15,7 @@ export class EventBus {
     this.emitter.emit(channel, event);
   }
 
-  /** How many listeners a channel has (a browser tab watching `thread:<id>` counts as one). */
+  /** How many listeners a channel has (a visible tab on a thread counts as one on `watch:<id>`). */
   listenerCount(channel: string): number {
     return this.emitter.listenerCount(channel);
   }

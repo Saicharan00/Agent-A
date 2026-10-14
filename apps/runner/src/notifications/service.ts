@@ -52,7 +52,7 @@ function excerpt(md: string, max = 280): string {
 /**
  * A bot's turn ended: tell the owner when it was their turn (a message or a schedule) and they are not looking at
  * that thread, or when the bot asks them something. A failed scheduled run is always reported.
- * The owner "looks at" a thread while a browser tab is subscribed to its live channel.
+ * The owner "looks at" a thread while a visible browser tab is subscribed to its `watch:<threadId>` channel.
  */
 export function notifyRunFinished(repos: NotifyRepos, bus: EventBus, run: Run, replyMd?: string): void {
   if (run.status !== 'succeeded' && run.status !== 'failed') return;
@@ -69,7 +69,7 @@ export function notifyRunFinished(repos: NotifyRepos, bus: EventBus, run: Run, r
     return;
   }
   if (run.trigger !== 'user' && run.trigger !== 'schedule' && run.trigger !== 'mention') return;
-  if (run.threadId && bus.listenerCount(`thread:${run.threadId}`) > 0) return;
+  if (run.threadId && bus.listenerCount(`watch:${run.threadId}`) > 0) return;
   const question = !!replyMd && asksOwner(replyMd);
   // Bot-to-bot turns (mentions) only matter when they end with a question.
   if (run.trigger === 'mention' && !question) return;

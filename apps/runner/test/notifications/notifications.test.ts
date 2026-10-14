@@ -87,7 +87,7 @@ describe('notifications (F27)', () => {
   it('no notification while the owner watches the thread', async () => {
     const botId = h.bot('Ada', 'claude');
     const threadId = h.dm(botId);
-    const off = h.bus.subscribe(`thread:${threadId}`, () => undefined);
+    const off = h.bus.subscribe(`watch:${threadId}`, () => undefined);
     h.service.enqueue({ botId, threadId, trigger: 'user', prompt: 'x' });
     await h.gate.whenRunning(1);
     h.gate.release('x');

@@ -696,8 +696,9 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **One `notify()` helper** (`apps/runner/src/notifications/service.ts`) stores the row and publishes
   `notification.changed` on `global`; every service that already had the bus calls it (no new wiring). Read changes
   publish the same event with `notification: null` so other tabs refetch.
-- **"Owner is viewing the thread" = a browser tab is subscribed to `thread:<id>`** (`EventBus.listenerCount`; only the
-  live hub subscribes to thread channels). A background tab still counts as viewing; no presence API.
+- **"Owner is viewing the thread" = a visible tab is subscribed to `watch:<threadId>`**, an event-less live channel the
+  thread view joins only while `document.visibilityState` is visible (`EventBus.listenerCount`). The `thread:<id>`
+  subscription stays on in hidden tabs so messages keep arriving; a hidden tab does not count as viewing.
 - **Which runs notify:** owner turns (`user`) and `schedule` turns when they end (succeeded/failed) unseen; bot-to-bot
   `mention` turns only when they end with a question. Task, delegation and review turns are covered by task/goal
   notifications instead. A failed scheduled run is always reported (`schedule.failed`), as is a schedule that could not start.
