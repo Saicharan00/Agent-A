@@ -20,6 +20,7 @@ export const ID_PREFIXES = {
   terminal: 'trm',
   desktop: 'dsk',
   goal: 'gol',
+  mcpServer: 'mcs',
 } as const;
 export type IdKind = keyof typeof ID_PREFIXES;
 

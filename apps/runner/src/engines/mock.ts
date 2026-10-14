@@ -4,7 +4,9 @@ import type { EngineAdapter, EngineRunInput } from './types';
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
 // [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan] [mock:remember] [mock:brief];
-// [mock:approval] [mock:checkapproval] (the approval id, apr_…, follows in the prompt); anything else echoes the prompt.
+// [mock:approval] [mock:checkapproval] (the approval id, apr_…, follows in the prompt);
+// [mock:mcp] calls each MCP gateway tool named as gw:<server-slug>__<tool> (F35), adding _approval_id when an apr_… id
+// is in the prompt; anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
   'hello',
@@ -22,6 +24,7 @@ export const MOCK_SCENARIOS = [
   'brief',
   'approval',
   'checkapproval',
+  'mcp',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -509,6 +512,27 @@ export class MockEngine implements EngineAdapter {
         };
         yield* this.platformCall('mock-mcp-1', call, input, emit);
         yield* reply('I asked for your approval before pushing. I will wait until you decide.');
+        return 'succeeded';
+      }
+      case 'mcp': {
+        // MCP gateway tools (F35) go through the Platform MCP endpoint like platform tools: mcp__agenta__<slug>__<tool>.
+        const names = [...input.prompt.matchAll(/\bgw:([a-z0-9-]+__[A-Za-z0-9_.-]+)/g)].map((m) => m[1]!);
+        const approvalId = /\bapr_[A-Za-z0-9_-]+/.exec(input.prompt)?.[0];
+        if (!names.length) {
+          yield* reply('Name a gateway tool as gw:<server>__<tool> and I will call it.');
+          return 'succeeded';
+        }
+        const outputs: string[] = [];
+        for (const [i, name] of names.entries()) {
+          const call = {
+            name: `mcp__agenta__${name}`,
+            input: { text: 'hello from the mock bot', ...(approvalId ? { _approval_id: approvalId } : {}) },
+          };
+          outputs.push(yield* this.platformCall(`mock-mcp-${i + 1}`, call, input, emit));
+        }
+        yield* reply(
+          `Called ${names.join(', ')}:\n\n${outputs.map((o) => `- ${o.split('\n')[0]}`).join('\n')}`,
+        );
         return 'succeeded';
       }
       case 'checkapproval': {

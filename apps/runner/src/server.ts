@@ -22,6 +22,8 @@ import type { ScheduleService } from './schedules/service';
 import type { ApprovalService } from './approvals/service';
 import { registerConnectorRoutes } from './connectors/routes';
 import type { ConnectorService } from './connectors/service';
+import { registerGatewayRoutes } from './gateway/routes';
+import type { GatewayService } from './gateway/service';
 import { registerGuardRoutes } from './guard/routes';
 import type { GuardService } from './guard/service';
 import { registerLearnRoutes } from './learn/routes';
@@ -87,6 +89,8 @@ export type ServerDeps = {
   notifications?: NotificationService;
   /** Connectors (F29): /api/connectors*. */
   connectors?: ConnectorService;
+  /** MCP gateway (F35): /api/mcp-servers*, /api/bots/:id/mcp-access. */
+  gateway?: GatewayService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -151,6 +155,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.schedules) registerScheduleRoutes(app, deps.schedules);
   if (deps.notifications) registerNotificationRoutes(app, deps.notifications);
   if (deps.connectors) registerConnectorRoutes(app, deps.connectors);
+  if (deps.gateway) registerGatewayRoutes(app, deps.gateway);
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });

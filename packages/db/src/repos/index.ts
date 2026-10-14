@@ -2,6 +2,7 @@ import type { Db } from '../client';
 import { makeBotsRepo } from './bots';
 import { makeGoalsRepo } from './goals';
 import { makeDecisionsRepo, makeLessonsRepo, makeMemoriesRepo } from './knowledge';
+import { makeMcpServersRepo } from './mcp';
 import { makeMessagesRepo } from './messages';
 import { makeApprovalsRepo, makeEngineStateRepo, makeNotificationsRepo, makeSchedulesRepo } from './ops';
 import { makeConnectorsRepo, makeGuardTermsRepo, makeSettingsRepo } from './platform';
@@ -30,6 +31,7 @@ export function createRepos(db: Db) {
     connectors: makeConnectorsRepo(db),
     guardTerms: makeGuardTermsRepo(db),
     settings: makeSettingsRepo(db),
+    mcpServers: makeMcpServersRepo(db),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;
@@ -37,6 +39,7 @@ export type Repos = ReturnType<typeof createRepos>;
 export * from './bots';
 export * from './goals';
 export * from './knowledge';
+export * from './mcp';
 export * from './messages';
 export * from './ops';
 export * from './platform';

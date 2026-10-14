@@ -12,7 +12,7 @@ import { EngineAuth } from './engines/auth';
 import { ClaudeEngine } from './engines/claude';
 import { CodexEngine } from './engines/codex';
 import { MockEngine } from './engines/mock';
-import { PlatformMcpServer } from './mcp/server';
+import { PlatformMcpServer, inProcessPlatform } from './mcp/server';
 import { PlatformTools } from './mcp/tools';
 import { ContainerLauncher } from './engines/process';
 import { FilesService } from './files/service';
@@ -34,6 +34,7 @@ import { ScheduleService } from './schedules/service';
 import { NotificationService } from './notifications/service';
 import { envFileSource } from './engines/secrets';
 import { ConnectorService } from './connectors/service';
+import { GatewayService } from './gateway/service';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
 
@@ -82,15 +83,12 @@ const engineAuth: EngineAuth = new EngineAuth({
   exec: containers && ((botId, opts) => containers.exec(botId, opts)),
   log: rootLog.child({ module: 'engine-auth' }),
 });
-// The mock engine calls the same Platform MCP tools in-process (`platformTools` is created below, before any run).
+// The mock engine calls the same Platform MCP tools in-process (`platformTools` and `gateway` are created below,
+// before any run).
 const engineAdapters: ConstructorParameters<typeof EngineRegistry>[0] = [
   new MockEngine({
     platform: {
-      call: async (name, input, botId) => {
-        const bot = repos.bots.get(botId);
-        if (!bot) throw new Error(`Bot ${botId} not found`);
-        return JSON.stringify(await platformTools.call(bot, name, input), null, 2);
-      },
+      call: (name, input, botId) => inProcessPlatform(repos, platformTools, gateway).call(name, input, botId),
     },
   }),
 ];
@@ -186,9 +184,11 @@ const platformTools = new PlatformTools({
   learn,
   log: rootLog.child({ module: 'platform-tools' }),
 });
+const gateway = new GatewayService({ repos, secrets, approvals, log: rootLog.child({ module: 'gateway' }) });
 const platformMcp = new PlatformMcpServer({
   repos,
   tools: platformTools,
+  gateway,
   log: rootLog.child({ module: 'platform-mcp' }),
 });
 const files = new FilesService({
@@ -230,11 +230,14 @@ const app = await buildServer(config, {
   schedules,
   notifications,
   connectors,
+  gateway,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
   schedules.stop();
   await platformMcp.close();
+  // Stops the stdio MCP servers the gateway started.
+  await gateway.close();
   // Stops running engines and records them as failed ("runner stopped") before the DB closes.
   await runs.shutdown();
   // Bot containers keep running across runner restarts; the reconcile loop adopts them on start.

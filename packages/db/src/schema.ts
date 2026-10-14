@@ -34,6 +34,12 @@ import {
   THREAD_KINDS,
 } from '@agenta/shared/enums';
 import { SCHEDULE_OUTCOMES } from '@agenta/shared/schedules';
+import {
+  MCP_TOOL_POLICIES,
+  MCP_TRANSPORTS,
+  type McpToolInfo,
+  type McpToolPolicy,
+} from '@agenta/shared/mcp-gateway';
 
 const createdAt = () => text('created_at').notNull();
 const updatedAt = () => text('updated_at').notNull();
@@ -427,6 +433,51 @@ export const botConnectors = sqliteTable(
   (t) => [primaryKey({ columns: [t.botId, t.connectorId] })],
 );
 
+/** External MCP servers behind the gateway (F35). Secrets are referenced by .env.local variable name only. */
+export const mcpServers = sqliteTable(
+  'mcp_servers',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    transport: text('transport', { enum: MCP_TRANSPORTS }).notNull(),
+    command: text('command'),
+    args: text('args_json', { mode: 'json' }).$type<string[]>().notNull(),
+    cwd: text('cwd'),
+    url: text('url'),
+    envRefs: text('env_refs_json', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+    headerRefs: text('header_refs_json', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+    enabled: bool('enabled').notNull().default(true),
+    defaultPolicy: text('default_policy', { enum: MCP_TOOL_POLICIES }).notNull().default('approval'),
+    toolPolicies: text('tool_policies_json', { mode: 'json' })
+      .$type<Record<string, McpToolPolicy>>()
+      .notNull(),
+    toolsCache: text('tools_cache_json', { mode: 'json' }).$type<McpToolInfo[]>(),
+    lastCheckAt: text('last_check_at'),
+    lastError: text('last_error'),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('mcp_servers_slug_idx').on(t.slug)],
+);
+
+export const botMcpAccess = sqliteTable(
+  'bot_mcp_access',
+  {
+    botId: text('bot_id')
+      .notNull()
+      .references(() => bots.id, { onDelete: 'cascade' }),
+    serverId: text('server_id')
+      .notNull()
+      .references(() => mcpServers.id, { onDelete: 'cascade' }),
+    /** `*` = every tool of the server. */
+    toolAllowlist: text('tool_allowlist_json', { mode: 'json' }).$type<'*' | string[]>().notNull(),
+    toolPolicies: text('tool_policies_json', { mode: 'json' })
+      .$type<Record<string, McpToolPolicy>>()
+      .notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.botId, t.serverId] })],
+);
+
 export const guardTerms = sqliteTable('guard_terms', {
   id: text('id').primaryKey(),
   term: text('term').notNull(),
@@ -460,4 +511,6 @@ export type Notification = typeof notifications.$inferSelect;
 export type EngineState = typeof engineState.$inferSelect;
 export type Connector = typeof connectors.$inferSelect;
 export type GuardTerm = typeof guardTerms.$inferSelect;
+export type McpServer = typeof mcpServers.$inferSelect;
+export type BotMcpAccess = typeof botMcpAccess.$inferSelect;
 export type Setting = typeof settings.$inferSelect;

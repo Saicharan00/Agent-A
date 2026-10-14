@@ -743,3 +743,34 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   private repo's `info/refs`). So any bot can probably clone, and maybe push to, the owner's repos without the connector.
   Not patched in the app: a per-exec `NO_PROXY` block would be trivially undone by the bot itself. Pushes still need
   approval for every bot. The owner-side fix is in HUMAN_TODO (narrow or remove the sandbox's github secret).
+
+## F35 — MCP gateway (session 1: registry & gateway)
+- **Tables:** `mcp_servers` (spec columns plus `tool_policies_json`, the owner's per-tool policy per server) and
+  `bot_mcp_access` (allowlist `*` or names, per-bot per-tool policy overrides). Policy order: bot override, then the
+  server's per-tool setting, then annotations (`readOnlyHint` → allow; `destructiveHint` → approval even when the server
+  default is allow), then the server's `default_policy` (default `approval`). `deny` hides the tool.
+- **Secrets are referenced, never stored:** `env_refs_json` maps a child env var to a `.env.local` variable name;
+  `header_refs_json` holds templates like `Bearer ${NOTION_TOKEN}` (zod rejects a header without a `${NAME}`).
+  Values are read via `envFileSource` at connect time. Results and errors are passed through `redactSecrets` with the
+  server's values. A stdio server gets only the SDK's safe env (HOME, PATH, …), the proxy/CA variables, and its own
+  referenced secrets: never the runner's `process.env` (which holds every `.env.local` value).
+- **Platform MCP server moved to the SDK's low-level `Server`** so gateway tools can publish their servers' raw JSON
+  schemas next to the zod platform tools. Platform schemas still come from the SDK's own `toJsonSchemaCompat`, so
+  `tools/list` is unchanged for them. Gateway tools are named `<slug>__<tool>` (slugs can't contain `_`).
+- **Approval flow:** an `approval` tool gets an extra `_approval_id` argument. The first call creates an F25 approval
+  (action `Use <slug>__<tool>`, details with the redacted arguments and a fingerprint of them) and returns
+  `{status: "pending", approval_id}`. The retry must come from the same bot with identical arguments (fingerprint) and an
+  approved id; each id works once. Used ids are kept in memory only (`shortcut:` comment): after a runner restart an
+  approved call could run once more with the same arguments.
+- **Tool calls are logged by the engines, not the gateway:** every engine already records a gateway call as
+  `tool.call`/`tool.result` on the run (`mcp__agenta__<slug>__<tool>`, so the server slug is in the name). The gateway
+  adds pino lines (bot, server, tool, outcome, ms; arguments never at info). Duplicating run events would show every
+  call twice. Showing the server's display name on the tool card is session 2 (UI).
+- **Connections:** lazy connect on first `tools/list` or call, 10 min idle shutdown, 60 s per-call timeout, a closed
+  connection (crash) is forgotten so the next call restarts it. HTTP uses Streamable HTTP and falls back to SSE on
+  404/405. Outbound HTTP uses Node 22's `NODE_USE_ENV_PROXY=1` (already set in the VM) and `NODE_EXTRA_CA_CERTS`, so the
+  sandbox proxy and its CA apply without extra code. Network-policy blocks are reported with the `sbx policy allow`
+  command. `uv` is in the VM but `uvx` is not: use `uv tool run <pkg>` as the command (presets in session 2).
+- **Mock:** `[mock:mcp]` calls each `gw:<slug>__<tool>` named in the prompt (adds `_approval_id` if an `apr_…` id is
+  there). `inProcessPlatform()` routes the mock's calls exactly like the HTTP endpoint. Test fixture:
+  `tests/fixtures/mcp-echo/server.mjs`, plain JSON-RPC, no dependencies (`__crash__` / `__key__` test hooks).

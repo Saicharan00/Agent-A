@@ -1,10 +1,19 @@
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Bot, Repos } from '@agenta/db';
-import { PLATFORM_MCP_SERVER, type PlatformToolName, platformToolInputs } from '@agenta/shared';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import {
+  PLATFORM_MCP_SERVER,
+  PLATFORM_TOOL_PREFIX,
+  type PlatformToolName,
+  platformToolInputs,
+} from '@agenta/shared';
+import { Server as McpProtocolServer } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { toJsonSchemaCompat } from '@modelcontextprotocol/sdk/server/zod-json-schema-compat.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { hashMcpToken } from '../bots/mcp-token';
+import type { MockPlatform } from '../engines/mock';
+import type { GatewayService } from '../gateway/service';
 import { PLATFORM_TOOL_DESCRIPTIONS, type PlatformTools } from './tools';
 
 type Log = {
@@ -20,6 +29,8 @@ export const DEFAULT_MCP_RATE_LIMIT = { max: 120, windowMs: 60_000 };
 export type PlatformMcpOptions = {
   repos: Pick<Repos, 'bots'>;
   tools: PlatformTools;
+  /** External MCP servers' tools (F35), listed and called as `<server-slug>__<tool>` next to the platform tools. */
+  gateway?: Pick<GatewayService, 'toolsFor' | 'isGatewayTool' | 'call'>;
   log: Log;
   rateLimit?: { max: number; windowMs: number };
   now?: () => number;
@@ -120,25 +131,75 @@ export class PlatformMcpServer {
     await transport.handleRequest(req, res);
   }
 
-  private mcpFor(bot: Bot): McpServer {
-    const server = new McpServer({ name: PLATFORM_MCP_SERVER, version: '1.0.0' });
-    for (const name of Object.keys(platformToolInputs) as PlatformToolName[]) {
-      server.registerTool(
-        name,
-        { description: PLATFORM_TOOL_DESCRIPTIONS[name], inputSchema: platformToolInputs[name].shape },
-        async (args: unknown) => {
-          try {
-            const result = await this.opts.tools.call(bot, name, args);
-            return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-          } catch (err) {
-            this.opts.log.debug({ botId: bot.id, tool: name, err }, 'platform tool refused');
-            return { content: [{ type: 'text' as const, text: (err as Error).message }], isError: true };
-          }
-        },
-      );
-    }
+  private mcpFor(bot: Bot): McpProtocolServer {
+    const { tools, gateway, log } = this.opts;
+    const server = new McpProtocolServer(
+      { name: PLATFORM_MCP_SERVER, version: '1.0.0' },
+      { capabilities: { tools: {} } },
+    );
+    // Low-level handlers: platform tools publish their zod inputs (as the SDK's McpServer would), gateway tools
+    // pass their servers' JSON schemas through. Each request lists afresh, filtered for this bot.
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [
+        ...PLATFORM_TOOLS.map((name) => ({
+          name,
+          description: PLATFORM_TOOL_DESCRIPTIONS[name],
+          inputSchema: platformInputJson(name),
+        })),
+        ...((await gateway?.toolsFor(bot)) ?? []),
+      ],
+    }));
+    server.setRequestHandler(CallToolRequestSchema, async (req) => {
+      const { name, arguments: args } = req.params;
+      try {
+        if (gateway?.isGatewayTool(name)) {
+          const r = await gateway.call(bot, name, args, tools.currentRun(bot.id)?.id ?? null);
+          return { content: [{ type: 'text' as const, text: r.text }], isError: r.isError };
+        }
+        const result = await tools.call(bot, name, args);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        log.debug({ botId: bot.id, tool: name, err }, 'platform tool refused');
+        return { content: [{ type: 'text' as const, text: (err as Error).message }], isError: true };
+      }
+    });
     return server;
   }
+}
+
+const PLATFORM_TOOLS = Object.keys(platformToolInputs) as PlatformToolName[];
+const inputJson = new Map<PlatformToolName, Record<string, unknown>>();
+function platformInputJson(name: PlatformToolName): Record<string, unknown> & { type: 'object' } {
+  let json = inputJson.get(name);
+  if (!json) {
+    json = toJsonSchemaCompat(platformToolInputs[name], { strictUnions: true, pipeStrategy: 'input' });
+    inputJson.set(name, json);
+  }
+  return json as Record<string, unknown> & { type: 'object' };
+}
+
+/**
+ * The Platform MCP endpoint's tools called in-process, for the mock engine: platform tools and (F35) gateway tools,
+ * routed the same way as over HTTP. Gateway errors are thrown, so the mock records them as failed tool results.
+ */
+export function inProcessPlatform(
+  repos: Pick<Repos, 'bots'>,
+  tools: PlatformTools,
+  gateway?: Pick<GatewayService, 'isGatewayTool' | 'call'>,
+): MockPlatform {
+  return {
+    call: async (name, input, botId) => {
+      const bot = repos.bots.get(botId);
+      if (!bot) throw new Error(`Bot ${botId} not found`);
+      const bare = name.startsWith(PLATFORM_TOOL_PREFIX) ? name.slice(PLATFORM_TOOL_PREFIX.length) : name;
+      if (gateway?.isGatewayTool(bare)) {
+        const r = await gateway.call(bot, bare, input, tools.currentRun(botId)?.id ?? null);
+        if (r.isError) throw new Error(r.text);
+        return r.text;
+      }
+      return JSON.stringify(await tools.call(bot, name, input), null, 2);
+    },
+  };
 }
 
 function jsonError(res: ServerResponse, status: number, code: number, message: string): void {
