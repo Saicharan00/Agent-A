@@ -65,6 +65,20 @@
       "skills": ["threat-model-lite", "code-review-checklist", "design-review"]
     }
   ],
+  "schedules": [
+    {
+      "name": "Daily plan",
+      "bot": "agent-a",
+      "cron": "45 8 * * 1-5",
+      "prompt": "Good morning. Write today's plan for me: look at the task board (list_tasks) and any open goals, then give me the 3 most important things to do today, what each bot should work on, anything waiting on me (reviews, approvals, decisions), and one thing I should learn today as a future lead. Keep it short."
+    },
+    {
+      "name": "Weekly review",
+      "bot": "agent-a",
+      "cron": "45 16 * * 5",
+      "prompt": "Write my weekly review of the last 7 days: what we achieved, the decisions and why they matter, what I learned, and my growth areas as a future lead (be specific and honest). Then add exactly 5 review questions that test what I should remember, each with `add_lesson` (topic \"weekly-review\", the question and its answer in `lesson`, `review_today: true`)."
+    }
+  ],
   "group": {
     "title": "Lead Room",
     "purpose": "The whole team in one room. Agent A moderates: bring a question or idea here and Agent A pulls in the right specialists."

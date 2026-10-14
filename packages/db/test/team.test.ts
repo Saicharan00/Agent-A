@@ -66,6 +66,18 @@ describe('team template (F21)', () => {
     expect(t.repos.bots.list()).toHaveLength(7);
   });
 
+  it('seeds the Daily plan and Weekly review schedules for Agent A, switched off, once', () => {
+    applyTeamTemplate(t.repos, template, { restore: false });
+    applyTeamTemplate(t.repos, template, { restore: true });
+    const lead = t.repos.bots.getLead()!;
+    expect(
+      t.repos.schedules.list().map((s) => [s.name, s.botId, s.cron, s.timezone, s.enabled, s.nextRunAt]),
+    ).toEqual([
+      ['Daily plan', lead.id, '45 8 * * 1-5', 'America/New_York', false, null],
+      ['Weekly review', lead.id, '45 16 * * 5', 'America/New_York', false, null],
+    ]);
+  });
+
   it('seed leaves edited bots alone; restore brings the defaults back and keeps the rest', () => {
     const { leadRoom } = applyTeamTemplate(t.repos, template, { restore: false });
     const arch = t.repos.bots.getBySlug('architect')!;

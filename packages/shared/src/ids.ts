@@ -13,6 +13,7 @@ export const ID_PREFIXES = {
   lesson: 'lsn',
   approval: 'apr',
   schedule: 'sch',
+  scheduleRun: 'shr',
   notification: 'ntf',
   connector: 'con',
   guardTerm: 'grd',

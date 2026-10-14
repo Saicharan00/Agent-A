@@ -40,4 +40,8 @@ export const queryKeys = {
   /** Prefix of every approval query (refetched on approval.changed). */
   approvals: ['approvals'] as const,
   pendingApprovals: ['approvals', 'pending'] as const,
+  /** Prefix of every schedule query (refetched on schedule.changed). */
+  schedules: ['schedules'] as const,
+  scheduleList: ['schedules', 'list'] as const,
+  scheduleHistory: (id: string) => ['schedules', 'history', id] as const,
 };

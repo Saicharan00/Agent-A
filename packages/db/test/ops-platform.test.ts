@@ -34,7 +34,7 @@ describe('schedulesRepo', () => {
       prompt: 'Summarise yesterday',
       nextRunAt: '2026-01-01T09:00:00.000Z',
     });
-    expect(s).toMatchObject({ enabled: true, catchUp: false, timezone: 'UTC' });
+    expect(s).toMatchObject({ enabled: true, catchUp: false, timezone: 'America/New_York' });
     expect(s.id).toMatch(/^sch_/);
     expect(t.repos.schedules.listDue().map((x) => x.id)).toEqual([s.id]);
     t.repos.schedules.update(s.id, { enabled: false });

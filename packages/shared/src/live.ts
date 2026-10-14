@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { LiveApprovalChanged } from './approvals';
+import type { LiveScheduleChanged } from './schedules';
 import type { LiveBotsChanged } from './bots';
 import type { BotStatusEvent } from './computer';
 import { AUTHOR_TYPES, ENGINES, RUN_STATUSES } from './enums';
@@ -84,7 +85,8 @@ export type LiveEvent =
   | LiveGoalChanged
   | LiveMemoryChanged
   | LiveLearnChanged
-  | LiveApprovalChanged;
+  | LiveApprovalChanged
+  | LiveScheduleChanged;
 
 // ---------- WebSocket wire protocol (GET /ws, F11) ----------
 // One socket per browser tab carries any number of channel subscriptions. Every frame is one JSON object.

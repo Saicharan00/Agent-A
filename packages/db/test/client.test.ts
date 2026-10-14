@@ -20,6 +20,7 @@ const ALL_TABLES = [
   'notifications',
   'run_events',
   'runs',
+  'schedule_runs',
   'schedules',
   'settings',
   'task_events',

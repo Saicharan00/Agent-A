@@ -21,6 +21,7 @@ import {
   TASK_STATUSES,
   THREAD_KINDS,
 } from './enums';
+import { DEFAULT_SCHEDULE_TIMEZONE } from './schedules';
 
 const isoDate = z.iso.datetime();
 const slug = z
@@ -316,7 +317,7 @@ export const scheduleCreateSchema = z.object({
   botId: z.string().min(1),
   threadId: z.string().nullable().default(null),
   cron: z.string().trim().min(1).max(100),
-  timezone: z.string().min(1).default('UTC'),
+  timezone: z.string().min(1).default(DEFAULT_SCHEDULE_TIMEZONE),
   prompt: z.string().min(1),
   enabled: z.boolean().default(true),
   catchUp: z.boolean().default(false),
@@ -327,6 +328,7 @@ export type ScheduleCreateInput = z.input<typeof scheduleCreateSchema>;
 export const scheduleUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
+    botId: z.string().min(1),
     threadId: z.string().nullable(),
     cron: z.string().trim().min(1).max(100),
     timezone: z.string().min(1),

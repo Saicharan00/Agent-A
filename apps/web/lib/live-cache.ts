@@ -147,6 +147,9 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
     case 'approval.changed':
       void cache.invalidateQueries({ queryKey: queryKeys.approvals });
       return;
+    case 'schedule.changed':
+      void cache.invalidateQueries({ queryKey: queryKeys.schedules });
+      return;
     case 'run.event':
       return;
   }

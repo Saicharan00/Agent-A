@@ -673,3 +673,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   anything the owner said needs approval (in chat or in the bot's instructions). PLAN rules out a policy engine.
 - **The owner can only approve or deny;** `expired` is set by the runner. A decided or expired approval returns 409.
 - **The note is not logged** (it may hold private context); the decision is.
+
+## F26 — Scheduled tasks
+- **New dependency: `croner`** (runner) for cron parsing and time-zone-aware "next run" math only. Firing is our own
+  30 s tick over `schedules.next_run_at` (`listDue`), not croner jobs: one code path for timer, catch-up and limits, and
+  a fake `now` drives it in tests.
+- **Five-field cron (or `@nickname`) only:** a seconds field would fire faster than the tick.
+- **Missed = due more than 2 min ago** (app off or machine asleep). Catch-up off: skipped with a logged reason.
+  Catch-up on: fires once (not once per missed slot), then the next occurrence from now.
+- **Engine limited:** skipped with the reason; with catch-up the next try is the limit's reset time (if that comes
+  before the next occurrence). Also skipped while the schedule's previous run is still queued/running (no pile-up).
+- **History is a new `schedule_runs` table** (outcome started/skipped/failed, reason, run, thread, manual) because
+  skips have no run row to hang the reason on. "Run now" fires at once, is recorded as manual and leaves the timer alone.
+- **A run is the owner's message:** the prompt is posted as `**Scheduled: <name>**` + prompt in the target thread
+  (or a new `scheduled` thread each run) and only the schedule's bot gets a turn (`ThreadService.ownerAsks`, shared
+  with `askLead`), trigger `schedule`.
+- **Default time zone `America/New_York`** per schedule (editable in the form); invalid IANA names are rejected by zod.
+- **Seeded schedules live in `templates/team/team.json`** (Daily plan weekdays 08:45, Weekly review Fridays 16:45, for
+  Agent A), created switched off if no schedule of that name exists; the owner's edits are never overwritten.

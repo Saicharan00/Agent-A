@@ -24,6 +24,17 @@ const teamFileSchema = z.object({
     )
     .min(1),
   group: z.object({ title: z.string().min(1).max(200), purpose: z.string().max(2000) }),
+  /** Seeded disabled (F26); the owner switches them on in Schedules. */
+  schedules: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(200),
+        bot: skillNameSchema,
+        cron: z.string(),
+        prompt: z.string(),
+      }),
+    )
+    .default([]),
 });
 
 export type TeamBotTemplate = z.infer<typeof teamFileSchema>['bots'][number] & { instructions: string };
@@ -31,6 +42,7 @@ export type TeamSkill = { name: string; description: string; body: string; dir: 
 export type TeamTemplate = {
   bots: TeamBotTemplate[];
   group: { title: string; purpose: string };
+  schedules: z.infer<typeof teamFileSchema>['schedules'];
   skills: Map<string, TeamSkill>;
 };
 
@@ -66,7 +78,9 @@ export function loadTeamTemplate(dir: string): TeamTemplate {
     for (const s of b.skills) if (!skills.has(s)) throw new Error(`${b.slug}: unknown skill ${s}`);
     return { ...b, instructions: readFileSync(join(dir, 'bots', `${b.slug}.md`), 'utf8').trim() };
   });
-  return { bots, group: file.group, skills };
+  for (const s of file.schedules)
+    if (!file.bots.some((b) => b.slug === s.bot)) throw new Error(`schedule ${s.name}: unknown bot ${s.bot}`);
+  return { bots, group: file.group, skills, schedules: file.schedules };
 }
 
 export type TeamApplyResult = { created: Bot[]; restored: Bot[]; leadRoom: Thread; leadRoomCreated: boolean };
@@ -141,6 +155,14 @@ export function applyTeamTemplate(
       purpose: template.group.purpose,
       moderatorBotId: lead.id,
     })!;
+  }
+
+  // Missing template schedules are added switched off; existing ones (matched by name) are the owner's.
+  const existing = new Set(repos.schedules.list().map((s) => s.name));
+  for (const s of template.schedules) {
+    const bot = team[template.bots.findIndex((b) => b.slug === s.bot)];
+    if (bot && !existing.has(s.name))
+      repos.schedules.create({ name: s.name, botId: bot.id, cron: s.cron, prompt: s.prompt, enabled: false });
   }
   return { created, restored, leadRoom, leadRoomCreated };
 }

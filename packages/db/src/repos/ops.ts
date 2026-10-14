@@ -24,9 +24,11 @@ import {
   type EngineState,
   type Notification,
   type Schedule,
+  type ScheduleRun,
   approvals,
   engineState,
   notifications,
+  scheduleRuns,
   schedules,
 } from '../schema';
 import { definedOnly, isEmpty, pageSize } from './util';
@@ -136,6 +138,30 @@ export function makeSchedulesRepo(db: Db) {
 
     delete(id: string): boolean {
       return db.delete(schedules).where(eq(schedules.id, id)).run().changes > 0;
+    },
+
+    /** Records one firing (F26). `at` defaults to now (tests pass a fake clock). */
+    addRun(
+      input: Pick<ScheduleRun, 'scheduleId' | 'outcome'> &
+        Partial<Pick<ScheduleRun, 'manual' | 'reason' | 'runId' | 'threadId'>>,
+      at: string = nowIso(),
+    ): ScheduleRun {
+      return db
+        .insert(scheduleRuns)
+        .values({ ...input, id: newId('scheduleRun'), createdAt: at })
+        .returning()
+        .get();
+    },
+
+    /** Newest first. */
+    listRuns(scheduleId: string, limit?: number): ScheduleRun[] {
+      return db
+        .select()
+        .from(scheduleRuns)
+        .where(eq(scheduleRuns.scheduleId, scheduleId))
+        .orderBy(desc(scheduleRuns.createdAt), desc(scheduleRuns.id))
+        .limit(pageSize(limit, 50))
+        .all();
     },
   };
 }

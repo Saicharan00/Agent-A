@@ -33,6 +33,7 @@ import {
   TASK_STATUSES,
   THREAD_KINDS,
 } from '@agenta/shared/enums';
+import { SCHEDULE_OUTCOMES } from '@agenta/shared/schedules';
 
 const createdAt = () => text('created_at').notNull();
 const updatedAt = () => text('updated_at').notNull();
@@ -364,6 +365,24 @@ export const schedules = sqliteTable(
   (t) => [index('schedules_next_run_idx').on(t.enabled, t.nextRunAt)],
 );
 
+/** One firing of a schedule (F26): the run it started, or why it was skipped or failed. */
+export const scheduleRuns = sqliteTable(
+  'schedule_runs',
+  {
+    id: text('id').primaryKey(),
+    scheduleId: text('schedule_id')
+      .notNull()
+      .references(() => schedules.id, { onDelete: 'cascade' }),
+    outcome: text('outcome', { enum: SCHEDULE_OUTCOMES }).notNull(),
+    manual: bool('manual').notNull().default(false),
+    reason: text('reason'),
+    runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    threadId: text('thread_id').references(() => threads.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('schedule_runs_schedule_idx').on(t.scheduleId, t.createdAt)],
+);
+
 export const notifications = sqliteTable(
   'notifications',
   {
@@ -435,6 +454,7 @@ export type Decision = typeof decisions.$inferSelect;
 export type Lesson = typeof lessons.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
 export type Schedule = typeof schedules.$inferSelect;
+export type ScheduleRun = typeof scheduleRuns.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type EngineState = typeof engineState.$inferSelect;
 export type Connector = typeof connectors.$inferSelect;

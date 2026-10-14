@@ -9,6 +9,7 @@ import {
   type LiveMessage,
   type LiveThreadActivity,
   type RetryTurnRequest,
+  type RunTrigger,
   type ThreadUpdateRequest,
   type UnreadCounts,
   type MessagePage,
@@ -266,29 +267,37 @@ export class ThreadService {
    * the weekly review and carry-over briefs (F23).
    */
   askLead(threadId: string | null, content: string): SendMessageResponse {
-    const { repos, log } = this.opts;
-    const lead = repos.bots.getLead();
+    const lead = this.opts.repos.bots.getLead();
     if (!lead) throw new ThreadError('no_lead', 'There is no lead bot (Agent A) on the team', 409);
-    const id = threadId ?? repos.threads.findDm(lead.id)?.id;
+    const id = threadId ?? this.opts.repos.threads.findDm(lead.id)?.id;
     if (!id) throw new ThreadError('thread_not_found', `${lead.name} has no direct messages thread`, 404);
-    const thread = this.writable(id);
-    if (thread.kind === 'goal') this.opts.runs.admitGoal({ threadId: id });
+    return this.ownerAsks(lead, id, content, 'user');
+  }
+
+  /**
+   * Posts `content` as the owner's message in `threadId` and gives only `bot` a turn, even if it is not a member.
+   * Used by askLead and by scheduled tasks (F26).
+   */
+  ownerAsks(bot: Bot, threadId: string, content: string, trigger: RunTrigger): SendMessageResponse {
+    const { repos, log } = this.opts;
+    const thread = this.writable(threadId);
+    if (thread.kind === 'goal') this.opts.runs.admitGoal({ threadId });
     const message = repos.messages.create({
-      threadId: id,
+      threadId,
       authorType: 'user',
       contentMd: content,
-      mentions: thread.kind === 'group' ? [lead.id] : [],
+      mentions: thread.kind === 'group' ? [bot.id] : [],
     });
     const run = this.opts.runs.enqueue({
-      botId: lead.id,
-      threadId: id,
-      trigger: 'user',
-      prompt: this.promptFor(lead, thread, message),
+      botId: bot.id,
+      threadId,
+      trigger,
+      prompt: this.promptFor(bot, thread, message),
     });
     this.markSeen(run, message.id);
     const stored = repos.messages.setRunId(message.id, run.id) ?? message;
     this.publish(stored);
-    log.info({ threadId: id, messageId: message.id, runId: run.id }, 'lead asked');
+    log.info({ threadId, messageId: message.id, runId: run.id, trigger }, 'bot asked');
     return { message: toMessageView(stored), runs: [toRunView(run)] };
   }
 

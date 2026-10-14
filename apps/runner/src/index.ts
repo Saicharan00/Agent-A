@@ -30,6 +30,7 @@ import { TaskService } from './tasks/service';
 import { ThreadService } from './threads/service';
 import { GuardService } from './guard/service';
 import { ApprovalService } from './approvals/service';
+import { ScheduleService } from './schedules/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
@@ -106,10 +107,11 @@ if (containers) {
     }),
   );
 }
+const engines = new EngineRegistry(engineAdapters, config.engineOverride);
 const runs = new RunService({
   repos,
   bus,
-  engines: new EngineRegistry(engineAdapters, config.engineOverride),
+  engines,
   log: rootLog.child({ module: 'runs' }),
   prepare: computerPreparer({
     containers,
@@ -159,6 +161,13 @@ const learn = new LearnService({
   sharedDir: config.sharedDir,
   threads,
 });
+const schedules = new ScheduleService({
+  repos,
+  threads,
+  effectiveEngine: (bot) => engines.effectiveEngine(bot),
+  bus,
+  log: rootLog.child({ module: 'schedules' }),
+});
 const approvals = new ApprovalService({ repos, bus, log: rootLog.child({ module: 'approvals' }) });
 const platformTools = new PlatformTools({
   repos,
@@ -207,9 +216,11 @@ const app = await buildServer(config, {
   learn,
   guard,
   approvals,
+  schedules,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
+  schedules.stop();
   await platformMcp.close();
   // Stops running engines and records them as failed ("runner stopped") before the DB closes.
   await runs.shutdown();
@@ -239,6 +250,8 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
 // Recover runs a previous process left `running`, then start scheduling queued work.
 runs.start();
+// Fires due schedules (missed ones are skipped or caught up, per schedule) and then every 30 s.
+schedules.start();
 await app.listen({ host: config.host, port: config.port });
 await platformMcp.listen(config.host, config.mcpPort);
 if (containers) {

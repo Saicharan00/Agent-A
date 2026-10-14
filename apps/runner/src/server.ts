@@ -15,6 +15,8 @@ import type { FilesService } from './files/service';
 import { registerGoalRoutes } from './goals/routes';
 import type { GoalService } from './goals/service';
 import { registerApprovalRoutes } from './approvals/routes';
+import { registerScheduleRoutes } from './schedules/routes';
+import type { ScheduleService } from './schedules/service';
 import type { ApprovalService } from './approvals/service';
 import { registerGuardRoutes } from './guard/routes';
 import type { GuardService } from './guard/service';
@@ -75,6 +77,7 @@ export type ServerDeps = {
   guard?: GuardService;
   /** Approvals inbox (F25): /api/approvals*. */
   approvals?: ApprovalService;
+  schedules?: ScheduleService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -131,6 +134,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.learn) registerLearnRoutes(app, deps.learn);
   if (deps.guard) registerGuardRoutes(app, deps.guard);
   if (deps.approvals) registerApprovalRoutes(app, deps.approvals);
+  if (deps.schedules) registerScheduleRoutes(app, deps.schedules);
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
