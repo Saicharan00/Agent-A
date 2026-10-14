@@ -335,6 +335,8 @@ export const approvals = sqliteTable(
     detailsMd: text('details_md').notNull().default(''),
     risk: text('risk', { enum: RISK_LEVELS }).notNull(),
     status: text('status', { enum: APPROVAL_STATUSES }).notNull().default('pending'),
+    /** The owner's note with the decision (F25), shown to the bot by check_approval. */
+    note: text('note'),
     decidedAt: text('decided_at'),
     createdAt: createdAt(),
   },

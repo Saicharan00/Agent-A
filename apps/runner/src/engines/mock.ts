@@ -4,7 +4,7 @@ import type { EngineAdapter, EngineRunInput } from './types';
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
 // [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan] [mock:remember] [mock:brief];
-// anything else echoes the prompt.
+// [mock:approval] [mock:checkapproval] (the approval id, apr_…, follows in the prompt); anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
   'hello',
@@ -20,6 +20,8 @@ export const MOCK_SCENARIOS = [
   'plan',
   'remember',
   'brief',
+  'approval',
+  'checkapproval',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -493,6 +495,28 @@ export class MockEngine implements EngineAdapter {
         };
         yield* this.platformCall('mock-mcp-1', call, input, emit);
         yield* reply('Saved the carry-over brief to /shared/handoff.');
+        return 'succeeded';
+      }
+      case 'approval': {
+        // request_approval (F25): ask before a risky action, then wait for the owner.
+        const call = {
+          name: 'mcp__agenta__request_approval',
+          input: {
+            action: 'Push to origin/main',
+            details: 'Push the 2 commits on main to GitHub.',
+            risk: 'high',
+          },
+        };
+        yield* this.platformCall('mock-mcp-1', call, input, emit);
+        yield* reply('I asked for your approval before pushing. I will wait until you decide.');
+        return 'succeeded';
+      }
+      case 'checkapproval': {
+        const id = /\bapr_[A-Za-z0-9_-]+/.exec(input.prompt)?.[0] ?? 'apr_missing';
+        const call = { name: 'mcp__agenta__check_approval', input: { approval_id: id } };
+        const output = yield* this.platformCall('mock-mcp-1', call, input, emit);
+        const status = /"status": "([a-z]+)"/.exec(output)?.[1] ?? 'unknown';
+        yield* reply(`Approval ${id} is ${status}.`);
         return 'succeeded';
       }
       case 'pingpong': {

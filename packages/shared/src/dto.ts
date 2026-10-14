@@ -307,6 +307,7 @@ export type ApprovalCreateInput = z.input<typeof approvalCreateSchema>;
 
 export const approvalDecisionSchema = z.object({
   status: z.enum(APPROVAL_STATUSES).exclude(['pending']),
+  note: z.string().trim().max(2_000).optional(),
 });
 export type ApprovalDecisionInput = z.input<typeof approvalDecisionSchema>;
 

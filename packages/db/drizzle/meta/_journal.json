@@ -57,6 +57,13 @@
       "when": 1791942862404,
       "tag": "0007_natural_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791988597767,
+      "tag": "0008_nostalgic_mordo",
+      "breakpoints": true
     }
   ]
 }

@@ -345,6 +345,14 @@ export function renderInstructionFiles(
         ? 'As the lead you assign tasks to others and review handed-in work with `review_task`.'
         : 'Only the lead assigns work to others; ask teammates for help with `ask_bot`.',
     ].join(' '),
+    '## Approvals',
+    [
+      'Call `request_approval` and wait until `check_approval` says approved before you: push to a remote git',
+      'repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files',
+      'outside `/home/bot/work`; install system packages (apt, global npm/pip); or do anything the owner told you',
+      'needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the',
+      "owner's note, tell them, and pick another way or stop.",
+    ].join(' '),
     '## Memory',
     '_Durable facts you saved (pinned first, then the newest). Save more with `save_memory` (never secrets); find older ones with `search_memory`._',
     mem(own),

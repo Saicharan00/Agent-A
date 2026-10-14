@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Bell, Monitor, Moon, Search, Sun } from 'lucide-react';
+import { Monitor, Moon, Search, Sun } from 'lucide-react';
+import { ApprovalsBell } from '@/components/approvals/approvals-bell';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
@@ -132,9 +133,7 @@ export function TopBar() {
           <RunnerPill />
         </div>
 
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications" title="Notifications">
-          <Bell />
-        </Button>
+        <ApprovalsBell />
         <Button
           variant="ghost"
           size="icon-sm"

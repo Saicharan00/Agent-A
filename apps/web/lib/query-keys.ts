@@ -37,4 +37,7 @@ export const queryKeys = {
   lessons: ['learn', 'lessons'] as const,
   workSplit: ['learn', 'work-split'] as const,
   briefs: ['learn', 'briefs'] as const,
+  /** Prefix of every approval query (refetched on approval.changed). */
+  approvals: ['approvals'] as const,
+  pendingApprovals: ['approvals', 'pending'] as const,
 };

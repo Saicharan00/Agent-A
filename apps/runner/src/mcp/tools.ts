@@ -8,6 +8,7 @@ import {
 } from '@agenta/shared';
 import { z } from 'zod';
 import type { EventBus } from '../bus';
+import { ApprovalService } from '../approvals/service';
 import type { GoalService } from '../goals/service';
 import { LearnError, LearnService } from '../learn/service';
 import { MemoryError, MemoryService } from '../memories/service';
@@ -81,6 +82,8 @@ export type PlatformToolsOptions = {
   memories?: MemoryService;
   /** record_decision/add_lesson (F23); default: one without the /shared export or live events. */
   learn?: LearnService;
+  /** request_approval/check_approval (F25); default: one without live events. */
+  approvals?: ApprovalService;
 };
 
 /**
@@ -90,10 +93,12 @@ export type PlatformToolsOptions = {
 export class PlatformTools {
   private readonly memories: MemoryService;
   private readonly learn: LearnService;
+  private readonly approvals: ApprovalService;
 
   constructor(private readonly opts: PlatformToolsOptions) {
     this.memories = opts.memories ?? new MemoryService({ repos: opts.repos });
     this.learn = opts.learn ?? new LearnService({ repos: opts.repos });
+    this.approvals = opts.approvals ?? new ApprovalService({ repos: opts.repos });
   }
 
   /** The turn the bot is in now (a bot runs one turn at a time), so calls can be tied to it. */
@@ -483,21 +488,8 @@ export class PlatformTools {
       }
     },
 
-    request_approval: (bot, { action, details, risk }) => {
-      const { repos } = this.opts;
-      const a = repos.approvals.create({
-        botId: bot.id,
-        runId: this.currentRun(bot.id)?.id ?? null,
-        action,
-        detailsMd: details,
-        risk,
-      });
-      repos.notifications.create({
-        kind: 'approval.requested',
-        title: `${bot.name} asks to: ${action}`,
-        body: `Risk: ${risk}. ${details}`.slice(0, 2_000),
-        link: '/',
-      });
+    request_approval: (bot, input) => {
+      const a = this.approvals.request(bot, input, this.currentRun(bot.id)?.id ?? null);
       return { approval_id: a.id, status: a.status };
     },
 
@@ -505,7 +497,8 @@ export class PlatformTools {
       const a = this.opts.repos.approvals.get(approval_id);
       if (!a || a.botId !== bot.id)
         throw new ToolError('approval_not_found', `No approval ${approval_id} of yours`);
-      return { approval_id: a.id, action: a.action, status: a.status, decided_at: a.decidedAt };
+      const v = this.approvals.get(approval_id);
+      return { approval_id: v.id, action: v.action, status: v.status, note: v.note, decided_at: v.decidedAt };
     },
 
     notify_owner: (bot, { title, body }) => {

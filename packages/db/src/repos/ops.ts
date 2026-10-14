@@ -64,20 +64,20 @@ export function makeApprovalsRepo(db: Db) {
 
     /** pending → approved/denied/expired. Returns undefined if it was already decided. */
     decide(id: string, input: ApprovalDecisionInput): Approval | undefined {
-      const { status } = approvalDecisionSchema.parse(input);
+      const { status, note } = approvalDecisionSchema.parse(input);
       return db
         .update(approvals)
-        .set({ status, decidedAt: nowIso() })
+        .set({ status, note: note || null, decidedAt: nowIso() })
         .where(and(eq(approvals.id, id), eq(approvals.status, 'pending')))
         .returning()
         .get();
     },
 
     /** Expires pending approvals created before `before`. Returns how many expired. */
-    expireOlderThan(before: string): number {
+    expireOlderThan(before: string, at: string = nowIso()): number {
       return db
         .update(approvals)
-        .set({ status: 'expired', decidedAt: nowIso() })
+        .set({ status: 'expired', decidedAt: at })
         .where(and(eq(approvals.status, 'pending'), lte(approvals.createdAt, before)))
         .run().changes;
     },

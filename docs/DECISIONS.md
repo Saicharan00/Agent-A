@@ -665,3 +665,11 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   anyway". The UI offers "Upload anyway"; there is no automatic redaction for files (edit the file instead).
 - **Guard terms stay local:** stored in `guard_terms`, only read by the guard; never rendered into prompts,
   instruction files or memories.
+
+## F25 — Approvals
+- **Expiry is lazy:** pending approvals older than 24 h are expired on every list/get/check (no timer). Nothing can act
+  on a stale approval because every read path expires first; a fake `now` in `ApprovalService` tests it.
+- **"Any action the owner flagged" is an instruction, not a setting:** the Approvals section tells bots to ask for
+  anything the owner said needs approval (in chat or in the bot's instructions). PLAN rules out a policy engine.
+- **The owner can only approve or deny;** `expired` is set by the runner. A decided or expired approval returns 409.
+- **The note is not logged** (it may hold private context); the decision is.

@@ -29,6 +29,7 @@ import { DesktopService } from './desktop/service';
 import { TaskService } from './tasks/service';
 import { ThreadService } from './threads/service';
 import { GuardService } from './guard/service';
+import { ApprovalService } from './approvals/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
@@ -158,8 +159,10 @@ const learn = new LearnService({
   sharedDir: config.sharedDir,
   threads,
 });
+const approvals = new ApprovalService({ repos, bus, log: rootLog.child({ module: 'approvals' }) });
 const platformTools = new PlatformTools({
   repos,
+  approvals,
   threads,
   bus,
   tasks,
@@ -203,6 +206,7 @@ const app = await buildServer(config, {
   memories,
   learn,
   guard,
+  approvals,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
