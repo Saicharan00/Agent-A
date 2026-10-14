@@ -67,6 +67,7 @@ describe('nav', () => {
       '/',
       '/bots',
       '/tasks',
+      '/knowledge',
       '/learn',
       '/schedules',
       '/usage',

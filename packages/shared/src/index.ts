@@ -15,3 +15,5 @@ export * from './files';
 export * from './mcp';
 export * from './tasks';
 export * from './goals';
+export * from './memories';
+export * from './guard';

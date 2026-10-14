@@ -171,7 +171,7 @@ Here is my goal
 Reply as Agent A. Others only see your final message in the thread; mention a teammate with @slug only when you need them."
 `;
 
-exports[`system prompt + instruction files > CLAUDE.md / AGENTS.md without memory (F22 stub) and with memory 1`] = `
+exports[`system prompt + instruction files > CLAUDE.md / AGENTS.md without memory and with memory (F22) 1`] = `
 "# Agent A
 
 <!-- Rendered by Agent A before each run from the bot's settings and memory. Edits here are overwritten. -->
@@ -195,6 +195,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -203,7 +205,7 @@ _Nothing yet._
 "
 `;
 
-exports[`system prompt + instruction files > CLAUDE.md / AGENTS.md without memory (F22 stub) and with memory 2`] = `
+exports[`system prompt + instruction files > CLAUDE.md / AGENTS.md without memory and with memory (F22) 2`] = `
 "# Agent A
 
 <!-- Rendered by Agent A before each run from the bot's settings and memory. Edits here are overwritten. -->
@@ -226,6 +228,8 @@ Plan, delegate, review, teach.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. As the lead you assign tasks to others and review handed-in work with \`review_task\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 ### Owner prefers pnpm
 Use pnpm, never npm.
@@ -339,6 +343,8 @@ platform.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. As the lead you assign tasks to others and review handed-in work with \`review_task\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -567,6 +573,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -635,6 +643,8 @@ you make the trade-offs behind them visible.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -787,6 +797,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -851,6 +863,8 @@ boring to operate.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -961,6 +975,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -1024,6 +1040,8 @@ to rerun.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -1132,6 +1150,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -1195,6 +1215,8 @@ it with honest evaluation.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -1318,6 +1340,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -1382,6 +1406,8 @@ them healthy there.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -1518,6 +1544,8 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 ## Memory
 
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
+
 _Nothing yet._
 
 ## Team knowledge
@@ -1581,6 +1609,8 @@ the fix obvious.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 
@@ -1714,6 +1744,8 @@ the fix obvious.
 The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`list_bots\`, \`ask_bot\` (a teammate starts working; follow up with \`get_run_status\`), threads, tasks (\`create_task\`, \`update_task\`, \`submit_task_result\`), memory, decisions, lessons, \`request_approval\` before risky actions, \`notify_owner\`. Only the lead assigns work to others; ask teammates for help with \`ask_bot\`.
 
 ## Memory
+
+_Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
 
 _Nothing yet._
 

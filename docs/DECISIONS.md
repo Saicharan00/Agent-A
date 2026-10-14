@@ -604,3 +604,18 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   is found by title; a renamed one gets a new Lead Room on reset.
 - **No auto-seed on runner start:** first-launch seeding is `pnpm db:seed` now and the onboarding wizard in F31, so
   e2e specs that expect an empty team keep working.
+
+## F22 — Memory system
+- **Search is SQLite FTS5** (`memories_fts`, external content over `memories`, porter + unicode61, synced by triggers).
+  Query words are quoted and prefix-matched, joined by OR, ranked by bm25 with the title weighted ×2. No embeddings.
+- **Secret check lives in `@agenta/shared/guard.ts` (`findSecrets`)** so F24 can grow it into the full confidentiality
+  guard (emails, IPs, internal hosts, guard terms). Memory saves only reject secrets (keys, tokens, private keys,
+  credential assignments, high-entropy strings ≥32 chars, >4.3 bits/char with mixed case and digits: hex hashes and
+  UUIDs pass). Rejections return 422 `secret_detected` and never echo the matched text.
+- **Rendering budget:** pinned memories first, then newest (own and shared together), until 2,000 words; the memory
+  crossing the cap is cut to the words left (if ≥20) and nothing follows. New `memories.pinned` column.
+- **Shared mirror is one-way (DB → `/shared/knowledge/<id>-<slug>.md`).** The DB is the source of truth; files whose
+  name does not start with a memory id are never touched, so bots can still keep their own notes there. A failed
+  mirror write is logged, not fatal.
+- **All writes go through `MemoryService`** (owner API and bots' `save_memory`), so the guard, mirror and live
+  `memory.changed` event apply to both.

@@ -17,6 +17,7 @@ import { PlatformTools } from './mcp/tools';
 import { ContainerLauncher } from './engines/process';
 import { FilesService } from './files/service';
 import { GoalService } from './goals/service';
+import { MemoryService } from './memories/service';
 import { EngineRegistry } from './engines/registry';
 import { DockerMonitor } from './live/docker-monitor';
 import { LiveHub } from './live/hub';
@@ -39,6 +40,12 @@ const rootLog = pino({ level: config.logLevel, redact: LOG_REDACT });
 const db = openDb(config.dbPath);
 const repos = createRepos(db);
 const bus = new EventBus();
+const memories = new MemoryService({
+  repos,
+  bus,
+  log: rootLog.child({ module: 'memories' }),
+  sharedDir: config.sharedDir,
+});
 const skillsDir = join(config.teamDir, 'skills');
 const containers = config.dockerEnabled
   ? new ContainerManager({
@@ -54,7 +61,7 @@ const containers = config.dockerEnabled
         await engineAuth.prepareHome(botId, home);
         // Instruction files and skills are in the home from the first start, not only after the first run.
         const bot = repos.bots.get(botId);
-        if (bot) renderHome(home, bot, skillsDir);
+        if (bot) renderHome(home, bot, skillsDir, memories.forRender(botId));
       },
     })
   : undefined;
@@ -106,6 +113,7 @@ const runs = new RunService({
     ensureToken: (botId) => void ensureMcpToken(repos, config.botsDir, botId),
     platformMcpUrl: `http://host.docker.internal:${config.mcpPort}/mcp`,
     skillsDir,
+    memories: (botId) => memories.forRender(botId),
   }),
 });
 const bots = new BotService({
@@ -145,6 +153,7 @@ const platformTools = new PlatformTools({
   bus,
   tasks,
   goals,
+  memories,
   log: rootLog.child({ module: 'platform-tools' }),
 });
 const platformMcp = new PlatformMcpServer({
@@ -178,6 +187,7 @@ const app = await buildServer(config, {
   files,
   tasks,
   goals,
+  memories,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

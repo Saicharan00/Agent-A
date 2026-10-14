@@ -38,7 +38,7 @@ export function makeMemoriesRepo(db: Db) {
       return db.select().from(memories).where(eq(memories.id, id)).get();
     },
 
-    /** Most recently updated first. */
+    /** Pinned first, then most recently updated first. */
     list(opts: { scope?: MemoryScope; botId?: string; tag?: string } = {}): Memory[] {
       return db
         .select()
@@ -52,7 +52,7 @@ export function makeMemoriesRepo(db: Db) {
               : undefined,
           ),
         )
-        .orderBy(desc(memories.updatedAt))
+        .orderBy(desc(memories.pinned), desc(memories.updatedAt))
         .all();
     },
 
@@ -68,6 +68,32 @@ export function makeMemoriesRepo(db: Db) {
 
     delete(id: string): boolean {
       return db.delete(memories).where(eq(memories.id, id)).run().changes > 0;
+    },
+
+    /**
+     * Full-text search (SQLite FTS5, porter stemming), best match first; a title match weighs double.
+     * Each query word is matched as a prefix and any word may match. `botId` limits bot-scoped memories to that bot.
+     */
+    search(query: string, opts: { scope?: MemoryScope; botId?: string; limit?: number } = {}): Memory[] {
+      const words = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
+      if (!words.length) return [];
+      // Quoting each word keeps FTS5 syntax (AND, NEAR, column:, quotes) in the query from being interpreted.
+      const match = words.map((w) => `"${w}"*`).join(' OR ');
+      return db
+        .select({ m: memories })
+        .from(memories)
+        .innerJoin(sql`memories_fts`, sql`memories_fts.rowid = ${memories}.rowid`)
+        .where(
+          and(
+            sql`memories_fts match ${match}`,
+            opts.scope ? eq(memories.scope, opts.scope) : undefined,
+            opts.botId ? sql`(${memories.scope} = 'shared' or ${memories.botId} = ${opts.botId})` : undefined,
+          ),
+        )
+        .orderBy(sql`bm25(memories_fts, 2.0, 1.0, 1.0)`, desc(memories.updatedAt))
+        .limit(opts.limit ?? 20)
+        .all()
+        .map((r) => r.m);
     },
   };
 }

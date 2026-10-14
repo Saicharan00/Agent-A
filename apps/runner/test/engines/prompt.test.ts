@@ -115,7 +115,7 @@ describe('system prompt + instruction files', () => {
     expect(buildSystemPromptAppend(bot, group)).toMatchSnapshot();
   });
 
-  it('CLAUDE.md / AGENTS.md without memory (F22 stub) and with memory', () => {
+  it('CLAUDE.md / AGENTS.md without memory and with memory (F22)', () => {
     const lead = {
       name: 'Agent A',
       role: 'Lead AI Engineer',

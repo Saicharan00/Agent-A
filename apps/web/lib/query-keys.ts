@@ -27,4 +27,7 @@ export const queryKeys = {
   /** Prefix of every goal query (refetched on goal.changed and task.changed). */
   goals: ['goals'] as const,
   goalList: ['goals', 'list'] as const,
+  /** Prefix of every memory query (refetched on memory.changed). */
+  memories: ['memories'] as const,
+  memoryList: (f: { scope: string; botId?: string; q?: string }) => ['memories', 'list', f] as const,
 };

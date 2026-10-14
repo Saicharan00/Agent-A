@@ -231,6 +231,7 @@ export const memoryCreateSchema = z
     contentMd: z.string().max(50_000),
     tags: z.array(z.string().min(1).max(40)).default([]),
     sourceRunId: z.string().nullable().default(null),
+    pinned: z.boolean().default(false),
   })
   .refine((m) => (m.scope === 'bot') === (m.botId !== null), {
     message: 'botId is required for bot-scoped memories and forbidden for shared ones',
@@ -243,6 +244,7 @@ export const memoryUpdateSchema = z
     title: z.string().trim().min(1).max(200),
     contentMd: z.string().max(50_000),
     tags: z.array(z.string().min(1).max(40)),
+    pinned: z.boolean(),
   })
   .partial();
 export type MemoryUpdateInput = z.input<typeof memoryUpdateSchema>;

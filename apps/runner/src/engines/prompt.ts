@@ -295,8 +295,8 @@ export type InstructionFiles = { 'CLAUDE.md': string; 'AGENTS.md': string };
 export type InstructionSkill = { name: string; description: string; body: string };
 
 /**
- * Renders /home/bot/CLAUDE.md and AGENTS.md from the bot's instructions and memory (memory is a stub until F22:
- * callers pass none yet). Both engines get the same content, except skills: Claude Code loads them from
+ * Renders /home/bot/CLAUDE.md and AGENTS.md from the bot's instructions and memory (already selected and capped,
+ * MemoryService.forRender). Both engines get the same content, except skills: Claude Code loads them from
  * ~/.claude/skills itself, so CLAUDE.md only lists them; AGENTS.md carries their full text for Codex.
  */
 export function renderInstructionFiles(
@@ -335,6 +335,7 @@ export function renderInstructionFiles(
         : 'Only the lead assigns work to others; ask teammates for help with `ask_bot`.',
     ].join(' '),
     '## Memory',
+    '_Durable facts you saved (pinned first, then the newest). Save more with `save_memory` (never secrets); find older ones with `search_memory`._',
     mem(own),
     '## Team knowledge',
     mem(shared),

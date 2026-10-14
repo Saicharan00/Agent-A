@@ -43,6 +43,13 @@
       "when": 1791929748960,
       "tag": "0005_clear_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791939989260,
+      "tag": "0006_strong_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

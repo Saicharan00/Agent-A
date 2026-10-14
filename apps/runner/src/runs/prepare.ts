@@ -16,12 +16,12 @@ import { bootstrapHome, botHomeDir } from '../containers/home';
 import type { ContainerManager } from '../containers/manager';
 import { MCP_TOKEN_FILE } from '../bots/mcp-token';
 import { withManagedServers } from '../engines/mcp-config';
-import { renderInstructionFiles, writeInstructionFiles } from '../engines/prompt';
+import { type InstructionMemory, renderInstructionFiles, writeInstructionFiles } from '../engines/prompt';
 import type { PrepareComputer } from './service';
 
 /**
  * Before a real-engine turn: start the bot's computer on demand, hold a lease so the idle sweep can't stop it
- * mid-run, render /home/bot/CLAUDE.md + AGENTS.md from the bot's current instructions (memory: F22) and make
+ * mid-run, render /home/bot/CLAUDE.md + AGENTS.md from the bot's current instructions and memory (F22) and make
  * sure the MCP config (/home/bot/.agenta/mcp.json) has Playwright (F16) and the Platform MCP server (F17), re-issuing
  * the bot's MCP token if the home lost it. The mock engine never touches the computer, so tests and e2e need no Docker.
  */
@@ -34,6 +34,8 @@ export function computerPreparer(opts: {
   platformMcpUrl?: string;
   /** templates/team/skills (F21); unset: bots get no skills. */
   skillsDir?: string;
+  /** The memory rendered into the bot's instruction files (F22); unset: none. */
+  memories?: (botId: string) => InstructionMemory[];
 }): PrepareComputer {
   return async (bot: Bot, engine: Engine) => {
     if (engine === 'mock') return () => undefined;
@@ -45,7 +47,7 @@ export function computerPreparer(opts: {
       const home = botHomeDir(opts.botsDir, bot.id);
       bootstrapHome(home);
       opts.ensureToken?.(bot.id);
-      renderHome(home, bot, opts.skillsDir);
+      renderHome(home, bot, opts.skillsDir, opts.memories?.(bot.id));
       writeMcpConfig(home, opts.platformMcpUrl);
     } catch (err) {
       release();
@@ -56,13 +58,18 @@ export function computerPreparer(opts: {
 }
 
 /**
- * Renders the bot's instruction files and its skills (`settings.skills`, from `skillsDir`) into its home.
+ * Renders the bot's instruction files (with its memory) and its skills (`settings.skills`, from `skillsDir`) into its home.
  * Runs before every real-engine turn and when the computer starts, so the files are there from the first start.
  */
-export function renderHome(home: string, bot: Bot, skillsDir?: string): void {
+export function renderHome(
+  home: string,
+  bot: Bot,
+  skillsDir?: string,
+  memories: InstructionMemory[] = [],
+): void {
   const all = skillsDir ? loadSkills(skillsDir) : new Map<string, TeamSkill>();
   const skills = (bot.settings.skills ?? []).flatMap((n) => all.get(n) ?? []);
-  writeInstructionFiles(home, renderInstructionFiles(bot, [], skills));
+  writeInstructionFiles(home, renderInstructionFiles(bot, memories, skills));
   writeSkills(home, skills);
 }
 

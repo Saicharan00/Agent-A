@@ -1,4 +1,4 @@
-import type { Bot, Memory, Repos, Run, Task } from '@agenta/db';
+import type { Bot, Repos, Run, Task } from '@agenta/db';
 import {
   MAX_REVISION_ROUNDS,
   PLATFORM_TOOL_PREFIX,
@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 import type { EventBus } from '../bus';
 import type { GoalService } from '../goals/service';
+import { MemoryError, MemoryService } from '../memories/service';
 import { publishTaskChanged, type TaskService } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
 
@@ -73,6 +74,8 @@ export type PlatformToolsOptions = {
   tasks?: Pick<TaskService, 'start'>;
   /** The goal loop: reviews of handed-in work and escalations to the owner (F20). */
   goals?: Pick<GoalService, 'onSubmitted' | 'escalate'>;
+  /** save_memory/search_memory (F22); default: one without a /shared mirror or live events. */
+  memories?: MemoryService;
 };
 
 /**
@@ -80,7 +83,11 @@ export type PlatformToolsOptions = {
  * `call(bot, name, input)`. The calling bot is always the authenticated one; results are plain JSON objects.
  */
 export class PlatformTools {
-  constructor(private readonly opts: PlatformToolsOptions) {}
+  private readonly memories: MemoryService;
+
+  constructor(private readonly opts: PlatformToolsOptions) {
+    this.memories = opts.memories ?? new MemoryService({ repos: opts.repos });
+  }
 
   /** The turn the bot is in now (a bot runs one turn at a time), so calls can be tied to it. */
   currentRun(botId: string): Run | undefined {
@@ -246,34 +253,27 @@ export class PlatformTools {
     },
 
     save_memory: (bot, { title, content, scope, tags }) => {
-      const m = this.opts.repos.memories.create({
-        scope,
-        botId: scope === 'bot' ? bot.id : null,
-        title,
-        contentMd: content,
-        tags,
-        sourceRunId: this.currentRun(bot.id)?.id ?? null,
-      });
-      return { id: m.id, scope: m.scope, title: m.title };
+      try {
+        const m = this.memories.create(
+          { scope, botId: scope === 'bot' ? bot.id : undefined, title, contentMd: content, tags },
+          this.currentRun(bot.id)?.id ?? null,
+        );
+        return { id: m.id, scope: m.scope, title: m.title };
+      } catch (err) {
+        if (err instanceof MemoryError) throw new ToolError(err.code, err.message);
+        throw err;
+      }
     },
 
-    search_memory: (bot, { query, scope, limit }) => {
-      const { memories } = this.opts.repos;
-      const pool: Memory[] = [
-        ...(scope === 'shared' ? [] : memories.list({ scope: 'bot', botId: bot.id })),
-        ...(scope === 'bot' ? [] : memories.list({ scope: 'shared' })),
-      ];
-      return rankMemories(pool, query)
-        .slice(0, limit)
-        .map((m) => ({
-          id: m.id,
-          scope: m.scope,
-          title: m.title,
-          content: clip(m.contentMd, MAX_MEMORY_CHARS),
-          tags: m.tags,
-          updated_at: m.updatedAt,
-        }));
-    },
+    search_memory: (bot, { query, scope, limit }) =>
+      this.memories.search(bot.id, query, scope, limit).map((m) => ({
+        id: m.id,
+        scope: m.scope,
+        title: m.title,
+        content: clip(m.contentMd, MAX_MEMORY_CHARS),
+        tags: m.tags,
+        updated_at: m.updatedAt,
+      })),
 
     create_task: (bot, input) => {
       const { repos } = this.opts;
@@ -501,23 +501,4 @@ export class PlatformTools {
       return { notification_id: n.id };
     },
   };
-}
-
-/**
- * Keyword match, best first: each query word found in the title counts 2, in the tags or text 1; memories that
- * match no word are dropped. Ties keep the newest first (the repo's order).
- * shortcut: substring scoring over every memory of the bot, fine for hundreds; F22 can move it to SQLite FTS.
- */
-export function rankMemories(pool: Memory[], query: string): Memory[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return pool
-    .map((m) => {
-      const title = m.title.toLowerCase();
-      const rest = `${m.contentMd} ${m.tags.join(' ')}`.toLowerCase();
-      const score = words.reduce((s, w) => s + (title.includes(w) ? 2 : 0) + (rest.includes(w) ? 1 : 0), 0);
-      return { m, score };
-    })
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map((x) => x.m);
 }

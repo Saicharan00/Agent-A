@@ -3,7 +3,7 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan];
+// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan] [mock:remember];
 // anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
@@ -18,6 +18,7 @@ export const MOCK_SCENARIOS = [
   'pingpong',
   'task',
   'plan',
+  'remember',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -463,6 +464,19 @@ export class MockEngine implements EngineAdapter {
       }
       case 'plan': {
         yield* this.goalTurn(input, emit);
+        return 'succeeded';
+      }
+      case 'remember': {
+        // save_memory (F22): a durable fact for the bot's own memory.
+        const call = {
+          name: 'mcp__agenta__save_memory',
+          input: {
+            title: 'Owner prefers short answers',
+            content: 'Keep replies to a few lines unless asked.',
+          },
+        };
+        yield* this.platformCall('mock-mcp-1', call, input, emit);
+        yield* reply('Noted: I will remember that you prefer short answers.');
         return 'succeeded';
       }
       case 'pingpong': {

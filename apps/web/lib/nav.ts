@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
   Bot,
+  Brain,
   CalendarClock,
   GraduationCap,
   Home,
@@ -17,6 +18,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/bots', label: 'Bots', icon: Bot, keywords: 'team teammates' },
   { href: '/tasks', label: 'Tasks', icon: KanbanSquare, keywords: 'board kanban' },
+  { href: '/knowledge', label: 'Knowledge', icon: Brain, keywords: 'memory shared team' },
   { href: '/learn', label: 'Learn', icon: GraduationCap, keywords: 'lessons decisions mentor' },
   { href: '/schedules', label: 'Schedules', icon: CalendarClock, keywords: 'cron' },
   { href: '/usage', label: 'Usage', icon: BarChart3, keywords: 'limits' },

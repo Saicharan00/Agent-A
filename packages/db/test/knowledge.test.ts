@@ -90,3 +90,45 @@ describe('lessonsRepo', () => {
     expect(t.repos.lessons.delete(later.id)).toBe(true);
   });
 });
+
+describe('memoriesRepo.search (FTS5)', () => {
+  const t = useTestDb();
+
+  it('ranks by relevance, stems, scopes per bot and survives FTS syntax', () => {
+    const a = t.repos.bots.create({ name: 'A', engine: 'mock' });
+    const b = t.repos.bots.create({ name: 'B', engine: 'mock' });
+    const mine = t.repos.memories.create({
+      scope: 'bot',
+      botId: a.id,
+      title: 'Deploying the site',
+      contentMd: 'Use the staging branch first.',
+    });
+    const theirs = t.repos.memories.create({
+      scope: 'bot',
+      botId: b.id,
+      title: 'Deploy notes',
+      contentMd: 'private to B',
+    });
+    const shared = t.repos.memories.create({
+      scope: 'shared',
+      title: 'Release checklist',
+      contentMd: 'Before you deploy, run the tests.',
+    });
+    const ids = (q: string, o?: Parameters<typeof t.repos.memories.search>[1]) =>
+      t.repos.memories.search(q, o).map((m) => m.id);
+
+    // "deploys" stems to "deploy"; the title hit ranks above the body hit; B's memory is hidden from A.
+    expect(ids('deploys', { botId: a.id })).toEqual([mine.id, shared.id]);
+    expect(ids('deploy', { scope: 'shared' })).toEqual([shared.id]);
+    expect(ids('deploy')).toHaveLength(3);
+    expect(ids('stag')).toEqual([mine.id]); // prefix match
+    expect(ids('"AND NEAR( title:')).toEqual([]);
+    expect(ids('   ')).toEqual([]);
+
+    // Index follows updates and deletes.
+    t.repos.memories.update(theirs.id, { title: 'Unrelated', contentMd: 'nothing' });
+    expect(ids('deploy')).not.toContain(theirs.id);
+    t.repos.memories.delete(mine.id);
+    expect(ids('staging')).toEqual([]);
+  });
+});

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { EmptyState } from '@/components/empty-state';
+import { MemoryPanel } from '@/components/memory/memory-panel';
 import { Page, PageHeader } from '@/components/page-header';
 import { useShell } from '@/components/shell/shell-context';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { STATUS_LABEL } from '@/lib/avatar';
 import { botToForm, botsApi, changedFields, relativeTime } from '@/lib/bots';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 import { BotForm } from './bot-form';
 import { EngineBadge } from './bot-card';
 import { DeleteBotDialog } from './delete-bot-dialog';
@@ -59,6 +61,7 @@ function BotDetailLoaded({ bot }: { bot: BotView }) {
   const { openComputer } = useShell();
   const { archive, restore, duplicate } = useBotActions();
   const [deleting, setDeleting] = useState(false);
+  const [tab, setTab] = useState<'settings' | 'memory'>('settings');
   const archived = bot.archivedAt !== null;
   const initial = botToForm(bot);
 
@@ -117,65 +120,97 @@ function BotDetailLoaded({ bot }: { bot: BotView }) {
         </p>
       )}
 
-      {/* Re-mounts when the saved settings change (saved here or elsewhere), never on status-only updates. */}
-      <BotForm
-        key={JSON.stringify(initial)}
-        initial={initial}
-        base={bot}
-        submitLabel="Save changes"
-        onSubmit={async (body) => {
-          const patch = changedFields(body, bot);
-          if (Object.keys(patch).length === 0) {
-            toast('No changes to save');
-            return;
-          }
-          const res = await botsApi.update(bot.id, patch);
-          qc.setQueryData(queryKeys.bot(bot.id), res.bot);
-          void qc.invalidateQueries({ queryKey: queryKeys.bots });
-          toast.success('Bot saved');
-          if (res.restartRequired)
-            toast.warning('Resource limits apply after the computer restarts (Stop, then start it again).');
-        }}
-      />
+      <div role="tablist" aria-label="Bot sections" className="flex gap-1 border-b">
+        {(['settings', 'memory'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            id={`bot-tab-${t}`}
+            aria-selected={tab === t}
+            aria-controls={`bot-panel-${t}`}
+            onClick={() => setTab(t)}
+            className={cn(
+              '-mb-px border-b-2 px-3 py-1.5 text-sm capitalize',
+              tab === t
+                ? 'border-primary font-medium text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
-      <section
-        aria-labelledby="danger-zone"
-        className="space-y-3 rounded-lg border border-destructive/30 p-4"
-      >
-        <h2 id="danger-zone" className="text-sm font-semibold">
-          Danger zone
-        </h2>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {archived
-              ? 'Delete removes the bot and its computer for good.'
-              : 'Archive stops the computer and hides the bot, keeping all its data.'}
-          </p>
-          <div className="flex gap-2">
-            {!archived && !bot.isLead && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => archive.mutate(bot)}
-                disabled={archive.isPending}
-              >
-                <Archive /> Archive
-              </Button>
-            )}
-            {!bot.isLead && (
-              <Button variant="destructive" size="sm" onClick={() => setDeleting(true)}>
-                <Trash2 /> Delete…
-              </Button>
-            )}
-          </div>
+      {tab === 'memory' ? (
+        <div role="tabpanel" id="bot-panel-memory" aria-labelledby="bot-tab-memory">
+          <MemoryPanel scope="bot" botId={bot.id} />
         </div>
-      </section>
-      <DeleteBotDialog
-        bot={bot}
-        open={deleting}
-        onClose={() => setDeleting(false)}
-        onDeleted={() => router.push('/bots')}
-      />
+      ) : (
+        <div role="tabpanel" id="bot-panel-settings" aria-labelledby="bot-tab-settings" className="space-y-6">
+          {/* Re-mounts when the saved settings change (saved here or elsewhere), never on status-only updates. */}
+          <BotForm
+            key={JSON.stringify(initial)}
+            initial={initial}
+            base={bot}
+            submitLabel="Save changes"
+            onSubmit={async (body) => {
+              const patch = changedFields(body, bot);
+              if (Object.keys(patch).length === 0) {
+                toast('No changes to save');
+                return;
+              }
+              const res = await botsApi.update(bot.id, patch);
+              qc.setQueryData(queryKeys.bot(bot.id), res.bot);
+              void qc.invalidateQueries({ queryKey: queryKeys.bots });
+              toast.success('Bot saved');
+              if (res.restartRequired)
+                toast.warning(
+                  'Resource limits apply after the computer restarts (Stop, then start it again).',
+                );
+            }}
+          />
+
+          <section
+            aria-labelledby="danger-zone"
+            className="space-y-3 rounded-lg border border-destructive/30 p-4"
+          >
+            <h2 id="danger-zone" className="text-sm font-semibold">
+              Danger zone
+            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {archived
+                  ? 'Delete removes the bot and its computer for good.'
+                  : 'Archive stops the computer and hides the bot, keeping all its data.'}
+              </p>
+              <div className="flex gap-2">
+                {!archived && !bot.isLead && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => archive.mutate(bot)}
+                    disabled={archive.isPending}
+                  >
+                    <Archive /> Archive
+                  </Button>
+                )}
+                {!bot.isLead && (
+                  <Button variant="destructive" size="sm" onClick={() => setDeleting(true)}>
+                    <Trash2 /> Delete…
+                  </Button>
+                )}
+              </div>
+            </div>
+          </section>
+          <DeleteBotDialog
+            bot={bot}
+            open={deleting}
+            onClose={() => setDeleting(false)}
+            onDeleted={() => router.push('/bots')}
+          />
+        </div>
+      )}
     </Page>
   );
 }

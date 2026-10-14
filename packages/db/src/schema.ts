@@ -282,6 +282,8 @@ export const memories = sqliteTable(
       .notNull()
       .default(sql`'[]'`),
     sourceRunId: text('source_run_id').references(() => runs.id, { onDelete: 'set null' }),
+    /** Pinned memories are always rendered into the bot's instruction files, before the most recent (F22). */
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

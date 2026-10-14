@@ -41,11 +41,15 @@ describe('db client', () => {
     const db = openDb(tempFile());
     const tables = db.$client
       .prepare(
-        "select name from sqlite_master where type='table' and name not like 'sqlite_%' and name not like '__drizzle%' order by name",
+        // memories_fts* is the FTS5 index over memories (F22) and its shadow tables.
+        "select name from sqlite_master where type='table' and name not like 'sqlite_%' and name not like '__drizzle%' and name not like 'memories_fts%' order by name",
       )
       .all()
       .map((r) => (r as { name: string }).name);
     expect(tables).toEqual(ALL_TABLES);
+    expect(
+      db.$client.prepare("select name from sqlite_master where name = 'memories_fts'").get(),
+    ).toBeTruthy();
     closeDb(db);
   });
 
