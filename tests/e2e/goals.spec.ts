@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { closeDb, createRepos, openDb } from '@agenta/db';
+import { applyTeamTemplate, closeDb, createRepos, loadTeamTemplate, openDb } from '@agenta/db';
 import type { GoalView, TaskView } from '../../packages/shared/src/index';
 
 // Agent A delegation loop (F20) against the mock engine: goal → plan → confirm → 3 tasks → one round of changes →
@@ -16,23 +16,11 @@ function trackConsole(page: Page): string[] {
 
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-/** The e2e DB has no seeded team yet (F21), so make sure a lead exists, plus one specialist. */
+/** The e2e DB starts empty: seed the Agent A team (F21), as `pnpm db:seed` does. */
 function ensureTeam(): void {
   const db = openDb('data/e2e/agenta.db');
   try {
-    const repos = createRepos(db);
-    if (!repos.bots.getLead()) {
-      repos.bots.create({
-        name: 'Agent A',
-        slug: 'agent-a',
-        engine: 'mock',
-        isLead: true,
-        avatarColor: '#6366f1',
-      });
-    }
-    if (!repos.bots.list().some((b) => !b.isLead)) {
-      repos.bots.create({ name: 'Builder', engine: 'mock', avatarColor: '#10b981' });
-    }
+    applyTeamTemplate(createRepos(db), loadTeamTemplate('templates/team'), { restore: false });
   } finally {
     closeDb(db);
   }

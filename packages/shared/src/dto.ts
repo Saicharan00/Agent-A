@@ -29,6 +29,8 @@ const slug = z
   .max(48)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'lowercase letters, digits and single dashes');
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'a #rrggbb colour');
+/** A skill folder name under templates/team/skills (F21). */
+export const skillNameSchema = slug;
 
 // ---------- bots ----------
 export const botSettingsSchema = z.object({
@@ -37,6 +39,8 @@ export const botSettingsSchema = z.object({
   idleTimeoutMin: z.number().int().min(0).max(1440).default(30),
   /** Per-run time limit in minutes (F10). Unset: the runner default (30). Optional so older rows still parse. */
   runTimeoutMin: z.number().int().min(1).max(1440).optional(),
+  /** Team skills rendered into the bot's home before each run (F21). Optional so older rows still parse. */
+  skills: z.array(skillNameSchema).max(50).optional(),
   flags: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });
 export type BotSettings = z.infer<typeof botSettingsSchema>;

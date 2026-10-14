@@ -1,9 +1,10 @@
-import type { Bot, Repos } from '@agenta/db';
+import { type Bot, type Repos, applyTeamTemplate, loadTeamTemplate } from '@agenta/db';
 import {
   type BotCreateRequest,
   type BotUpdateRequest,
   type BotView,
   type LiveBotsChanged,
+  type TeamResetResponse,
   botCreateRequestSchema,
   botUpdateRequestSchema,
 } from '@agenta/shared';
@@ -34,6 +35,8 @@ export type BotServiceOptions = {
   containers?: ContainerManager;
   /** Absent in tests that don't run anything: no runs to cancel. */
   runs?: Pick<RunService, 'cancel'>;
+  /** templates/team (F21); absent: "Reset team to defaults" is unavailable. */
+  teamDir?: string;
 };
 
 /** Settings fields baked into the container at create time (see ContainerManager.discardStale). */
@@ -217,6 +220,29 @@ export class BotService {
         }),
       ),
     );
+  }
+
+  /**
+   * "Reset team to defaults" (F21): recreates missing template bots and the Lead Room, and restores the template's
+   * role, instructions, skills and lead flag on the others. Threads, tasks, memories and homes are kept.
+   */
+  resetTeam(): TeamResetResponse {
+    if (!this.opts.teamDir) throw new BotError('team_unavailable', 'No team template is configured', 503);
+    const res = applyTeamTemplate(this.opts.repos, loadTeamTemplate(this.opts.teamDir), { restore: true });
+    for (const b of res.created) {
+      this.provision(b.id);
+      this.changed(b.id, 'created');
+    }
+    for (const b of res.restored) this.changed(b.id, 'updated');
+    this.opts.log.info(
+      { created: res.created.length, restored: res.restored.length, leadRoomId: res.leadRoom.id },
+      'team reset to defaults',
+    );
+    return {
+      created: res.created.map((b) => b.name),
+      restored: res.restored.map((b) => b.name),
+      leadRoomId: res.leadRoom.id,
+    };
   }
 
   private changed(botId: string, change: LiveBotsChanged['change']): void {

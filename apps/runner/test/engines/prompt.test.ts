@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Message } from '@agenta/db';
+import { type Message, loadTeamTemplate } from '@agenta/db';
 import { describe, expect, it } from 'vitest';
 import {
   type PromptMessage,
@@ -145,6 +145,22 @@ describe('system prompt + instruction files', () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+});
+
+describe('team template instruction files (F21)', () => {
+  const template = loadTeamTemplate(join(import.meta.dirname, '../../../../templates/team'));
+  for (const t of template.bots) {
+    it(`renders ${t.slug}`, () => {
+      const skills = t.skills.map((n) => template.skills.get(n)!);
+      const files = renderInstructionFiles({ ...t, isLead: t.isLead }, [], skills);
+      expect(files['CLAUDE.md']).toMatchSnapshot('CLAUDE.md');
+      expect(files['AGENTS.md']).toMatchSnapshot('AGENTS.md');
+      for (const s of skills) {
+        expect(files['CLAUDE.md']).toContain(`- \`${s.name}\`: ${s.description}`);
+        expect(files['AGENTS.md']).toContain(s.body);
+      }
+    });
+  }
 });
 
 describe('goal prompts (F20)', () => {

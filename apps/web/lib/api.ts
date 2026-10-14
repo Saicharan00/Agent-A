@@ -5,6 +5,7 @@ import {
   engineQueueStateResponseSchema,
   engineSettingsResponseSchema,
   healthResponseSchema,
+  teamResetResponseSchema,
 } from '@agenta/shared';
 import type { z } from 'zod';
 
@@ -104,4 +105,6 @@ export const api = {
   /** Usage-limit pauses per engine and the engine override (F11). */
   engineState: (fetchImpl?: typeof fetch) =>
     apiRequest('/engines/state', engineQueueStateResponseSchema, {}, fetchImpl),
+  /** "Reset team to defaults" (F21): restores the Agent A team's instructions and skills, keeps all data. */
+  resetTeam: () => apiRequest('/team/reset', teamResetResponseSchema, { method: 'POST' }),
 };

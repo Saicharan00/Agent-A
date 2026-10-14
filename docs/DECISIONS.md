@@ -585,3 +585,22 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   Ctrl+K → "New goal" focuses the form. Goal queries refetch on `goal.changed`, `task.changed` and `run.updated`.
 - **E2E lead:** the e2e DB has no seeded team until F21, so `goals.spec.ts` inserts a mock lead (and a specialist)
   straight into `data/e2e/agenta.db` through `@agenta/db`.
+
+## F21 — Agent A team templates & skills
+- **Template format:** `templates/team/team.json` (bots: slug, name, role, engine, lead flag, avatar, skills; the group),
+  `bots/<slug>.md` (instructions) and `skills/<name>/SKILL.md` (Claude Code skill format, `name` + `description` front
+  matter). Loaded and validated by `@agenta/db` (`loadTeamTemplate`: exactly one lead, every skill exists).
+- **Seed:** `pnpm db:seed` now creates the 7-bot team, a DM per bot and the "Lead Room" group (all members, Agent A
+  moderates), idempotently by slug. The Echo Bot seed (`seedDb`) stays as a test helper only.
+- **Skills live in `bots.settings.skills`** (optional list of skill names), so they survive renames and can be edited
+  through the existing PATCH. Unknown names are ignored when rendering.
+- **Rendering:** before each real-engine run and when a computer starts (`prepareHome`), the runner copies the bot's
+  skills to `~/.claude/skills/<name>/` (marked `.agenta-managed`; unmarked, hand-made skills are never touched,
+  ours that the bot no longer has are removed). CLAUDE.md lists the skills (Claude Code loads them itself); AGENTS.md
+  carries their full text for Codex, as PLAN.md asks.
+- **Reset team to defaults** (`POST /api/team/reset`, Settings → Team): recreates missing team bots and the Lead Room;
+  for existing team bots (archived ones are restored) it restores role, instructions, skills and the lead flag, and
+  makes Agent A the only lead. Names, engines, models, avatars, resource limits and all data are kept. The Lead Room
+  is found by title; a renamed one gets a new Lead Room on reset.
+- **No auto-seed on runner start:** first-launch seeding is `pnpm db:seed` now and the onboarding wizard in F31, so
+  e2e specs that expect an empty team keep working.

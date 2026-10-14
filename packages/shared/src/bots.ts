@@ -81,3 +81,11 @@ export const liveBotsChangedSchema = z.object({
   change: z.enum(['created', 'updated', 'archived', 'restored', 'deleted']),
 });
 export type LiveBotsChanged = z.infer<typeof liveBotsChangedSchema>;
+
+/** POST /api/team/reset (F21): template bots created or restored by name, and the Lead Room's thread. */
+export const teamResetResponseSchema = z.object({
+  created: z.array(z.string()),
+  restored: z.array(z.string()),
+  leadRoomId: z.string(),
+});
+export type TeamResetResponse = z.infer<typeof teamResetResponseSchema>;

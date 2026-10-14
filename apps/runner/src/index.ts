@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { closeDb, createRepos, openDb } from '@agenta/db';
 import { loadRootEnv } from '@agenta/shared/env';
 import { BotService } from './bots/service';
@@ -19,7 +20,7 @@ import { GoalService } from './goals/service';
 import { EngineRegistry } from './engines/registry';
 import { DockerMonitor } from './live/docker-monitor';
 import { LiveHub } from './live/hub';
-import { computerPreparer } from './runs/prepare';
+import { computerPreparer, renderHome } from './runs/prepare';
 import { RunService } from './runs/service';
 import { TerminalService } from './terminal/service';
 import { DesktopService } from './desktop/service';
@@ -38,6 +39,7 @@ const rootLog = pino({ level: config.logLevel, redact: LOG_REDACT });
 const db = openDb(config.dbPath);
 const repos = createRepos(db);
 const bus = new EventBus();
+const skillsDir = join(config.teamDir, 'skills');
 const containers = config.dockerEnabled
   ? new ContainerManager({
       docker: createDockerApi(),
@@ -48,7 +50,12 @@ const containers = config.dockerEnabled
       sharedDir: config.sharedDir,
       // Proxy settings only: engine credentials are injected per exec (EngineAuth.execEnv), never here.
       containerEnv: proxyEnv(process.env),
-      prepareHome: (botId, home) => engineAuth.prepareHome(botId, home),
+      prepareHome: async (botId, home) => {
+        await engineAuth.prepareHome(botId, home);
+        // Instruction files and skills are in the home from the first start, not only after the first run.
+        const bot = repos.bots.get(botId);
+        if (bot) renderHome(home, bot, skillsDir);
+      },
     })
   : undefined;
 const engineAuth: EngineAuth = new EngineAuth({
@@ -98,6 +105,7 @@ const runs = new RunService({
     botsDir: config.botsDir,
     ensureToken: (botId) => void ensureMcpToken(repos, config.botsDir, botId),
     platformMcpUrl: `http://host.docker.internal:${config.mcpPort}/mcp`,
+    skillsDir,
   }),
 });
 const bots = new BotService({
@@ -107,6 +115,7 @@ const bots = new BotService({
   botsDir: config.botsDir,
   containers,
   runs,
+  teamDir: config.teamDir,
 });
 const threads = new ThreadService({
   repos,

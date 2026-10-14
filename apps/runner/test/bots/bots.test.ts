@@ -34,7 +34,15 @@ describe('bots API', () => {
       healthPollMs: 1,
       healthTimeoutMs: 50,
     });
-    bots = new BotService({ repos: h.repos, bus: h.bus, log: silent, botsDir, containers, runs: h.service });
+    bots = new BotService({
+      repos: h.repos,
+      bus: h.bus,
+      log: silent,
+      botsDir,
+      containers,
+      runs: h.service,
+      teamDir: config.teamDir,
+    });
     app = await buildServer(config, { repos: h.repos, runs: h.service, containers, bots });
   });
   afterEach(async () => {
@@ -45,6 +53,24 @@ describe('bots API', () => {
   const create = async (body: Record<string, unknown>) =>
     app.inject({ method: 'POST', url: '/api/bots', payload: body });
   const tokenFile = (id: string) => join(botsDir, id, 'home', '.agenta', 'mcp-token');
+
+  it('POST /api/team/reset creates the team and Lead Room, then restores edited instructions (F21)', async () => {
+    const first = await app.inject({ method: 'POST', url: '/api/team/reset' });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      restored: [],
+      created: expect.arrayContaining(['Agent A', 'Architect']),
+    });
+    expect(first.json().created).toHaveLength(7);
+    const lead = h.repos.bots.getLead()!;
+    expect(existsSync(tokenFile(lead.id))).toBe(true);
+    await app.inject({ method: 'PATCH', url: `/api/bots/${lead.id}`, payload: { instructions: 'mine' } });
+
+    const second = await app.inject({ method: 'POST', url: '/api/team/reset' });
+    expect(second.json()).toMatchObject({ created: [], leadRoomId: first.json().leadRoomId });
+    expect(second.json().restored).toHaveLength(7);
+    expect(h.repos.bots.get(lead.id)!.instructions).toMatch(/You are Agent A/);
+  });
 
   it('creates a bot with a DM thread, a home and a hashed MCP token, but no container', async () => {
     const res = await create({ name: 'Code Reviewer', role: 'Reviews PRs', engine: 'claude' });

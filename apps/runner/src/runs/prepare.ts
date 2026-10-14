@@ -1,6 +1,16 @@
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Bot } from '@agenta/db';
+import { type Bot, type TeamSkill, loadSkills } from '@agenta/db';
 import type { Engine } from '@agenta/shared';
 import { bootstrapHome, botHomeDir } from '../containers/home';
 import type { ContainerManager } from '../containers/manager';
@@ -22,6 +32,8 @@ export function computerPreparer(opts: {
   ensureToken?: (botId: string) => void;
   /** The Platform MCP URL as bots reach it (http://host.docker.internal:<port>/mcp); unset: not configured. */
   platformMcpUrl?: string;
+  /** templates/team/skills (F21); unset: bots get no skills. */
+  skillsDir?: string;
 }): PrepareComputer {
   return async (bot: Bot, engine: Engine) => {
     if (engine === 'mock') return () => undefined;
@@ -33,7 +45,7 @@ export function computerPreparer(opts: {
       const home = botHomeDir(opts.botsDir, bot.id);
       bootstrapHome(home);
       opts.ensureToken?.(bot.id);
-      writeInstructionFiles(home, renderInstructionFiles(bot));
+      renderHome(home, bot, opts.skillsDir);
       writeMcpConfig(home, opts.platformMcpUrl);
     } catch (err) {
       release();
@@ -41,6 +53,42 @@ export function computerPreparer(opts: {
     }
     return release;
   };
+}
+
+/**
+ * Renders the bot's instruction files and its skills (`settings.skills`, from `skillsDir`) into its home.
+ * Runs before every real-engine turn and when the computer starts, so the files are there from the first start.
+ */
+export function renderHome(home: string, bot: Bot, skillsDir?: string): void {
+  const all = skillsDir ? loadSkills(skillsDir) : new Map<string, TeamSkill>();
+  const skills = (bot.settings.skills ?? []).flatMap((n) => all.get(n) ?? []);
+  writeInstructionFiles(home, renderInstructionFiles(bot, [], skills));
+  writeSkills(home, skills);
+}
+
+const MANAGED_SKILL = '.agenta-managed';
+
+/**
+ * Copies the skills into ~/.claude/skills/<name>/ (marked as ours) and removes ours the bot no longer has.
+ * A skill folder the bot or owner made by hand (no marker) is never touched.
+ */
+export function writeSkills(home: string, skills: TeamSkill[]): void {
+  const root = join(home, '.claude', 'skills');
+  mkdirSync(root, { recursive: true });
+  const ours = (name: string) => existsSync(join(root, name, MANAGED_SKILL));
+  const wanted = new Set(skills.map((s) => s.name));
+  for (const name of readdirSync(root))
+    if (!wanted.has(name) && ours(name)) rmSync(join(root, name), { recursive: true, force: true });
+  for (const s of skills) {
+    const dest = join(root, s.name);
+    if (existsSync(dest) && !ours(s.name)) continue;
+    rmSync(dest, { recursive: true, force: true });
+    cpSync(s.dir, dest, { recursive: true });
+    writeFileSync(
+      join(dest, MANAGED_SKILL),
+      'Copied from the Agent A team template; replaced before each run.\n',
+    );
+  }
 }
 
 /**

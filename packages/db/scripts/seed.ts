@@ -1,10 +1,27 @@
-// pnpm db:seed — migrates, then creates the Echo Bot and its DM thread (idempotent).
+// pnpm db:seed — migrates, then creates the Agent A team and its Lead Room from templates/team (idempotent).
+import { join } from 'node:path';
 import { findRepoRoot, loadRootEnv } from '@agenta/shared/env';
-import { closeDb, createRepos, openDb, resolveDbPath, seedDb } from '../src/index';
+import {
+  applyTeamTemplate,
+  closeDb,
+  createRepos,
+  loadTeamTemplate,
+  openDb,
+  resolveDbPath,
+} from '../src/index';
 
 loadRootEnv();
-const file = resolveDbPath(findRepoRoot());
+const root = findRepoRoot();
+const file = resolveDbPath(root);
 const db = openDb(file);
-const { bot, thread, created } = seedDb(createRepos(db));
+const { created, leadRoom, leadRoomCreated } = applyTeamTemplate(
+  createRepos(db),
+  loadTeamTemplate(join(root, 'templates/team')),
+  { restore: false },
+);
 closeDb(db);
-console.log(`${created ? 'seeded' : 'already seeded'} ${file}: ${bot.name} (${bot.id}), DM ${thread.id}`);
+console.log(
+  created.length || leadRoomCreated
+    ? `seeded ${file}: ${created.map((b) => b.name).join(', ') || 'no new bots'}${leadRoomCreated ? `; ${leadRoom.title} (${leadRoom.id})` : ''}`
+    : `already seeded ${file}`,
+);

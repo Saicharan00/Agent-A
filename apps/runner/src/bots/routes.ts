@@ -42,10 +42,13 @@ async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise
 }
 
 /**
- * GET/POST /api/bots, GET/PATCH/DELETE /api/bots/:id, POST /api/bots/:id/{archive,restore,duplicate}.
+ * GET/POST /api/bots, GET/PATCH/DELETE /api/bots/:id, POST /api/bots/:id/{archive,restore,duplicate},
+ * POST /api/team/reset.
  * Responses never include runtime secrets (the MCP token hash) or container internals.
  */
 export function registerBotRoutes(app: FastifyInstance, bots: BotService): void {
+  app.post('/api/team/reset', async (_req, reply) => handle(reply, () => bots.resetTeam()));
+
   app.get('/api/bots', async (req, reply): Promise<BotView[] | undefined> => {
     const q = parse(botListQuerySchema, req.query, reply, 'invalid_query');
     if (!q) return;

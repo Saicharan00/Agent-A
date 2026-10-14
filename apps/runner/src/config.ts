@@ -16,6 +16,8 @@ const configSchema = z.object({
   /** Bot homes (`<botsDir>/<botId>/home`) and the team share, bind-mounted into bot containers. */
   botsDir: z.string().min(1),
   sharedDir: z.string().min(1),
+  /** The Agent A team template (F21): team.json, bots/<slug>.md, skills/<name>/SKILL.md. */
+  teamDir: z.string().min(1),
   /** Engine credentials (F06): <secretsDir>/codex/auth.json. Git-ignored, never mounted into containers. */
   secretsDir: z.string().min(1),
   /** .env.local, re-read for CLAUDE_CODE_OAUTH_TOKEN so a pasted token works without a restart. */
@@ -43,6 +45,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     dbPath: resolveDbPath(root, env),
     botsDir: repoPath(root, env.AGENTA_BOTS_DIR, 'data/bots'),
     sharedDir: repoPath(root, env.AGENTA_SHARED_DIR, 'data/shared'),
+    teamDir: join(root, 'templates/team'),
     secretsDir: repoPath(root, env.AGENTA_SECRETS_DIR, 'data/secrets'),
     envFile: join(root, '.env.local'),
     dockerEnabled: env.AGENTA_DOCKER !== '0',

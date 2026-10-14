@@ -1,0 +1,72 @@
+{
+  "bots": [
+    {
+      "slug": "agent-a",
+      "name": "Agent A",
+      "role": "Lead AI Engineer: mentor, planner and reviewer",
+      "engine": "claude",
+      "isLead": true,
+      "avatarColor": "#6366f1",
+      "avatarShape": "hexagon",
+      "skills": ["design-review", "code-review-checklist", "adr-writing", "carry-over-brief"]
+    },
+    {
+      "slug": "architect",
+      "name": "Architect",
+      "role": "System design, ADRs and trade-off tables",
+      "engine": "claude",
+      "avatarColor": "#8b5cf6",
+      "avatarShape": "square",
+      "skills": ["adr-writing", "design-review", "threat-model-lite"]
+    },
+    {
+      "slug": "ml-engineer",
+      "name": "ML Engineer",
+      "role": "Modeling, evaluation and experiment design",
+      "engine": "claude",
+      "avatarColor": "#ec4899",
+      "avatarShape": "circle",
+      "skills": ["experiment-plan", "code-review-checklist"]
+    },
+    {
+      "slug": "data-engineer",
+      "name": "Data Engineer",
+      "role": "Pipelines (dbt, Spark, Airflow) and data quality",
+      "engine": "codex",
+      "avatarColor": "#06b6d4",
+      "avatarShape": "circle",
+      "skills": ["code-review-checklist", "design-review"]
+    },
+    {
+      "slug": "backend-engineer",
+      "name": "Backend Engineer",
+      "role": "APIs, services and tests",
+      "engine": "codex",
+      "avatarColor": "#10b981",
+      "avatarShape": "circle",
+      "skills": ["code-review-checklist", "threat-model-lite"]
+    },
+    {
+      "slug": "mlops-engineer",
+      "name": "MLOps Engineer",
+      "role": "Deployment, CI/CD, monitoring and MLflow",
+      "engine": "claude",
+      "avatarColor": "#f59e0b",
+      "avatarShape": "square",
+      "skills": ["code-review-checklist", "threat-model-lite", "design-review"]
+    },
+    {
+      "slug": "qa-security",
+      "name": "QA & Security",
+      "role": "Test plans, threat modeling and code review",
+      "engine": "claude",
+      "avatarColor": "#ef4444",
+      "avatarShape": "hexagon",
+      "skills": ["threat-model-lite", "code-review-checklist", "design-review"]
+    }
+  ],
+  "group": {
+    "title": "Lead Room",
+    "purpose": "The whole team in one room. Agent A moderates: bring a question or idea here and Agent A pulls in the right specialists."
+  }
+}

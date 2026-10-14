@@ -291,13 +291,18 @@ export type InstructionMemory = { title: string; contentMd: string; scope: 'bot'
 
 export type InstructionFiles = { 'CLAUDE.md': string; 'AGENTS.md': string };
 
+/** A team skill as the instruction files show it (F21). */
+export type InstructionSkill = { name: string; description: string; body: string };
+
 /**
  * Renders /home/bot/CLAUDE.md and AGENTS.md from the bot's instructions and memory (memory is a stub until F22:
- * callers pass none yet). Both engines get the same content.
+ * callers pass none yet). Both engines get the same content, except skills: Claude Code loads them from
+ * ~/.claude/skills itself, so CLAUDE.md only lists them; AGENTS.md carries their full text for Codex.
  */
 export function renderInstructionFiles(
   bot: Pick<Bot, 'name' | 'role' | 'instructions' | 'isLead'>,
   memories: InstructionMemory[] = [],
+  skills: InstructionSkill[] = [],
 ): InstructionFiles {
   const own = memories.filter((m) => m.scope === 'bot');
   const shared = memories.filter((m) => m.scope === 'shared');
@@ -335,7 +340,16 @@ export function renderInstructionFiles(
     mem(shared),
   ].filter(Boolean);
   const text = `${body.join('\n\n')}\n`;
-  return { 'CLAUDE.md': text, 'AGENTS.md': text };
+  if (!skills.length) return { 'CLAUDE.md': text, 'AGENTS.md': text };
+  const intro = 'Follow the matching skill when a task fits its description.';
+  return {
+    'CLAUDE.md': `${text}\n## Skills\n\nYour skills are in \`~/.claude/skills\`. ${intro}\n\n${skills
+      .map((s) => `- \`${s.name}\`: ${s.description}`)
+      .join('\n')}\n`,
+    'AGENTS.md': `${text}\n## Skills\n\n${intro}\n\n${skills
+      .map((s) => `### Skill: ${s.name}\n\n_${s.description}_\n\n${s.body.trim()}`)
+      .join('\n\n')}\n`,
+  };
 }
 
 /** Writes the rendered files into the bot's home on the host (atomic replace). */

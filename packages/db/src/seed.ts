@@ -4,8 +4,8 @@ import type { Repos } from './repos';
 export const ECHO_BOT_SLUG = 'echo-bot';
 
 /**
- * Minimal dev seed: one mock-engine "Echo Bot" and its DM thread. Idempotent — re-running
- * reuses the existing bot/thread. (The Agent A team seed arrives in F21.)
+ * Minimal test seed: one mock-engine "Echo Bot" and its DM thread. Idempotent — re-running
+ * reuses the existing bot/thread. Used by tests; `pnpm db:seed` creates the Agent A team (team.ts).
  */
 export function seedDb(repos: Repos): { bot: Bot; thread: Thread; created: boolean } {
   let created = false;
