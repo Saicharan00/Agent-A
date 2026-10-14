@@ -142,7 +142,7 @@ export async function registerThreadRoutes(app: FastifyInstance, threads: Thread
           .send(apiError('unsupported_media_type', 'Send the file as application/octet-stream'));
       }
       const data = req.body;
-      const res = await handle(reply, () => threads.saveToInbox(req.params.id, q.name, data));
+      const res = await handle(reply, () => threads.saveToInbox(req.params.id, q.name, data, q.allowFlagged));
       if (res) return reply.code(201).send(res);
     });
   });

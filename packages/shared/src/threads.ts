@@ -108,6 +108,8 @@ export const sendMessageRequestSchema = z
   .object({
     content: z.string().max(MAX_MESSAGE_CHARS).default(''),
     attachments: z.array(inboxFileNameSchema).max(MAX_ATTACHMENTS).default([]),
+    /** The owner chose "Send anyway" after the confidentiality guard flagged the text (F24); logged. */
+    guardOverride: z.boolean().default(false),
   })
   .strict()
   .refine((b) => b.content.trim() !== '' || b.attachments.length > 0, {
@@ -123,7 +125,14 @@ export const sendMessageResponseSchema = z.object({
 export type SendMessageResponse = z.infer<typeof sendMessageResponseSchema>;
 
 /** POST /api/bots/:id/inbox?name= (raw bytes): the stored name (deduplicated) and its path in the computer. */
-export const inboxUploadQuerySchema = z.object({ name: z.string().min(1).max(500) });
+export const inboxUploadQuerySchema = z.object({
+  name: z.string().min(1).max(500),
+  /** The owner chose "Upload anyway" after the confidentiality guard flagged the file (F24). */
+  allowFlagged: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+});
 export const inboxUploadResponseSchema = z.object({
   name: z.string(),
   path: z.string(),

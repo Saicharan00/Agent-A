@@ -7,8 +7,8 @@ import {
   type MemoryScope,
   type MemoryUpdateRequest,
   type MemoryView,
-  describeSecrets,
-  findSecrets,
+  checkConfidential,
+  describeFindings,
   memoryCreateRequestSchema,
   memoryViewSchema,
 } from '@agenta/shared';
@@ -136,10 +136,11 @@ export class MemoryService {
   }
 
   private guard(texts: string[]): void {
-    const findings = findSecrets(texts.join('\n'));
+    const findings = checkConfidential(texts.join('\n'), this.opts.repos.guardTerms.list());
     if (findings.length) {
-      this.opts.log?.warn({ kinds: findings.map((f) => f.kind) }, 'memory rejected: secret');
-      throw new MemoryError('secret_detected', describeSecrets(findings), 422);
+      this.opts.log?.warn({ kinds: findings.map((f) => f.kind) }, 'memory rejected: confidential');
+      const advice = 'Memories must never hold secrets or confidential material: remove it and save again.';
+      throw new MemoryError('secret_detected', describeFindings(findings, advice), 422);
     }
   }
 

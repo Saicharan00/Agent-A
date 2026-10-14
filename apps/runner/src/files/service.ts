@@ -10,6 +10,7 @@ import {
 import type { Logger } from 'pino';
 import type { EventBus } from '../bus';
 import { botHomeDir, bootstrapHome, ensureSharedLayout } from '../containers/home';
+import type { GuardService } from '../guard/service';
 import { FilesError, FileStore } from './store';
 
 export type FilesServiceOptions = {
@@ -18,6 +19,8 @@ export type FilesServiceOptions = {
   log: Logger;
   botsDir: string;
   sharedDir: string;
+  /** Confidentiality guard (F24): checks uploads. */
+  guard?: Pick<GuardService, 'guardUpload'>;
 };
 
 /**
@@ -93,7 +96,9 @@ export class FilesService {
     name: string,
     data: Buffer,
     overwrite: boolean,
+    allowFlagged = false,
   ): FileEntry {
+    this.opts.guard?.guardUpload(data, allowFlagged, { botId, where: `files:${root}` });
     const rel = dir ? `${dir.replace(/\/+$/, '')}/${name}` : name;
     const entry = this.store(botId, root, true).writeBytes(rel, data, overwrite);
     this.opts.log.debug({ botId, root, path: entry.path, size: entry.size }, 'file uploaded');

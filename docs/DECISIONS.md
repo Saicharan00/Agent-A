@@ -646,3 +646,22 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   withholds the content of any that fails, so a hand-edited file cannot leak through the UI.
 - **Chart is plain divs** (100% stacked bars, dashed target line, legend, hover titles, table view); no chart
   library added.
+
+## F24 — Confidentiality guard
+- **One engine, `checkConfidential(text, terms)` in `packages/shared/src/guard.ts`:** the F22 secret detectors plus
+  emails, IPv4/IPv6, internal hostnames (`*.internal|corp|intranet|intra`, `intranet.*`, `*.sharepoint.com`,
+  `*.atlassian.net`), code blocks over 150 lines (fenced, or an unfenced paste where half the lines look like code)
+  and guard terms (literal = case-insensitive substring; regex = `gi`). Loopback/`0.0.0.0`, `::1`,
+  `host.docker.internal` and `git@` remotes are not flagged; `.local`/`.lan` are left out because `.env.local` and
+  `this.local` would trip them.
+- **Memory saves and carry-over briefs use the full guard** (they still reject with 422 `secret_detected`; no
+  "save anyway"). A memory or brief that names a guard term, an email or an internal host is refused too.
+- **Composer checks client-side first (`POST /api/guard/check`)**, which returns the findings and the redacted text,
+  so the browser never needs the term list. "Send
+  anyway" sets `guardOverride: true` on the message; the runner re-checks and logs a pino warning with the finding
+  kinds only (never the text). A failed check does not send (fail closed).
+- **Uploads are enforced on the runner** (inbox and Files panel): text files up to 2 MB are scanned (binary = NUL in
+  the first 8 KB, skipped); a hit is 422 `guard_blocked` unless `allowFlagged=true`, which is logged like "Send
+  anyway". The UI offers "Upload anyway"; there is no automatic redaction for files (edit the file instead).
+- **Guard terms stay local:** stored in `guard_terms`, only read by the guard; never rendered into prompts,
+  instruction files or memories.

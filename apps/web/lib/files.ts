@@ -24,11 +24,17 @@ export const filesApi = {
       method: 'PUT',
       body: { root, path, content, expectedModifiedAt },
     }),
-  upload: (botId: string, root: FileRoot, dir: string, file: File, overwrite = false) =>
+  upload: (botId: string, root: FileRoot, dir: string, file: File, overwrite = false, allowFlagged = false) =>
     apiRequest(`/bots/${enc(botId)}/files/upload`, fileMutationResponseSchema, {
       method: 'POST',
       raw: file,
-      query: { root, path: dir, name: file.name, overwrite: overwrite ? 'true' : undefined },
+      query: {
+        root,
+        path: dir,
+        name: file.name,
+        overwrite: overwrite ? 'true' : undefined,
+        allowFlagged: allowFlagged ? 'true' : undefined,
+      },
     }),
   mkdir: (botId: string, root: FileRoot, path: string) =>
     apiRequest(`/bots/${enc(botId)}/files/mkdir`, fileMutationResponseSchema, {

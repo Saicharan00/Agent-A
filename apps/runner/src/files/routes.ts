@@ -160,7 +160,7 @@ export async function registerFileRoutes(app: FastifyInstance, files: FilesServi
         }
         const data = req.body;
         const entry = await handle(reply, () =>
-          files.upload(req.params.id, q.root, q.path, q.name, data, q.overwrite),
+          files.upload(req.params.id, q.root, q.path, q.name, data, q.overwrite, q.allowFlagged),
         );
         if (entry) return reply.code(201).send({ entry });
       },

@@ -28,6 +28,7 @@ import { TerminalService } from './terminal/service';
 import { DesktopService } from './desktop/service';
 import { TaskService } from './tasks/service';
 import { ThreadService } from './threads/service';
+import { GuardService } from './guard/service';
 import { envFileSource } from './engines/secrets';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
@@ -41,6 +42,7 @@ const rootLog = pino({ level: config.logLevel, redact: LOG_REDACT });
 const db = openDb(config.dbPath);
 const repos = createRepos(db);
 const bus = new EventBus();
+const guard = new GuardService({ repos, log: rootLog.child({ module: 'guard' }) });
 const memories = new MemoryService({
   repos,
   bus,
@@ -133,6 +135,7 @@ const threads = new ThreadService({
   botsDir: config.botsDir,
   bots,
   runs,
+  guard,
 });
 const tasks = new TaskService({ repos, bus, runs, threads, log: rootLog.child({ module: 'tasks' }) });
 const goals = new GoalService({
@@ -176,6 +179,7 @@ const files = new FilesService({
   log: rootLog.child({ module: 'files' }),
   botsDir: config.botsDir,
   sharedDir: config.sharedDir,
+  guard,
 });
 const live = new LiveHub({ bus, runs: repos.runs, log: rootLog.child({ module: 'live' }) });
 const terminals =
@@ -198,6 +202,7 @@ const app = await buildServer(config, {
   goals,
   memories,
   learn,
+  guard,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

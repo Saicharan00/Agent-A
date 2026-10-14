@@ -40,6 +40,7 @@ describe('file schemas', () => {
       path: '',
       name: 'a.txt',
       overwrite: false,
+      allowFlagged: false,
     });
     expect(
       fileUploadQuerySchema.parse({ root: 'shared', path: 'x', name: 'a', overwrite: '1' }).overwrite,

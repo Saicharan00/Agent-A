@@ -35,6 +35,7 @@ import type { EventBus } from '../bus';
 import { botHomeDir } from '../containers/home';
 import { buildPrompt, renderFollowUp, toPromptMessages } from '../engines/prompt';
 import { toPromptGoal } from '../goals/service';
+import type { GuardService } from '../guard/service';
 import type { RunService } from '../runs/service';
 
 /** Bot-triggered turns allowed in a chain started by one owner message (PLAN F18 loop guard). */
@@ -63,6 +64,8 @@ export type ThreadServiceOptions = {
   botsDir: string;
   bots: Pick<BotService, 'view'>;
   runs: Pick<RunService, 'enqueue' | 'cancel' | 'admitGoal'>;
+  /** Confidentiality guard (F24): checks inbox uploads and logs "Send anyway". */
+  guard?: Pick<GuardService, 'find' | 'guardUpload' | 'logOverride'>;
   now?: () => Date;
 };
 
@@ -226,6 +229,9 @@ export class ThreadService {
         }
       }
     }
+
+    if (req.guardOverride)
+      this.opts.guard?.logOverride('message', this.opts.guard.find(req.content), { threadId: id });
 
     // A paused goal or one out of runs refuses before the message is posted.
     if (thread.kind === 'goal') this.opts.runs.admitGoal({ threadId: id });
@@ -600,10 +606,11 @@ export class ThreadService {
   }
 
   /** Saves an attachment into the bot's inbox under a safe, unused name. */
-  saveToInbox(botId: string, rawName: string, data: Buffer): InboxUploadResponse {
+  saveToInbox(botId: string, rawName: string, data: Buffer, allowFlagged = false): InboxUploadResponse {
     const bot = this.opts.repos.bots.get(botId);
     if (!bot) throw new ThreadError('bot_not_found', `Bot ${botId} not found`, 404);
     if (bot.archivedAt) throw new ThreadError('bot_archived', `${bot.name} is archived`, 409);
+    this.opts.guard?.guardUpload(data, allowFlagged, { botId, where: 'inbox' });
     const dir = inboxDir(this.opts.botsDir, botId);
     mkdirSync(dir, { recursive: true });
     const wanted = sanitizeInboxName(rawName);

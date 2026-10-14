@@ -139,28 +139,36 @@ export function FilesPanel({ bot, visible }: { bot: BotView; visible: boolean })
         toast.error(`${file.name} is larger than ${formatBytes(MAX_UPLOAD_BYTES)}`);
         continue;
       }
-      try {
-        await filesApi.upload(bot.id, root, dir, file);
-      } catch (err) {
-        if (!(err instanceof ApiClientError && err.code === 'already_exists')) {
-          toast.error(`${file.name}: ${errorText(err)}`);
-          continue;
-        }
-        const ok = await confirm({
-          title: `Replace ${file.name}?`,
-          description: `A file with that name already exists in ${dir || ROOT_LABELS[root]}.`,
-          confirmLabel: 'Replace',
-          destructive: true,
-        });
-        if (!ok) continue;
+      let overwrite = false;
+      let allowFlagged = false;
+      for (;;) {
         try {
-          await filesApi.upload(bot.id, root, dir, file, true);
-        } catch (err2) {
-          toast.error(`${file.name}: ${errorText(err2)}`);
-          continue;
+          await filesApi.upload(bot.id, root, dir, file, overwrite, allowFlagged);
+          toast.success(`Uploaded ${file.name}`);
+        } catch (err) {
+          const code = err instanceof ApiClientError ? err.code : '';
+          if (code === 'already_exists' && !overwrite) {
+            overwrite = await confirm({
+              title: `Replace ${file.name}?`,
+              description: `A file with that name already exists in ${dir || ROOT_LABELS[root]}.`,
+              confirmLabel: 'Replace',
+              destructive: true,
+            });
+            if (overwrite) continue;
+          } else if (code === 'guard_blocked' && !allowFlagged) {
+            allowFlagged = await confirm({
+              title: `${file.name} looks confidential`,
+              description: errorText(err),
+              confirmLabel: 'Upload anyway',
+              destructive: true,
+            });
+            if (allowFlagged) continue;
+          } else {
+            toast.error(`${file.name}: ${errorText(err)}`);
+          }
         }
+        break;
       }
-      toast.success(`Uploaded ${file.name}`);
     }
     patchRoot(root, (s) => ({
       ...s,

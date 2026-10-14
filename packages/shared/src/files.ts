@@ -100,12 +100,16 @@ export const fileSaveRequestSchema = fileLocationSchema
 export type FileSaveRequest = z.input<typeof fileSaveRequestSchema>;
 
 /** POST /api/bots/:id/files/upload?root=&path=<folder>&name=&overwrite= (raw bytes, application/octet-stream). */
+const queryFlag = z
+  .enum(['true', 'false', '1', '0'])
+  .default('false')
+  .transform((v) => v === 'true' || v === '1');
+
 export const fileUploadQuerySchema = fileLocationSchema.extend({
   name: fileNameSchema,
-  overwrite: z
-    .enum(['true', 'false', '1', '0'])
-    .default('false')
-    .transform((v) => v === 'true' || v === '1'),
+  overwrite: queryFlag,
+  /** The owner chose "Upload anyway" after the confidentiality guard flagged the file (F24). */
+  allowFlagged: queryFlag,
 });
 
 /** POST /api/bots/:id/files/mkdir */

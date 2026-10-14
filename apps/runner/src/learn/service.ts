@@ -19,8 +19,8 @@ import {
   type CarryOverBriefRequest,
   carryOverBriefRequestSchema,
   decisionCreateRequestSchema,
-  describeSecrets,
-  findSecrets,
+  checkConfidential,
+  describeFindings,
   lessonCreateRequestSchema,
   lessonViewSchema,
   scheduleReview,
@@ -53,6 +53,7 @@ export type LearnServiceOptions = {
 };
 
 const DAY = 86_400_000;
+const BRIEF_ADVICE = 'Briefs must not hold secrets or confidential material: rewrite it without them.';
 
 const adrPrefix = (n: number) => `ADR-${String(n).padStart(4, '0')}-`;
 export const decisionFileName = (d: Pick<Decision, 'number' | 'title'>) =>
@@ -251,10 +252,10 @@ export class LearnService {
 
   /** save_handoff_brief: guard-checked, then written to /shared/handoff/<date>-<slug>.md. */
   saveBrief(input: { title: string; contentMd: string }): HandoffBrief {
-    const findings = findSecrets(`${input.title}\n${input.contentMd}`);
+    const findings = this.confidential(`${input.title}\n${input.contentMd}`);
     if (findings.length) {
-      this.opts.log?.warn({ kinds: findings.map((f) => f.kind) }, 'brief rejected: secret');
-      throw new LearnError('secret_detected', describeSecrets(findings), 422);
+      this.opts.log?.warn({ kinds: findings.map((f) => f.kind) }, 'brief rejected: confidential');
+      throw new LearnError('secret_detected', describeFindings(findings, BRIEF_ADVICE), 422);
     }
     const dir = this.handoffDir();
     mkdirSync(dir, { recursive: true });
@@ -281,15 +282,19 @@ export class LearnService {
     const file = join(this.handoffDir(), name);
     const text = readFileSync(file, 'utf8');
     const title = /^#\s+(.+)$/m.exec(text)?.[1]?.trim() ?? name.replace(/\.md$/, '');
-    const findings = findSecrets(text);
+    const findings = this.confidential(text);
     return {
       name,
       path: `/shared/handoff/${name}`,
       title,
       contentMd: findings.length ? '' : text,
       updatedAt: statSync(file).mtime.toISOString(),
-      guard: findings.length ? { ok: false, reason: describeSecrets(findings) } : { ok: true },
+      guard: findings.length ? { ok: false, reason: describeFindings(findings, BRIEF_ADVICE) } : { ok: true },
     };
+  }
+
+  private confidential(text: string) {
+    return checkConfidential(text, this.opts.repos.guardTerms.list());
   }
 
   private handoffDir(): string {

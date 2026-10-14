@@ -61,11 +61,11 @@ export const threadsApi = {
     apiRequest(`/threads/${enc(id)}/read`, z.object({ lastReadAt: z.string() }), { method: 'POST' }),
   unread: () => apiRequest('/threads/unread', unreadCountsSchema),
   cancelRun: (runId: string) => apiRequest(`/runs/${enc(runId)}/cancel`, runViewSchema, { method: 'POST' }),
-  upload: (botId: string, file: File, signal?: AbortSignal) =>
+  upload: (botId: string, file: File, allowFlagged = false, signal?: AbortSignal) =>
     apiRequest(`/bots/${enc(botId)}/inbox`, inboxUploadResponseSchema, {
       method: 'POST',
       raw: file,
-      query: { name: file.name },
+      query: { name: file.name, allowFlagged: allowFlagged ? 'true' : undefined },
       signal,
     }),
 };

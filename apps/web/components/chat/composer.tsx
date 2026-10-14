@@ -1,16 +1,19 @@
 'use client';
 
-import { type BotView, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@agenta/shared';
-import { Loader2, Paperclip, Send, Square, X } from 'lucide-react';
+import { type BotView, type GuardCheckResponse, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@agenta/shared';
+import { Loader2, Paperclip, Send, ShieldAlert, Square, X } from 'lucide-react';
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { Button } from '@/components/ui/button';
 import { useSendMessage } from '@/hooks/use-thread';
+import { ApiClientError } from '@/lib/api';
+import { guardApi } from '@/lib/guard';
 import { matchesShortcut, SHORTCUTS } from '@/lib/shortcuts';
 import { insertMention, mentionAt, mentionCandidates, threadsApi } from '@/lib/threads';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import { GuardDialog } from './guard-dialog';
 
 type Attachment = {
   key: string;
@@ -18,9 +21,12 @@ type Attachment = {
   label: string;
   /** Unknown for files already in the inbox (edit and resend). */
   size?: number;
-  state: 'uploading' | 'done' | 'error';
+  /** `flagged`: the confidentiality guard stopped the upload; the owner can upload it anyway. */
+  state: 'uploading' | 'done' | 'error' | 'flagged';
   name?: string;
   error?: string;
+  /** Kept for "Upload anyway". */
+  file?: File;
 };
 
 /** Text and inbox files to put back in the composer (Edit on the last message). `key` changes per request. */
@@ -126,33 +132,59 @@ export function Composer({
         continue;
       }
       setFiles((fs) => [...fs, { key, label: file.name, size: file.size, state: 'uploading' }]);
-      threadsApi
-        .upload(botId, file)
-        .then((res) =>
-          setFiles((fs) => fs.map((f) => (f.key === key ? { ...f, state: 'done', name: res.name } : f))),
-        )
-        .catch((err: unknown) => {
-          const error = err instanceof Error ? err.message : 'Upload failed';
-          setFiles((fs) => fs.map((f) => (f.key === key ? { ...f, state: 'error', error } : f)));
-          toast.error(`${file.name}: ${error}`);
-        });
+      upload(key, file, false);
     }
   };
 
-  const submit = () => {
-    if (!canSend) return;
+  const upload = (key: string, file: File, allowFlagged: boolean) => {
+    if (!botId) return;
+    const patch = (p: Partial<Attachment>) =>
+      setFiles((fs) => fs.map((f) => (f.key === key ? { ...f, ...p } : f)));
+    patch({ state: 'uploading', error: undefined });
+    threadsApi
+      .upload(botId, file, allowFlagged)
+      .then((res) => patch({ state: 'done', name: res.name, file: undefined }))
+      .catch((err: unknown) => {
+        const error = err instanceof Error ? err.message : 'Upload failed';
+        const flagged = err instanceof ApiClientError && err.code === 'guard_blocked';
+        patch(flagged ? { state: 'flagged', error, file } : { state: 'error', error });
+        toast.error(`${file.name}: ${error}`);
+      });
+  };
+
+  const [review, setReview] = useState<GuardCheckResponse | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const deliver = (content: string, guardOverride: boolean) => {
     send.mutate(
-      { content: text, attachments: ready.map((f) => f.name!) },
+      { content, attachments: ready.map((f) => f.name!), guardOverride },
       {
         onSuccess: () => {
           setText('');
           setFiles([]);
+          setReview(null);
           if (draft) onDraftDone();
           inputRef.current?.focus();
         },
         onError: (err) => void toast.error(err instanceof Error ? err.message : 'Could not send'),
       },
     );
+  };
+
+  // The confidentiality guard checks the text first; findings open the warning instead of sending.
+  const submit = async () => {
+    if (!canSend || checking) return;
+    if (!text.trim()) return deliver(text, false);
+    setChecking(true);
+    try {
+      const res = await guardApi.check(text);
+      if (res.findings.length) setReview(res);
+      else deliver(text, false);
+    } catch (err) {
+      toast.error(`Confidentiality check failed, not sent: ${err instanceof Error ? err.message : 'error'}`);
+    } finally {
+      setChecking(false);
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -176,7 +208,7 @@ export function Composer({
     }
     if (matchesShortcut(e, SHORTCUTS.send) || (e.metaKey && e.key === 'Enter')) {
       e.preventDefault();
-      submit();
+      void submit();
     }
   };
 
@@ -229,16 +261,27 @@ export function Composer({
                 title={f.error}
                 className={cn(
                   'inline-flex max-w-60 items-center gap-1.5 rounded-md border bg-muted px-2 py-1 text-xs',
-                  f.state === 'error' && 'border-destructive/50 text-destructive',
+                  (f.state === 'error' || f.state === 'flagged') && 'border-destructive/50 text-destructive',
                 )}
               >
                 {f.state === 'uploading' ? (
                   <Loader2 className="size-3 animate-spin" aria-hidden />
+                ) : f.state === 'flagged' ? (
+                  <ShieldAlert className="size-3" aria-hidden />
                 ) : (
                   <Paperclip className="size-3" aria-hidden />
                 )}
                 <span className="truncate">{f.name ?? f.label}</span>
                 {f.size !== undefined && <span className="text-muted-foreground">{formatBytes(f.size)}</span>}
+                {f.state === 'flagged' && f.file && (
+                  <button
+                    type="button"
+                    className="rounded px-1 underline hover:bg-accent"
+                    onClick={() => upload(f.key, f.file!, true)}
+                  >
+                    Upload anyway
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={`Remove ${f.label}`}
@@ -334,12 +377,26 @@ export function Composer({
               Stop
             </Button>
           )}
-          <Button size="sm" onClick={submit} disabled={!canSend} aria-label="Send">
-            {send.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />}
+          <Button size="sm" onClick={() => void submit()} disabled={!canSend || checking} aria-label="Send">
+            {send.isPending || checking ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <Send aria-hidden />
+            )}
             Send
           </Button>
         </div>
       </div>
+      <GuardDialog
+        findings={review?.findings ?? null}
+        busy={send.isPending}
+        onEdit={() => {
+          setReview(null);
+          inputRef.current?.focus();
+        }}
+        onRedact={() => review && deliver(review.redacted, false)}
+        onSendAnyway={() => deliver(text, true)}
+      />
     </div>
   );
 }
