@@ -440,6 +440,7 @@ export const mcpServers = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
+    description: text('description').notNull().default(''),
     transport: text('transport', { enum: MCP_TRANSPORTS }).notNull(),
     command: text('command'),
     args: text('args_json', { mode: 'json' }).$type<string[]>().notNull(),
@@ -447,6 +448,7 @@ export const mcpServers = sqliteTable(
     url: text('url'),
     envRefs: text('env_refs_json', { mode: 'json' }).$type<Record<string, string>>().notNull(),
     headerRefs: text('header_refs_json', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+    domains: text('domains_json', { mode: 'json' }).$type<string[]>().notNull().default([]),
     enabled: bool('enabled').notNull().default(true),
     defaultPolicy: text('default_policy', { enum: MCP_TOOL_POLICIES }).notNull().default('approval'),
     toolPolicies: text('tool_policies_json', { mode: 'json' })

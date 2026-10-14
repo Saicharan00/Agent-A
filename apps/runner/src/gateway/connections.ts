@@ -1,4 +1,5 @@
 import { GATEWAY_CALL_TIMEOUT_MS, GATEWAY_IDLE_MS, type McpToolInfo } from '@agenta/shared';
+import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -15,7 +16,7 @@ type Log = { info(obj: object, msg?: string): void; warn(obj: object, msg?: stri
 /** How to reach one server, with secret values already filled in (never stored or logged). */
 export type ConnectSpec =
   | { transport: 'stdio'; command: string; args: string[]; cwd: string | null; env: Record<string, string> }
-  | { transport: 'http'; url: string; headers: Record<string, string> };
+  | { transport: 'http'; url: string; headers: Record<string, string>; authProvider?: OAuthClientProvider };
 
 /**
  * Proxy and CA settings a stdio server needs to reach the internet through the sandbox proxy (like F04/F05).
@@ -174,7 +175,10 @@ export class McpConnections {
     // Streamable HTTP first; servers that only speak the older SSE transport get a second try.
     try {
       const client = this.client(serverId);
-      const transport = new StreamableHTTPClientTransport(url, { requestInit });
+      const transport = new StreamableHTTPClientTransport(url, {
+        requestInit,
+        authProvider: spec.authProvider,
+      });
       await client.connect(transport, { timeout: this.callTimeoutMs });
       return this.adopt(serverId, { client, transport, stderr: '' });
     } catch (err) {
@@ -182,6 +186,7 @@ export class McpConnections {
       const client = this.client(serverId);
       const transport = new SSEClientTransport(url, {
         requestInit,
+        authProvider: spec.authProvider,
         eventSourceInit: { fetch: withHeaders(spec.headers) },
       });
       await client.connect(transport, { timeout: this.callTimeoutMs });

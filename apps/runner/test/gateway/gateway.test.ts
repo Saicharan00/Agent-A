@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -14,7 +15,9 @@ import { loadConfig } from '../../src/config';
 import { botHomeDir } from '../../src/containers/home';
 import { MockEngine } from '../../src/engines/mock';
 import { McpConnections, stdioEnv } from '../../src/gateway/connections';
+import { appendHumanTodo } from '../../src/gateway/human-todo';
 import { GatewayService, annotationPolicy } from '../../src/gateway/service';
+import { renderInstructionFiles } from '../../src/engines/prompt';
 import { PlatformMcpServer, inProcessPlatform } from '../../src/mcp/server';
 import { PlatformTools } from '../../src/mcp/tools';
 import { buildServer } from '../../src/server';
@@ -315,6 +318,113 @@ describe('MCP gateway (F35)', () => {
     }
   });
 
+  it('${NAME} in arguments is filled in at start and redacted from results', async () => {
+    const bot = bots.create({ name: 'Researcher', engine: 'mock' });
+    const s = gateway.create({
+      name: 'Echo',
+      slug: 'echo',
+      transport: 'stdio',
+      command: process.execPath,
+      args: [FIXTURE, '--key=${ECHO_KEY}'],
+    });
+    expect(s.missingSecrets).toEqual([]);
+    gateway.setAccess(bot.id, [{ serverId: s.id }]);
+    expect(await gateway.call(bot, 'echo__echo', { text: '__args__' })).toEqual({
+      text: 'args=--key=[redacted]',
+      isError: false,
+    });
+  });
+
+  it('grantTo specialists gives a new server to every non-lead bot (team defaults)', () => {
+    const lead = h.repos.bots.create({ name: 'Agent A', engine: 'mock', isLead: true });
+    const a = bots.create({ name: 'Architect', engine: 'mock' });
+    const b = bots.create({ name: 'Writer', engine: 'mock' });
+    const other = addEcho();
+    gateway.setAccess(a.id, [{ serverId: other.id, tools: ['echo'] }]);
+    const docs = gateway.create(
+      { name: 'Docs', slug: 'docs', transport: 'http', url: 'https://docs.test/mcp' },
+      'specialists',
+    );
+    expect(docs.botIds.sort()).toEqual([a.id, b.id].sort());
+    expect(gateway.accessFor(lead.id)).toEqual([]);
+    // Existing grants are kept.
+    expect(gateway.accessFor(a.id).find((x) => x.serverId === other.id)?.toolAllowlist).toEqual(['echo']);
+  });
+
+  it('saving a server records the network allow command in HUMAN_TODO.md once', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'agenta-todo-')), 'HUMAN_TODO.md');
+    writeFileSync(file, '# HUMAN_TODO\n\n- [x] 1. Done thing\n- [ ] 14. Optional thing\n');
+    const g = new GatewayService({
+      repos: h.repos,
+      secrets: { get: () => undefined },
+      approvals,
+      log: silent,
+      sandboxName: 'agent-a',
+      humanTodo: (item) => appendHumanTodo(file, item),
+    });
+    const s = g.create({
+      name: 'Linear',
+      slug: 'linear',
+      transport: 'http',
+      url: 'https://mcp.linear.app/mcp',
+    });
+    expect(s.domains).toEqual(['mcp.linear.app']);
+    expect(s.networkCommand).toBe('sbx policy allow network --sandbox agent-a mcp.linear.app');
+    await g.update(s.id, { name: 'Linear 2' });
+    const npx = g.create({ name: 'T', slug: 't', transport: 'stdio', command: 'npx', args: ['-y', 'x'] });
+    expect(npx.domains).toEqual(['registry.npmjs.org']);
+    const todo = readFileSync(file, 'utf8');
+    expect(todo.match(/mcp\.linear\.app/g)).toHaveLength(1);
+    expect(todo).toContain('- [ ] 15. (F35) Allow the network for the MCP server "Linear"');
+    expect(todo).toContain('- [ ] 16. (F35) Allow the network for the MCP server "T"');
+  });
+
+  it('instruction files list granted servers and their visible tools, never secrets', async () => {
+    const bot = bots.create({ name: 'Researcher', engine: 'mock' });
+    const s = addEcho();
+    await gateway.update(s.id, { description: 'Echo things back.' });
+    await gateway.test(s.id);
+    gateway.setAccess(bot.id, [{ serverId: s.id, tools: ['echo'] }]);
+    const tools = gateway.instructionTools(bot.id);
+    expect(tools.mcpServers).toEqual([
+      { name: 'Echo', slug: 'echo', description: 'Echo things back.', tools: ['echo__echo'] },
+    ]);
+    const files = renderInstructionFiles(bot, [], [], [], tools);
+    expect(files['CLAUDE.md']).toContain('## Your tools');
+    expect(files['CLAUDE.md']).toContain('- **Echo** (`echo`): Echo things back. Tools: `echo__echo`.');
+    expect(files['AGENTS.md']).toContain(
+      'For research, use web search/fetch or the docs-lookup MCP; cite your sources.',
+    );
+    expect(JSON.stringify(files)).not.toContain(SECRET);
+    // No grants: no section.
+    expect(
+      renderInstructionFiles(bot, [], [], [], gateway.instructionTools('bot_none'))['CLAUDE.md'],
+    ).not.toContain('## Your tools');
+  });
+
+  it('without an OAuth store, a server asking for OAuth gets a clear "not supported here" error', async () => {
+    const http = createServer((_req, res) => {
+      res.statusCode = 401;
+      res.setHeader('WWW-Authenticate', 'Bearer resource_metadata="http://127.0.0.1/.well-known/x"');
+      res.end('{"error":"invalid_token"}');
+    });
+    await new Promise<void>((r) => http.listen(0, '127.0.0.1', r));
+    try {
+      const s = gateway.create({
+        name: 'Remote',
+        slug: 'remote',
+        transport: 'http',
+        url: `http://127.0.0.1:${(http.address() as AddressInfo).port}/mcp`,
+      });
+      expect((await gateway.test(s.id)).lastError).toMatch(
+        /needs an OAuth sign-in, which is not supported here/,
+      );
+    } finally {
+      http.closeAllConnections();
+      await new Promise((r) => http.close(r));
+    }
+  });
+
   it('idle connections are shut down and reconnect lazily', async () => {
     const conns = new McpConnections({ log: silent, idleMs: 30 });
     const spec = () => ({
@@ -349,13 +459,47 @@ describe('MCP gateway (F35)', () => {
   describe('HTTP API', () => {
     const config = { ...loadConfig({}), logLevel: 'silent' as const };
 
+    it('research settings: per-domain by default; saving writes the matching sbx command', async () => {
+      const todo: { key: string; text: string }[] = [];
+      const g = new GatewayService({
+        repos: h.repos,
+        secrets: { get: () => undefined },
+        approvals,
+        log: silent,
+        humanTodo: (i) => todo.push(i),
+      });
+      const app = await buildServer(config, { repos: h.repos, gateway: g });
+      try {
+        expect((await app.inject({ method: 'GET', url: '/api/research/settings' })).json()).toEqual({
+          webAccess: 'per-domain',
+          command: 'sbx policy allow network --sandbox agent-a <domain>',
+        });
+        const put = await app.inject({
+          method: 'PUT',
+          url: '/api/research/settings',
+          payload: { webAccess: 'broad' },
+        });
+        expect(put.json().command).toBe('sbx policy allow network --sandbox agent-a "**"');
+        expect(todo[0]?.text).toContain('sbx policy allow network --sandbox agent-a "**"');
+        expect(g.instructionTools('bot_x').webAccess).toBe('broad');
+        const bad = await app.inject({
+          method: 'PUT',
+          url: '/api/research/settings',
+          payload: { webAccess: 'all' },
+        });
+        expect(bad.statusCode).toBe(400);
+      } finally {
+        await app.close();
+      }
+    });
+
     it('creates, validates, rejects duplicate slugs, grants bots and deletes', async () => {
       const app = await buildServer(config, { repos: h.repos, gateway });
       try {
         const bad = await app.inject({
           method: 'POST',
           url: '/api/mcp-servers',
-          payload: { name: 'X', slug: 'x', transport: 'stdio' },
+          payload: { server: { name: 'X', slug: 'x', transport: 'stdio' } },
         });
         expect(bad.statusCode).toBe(400);
         expect(bad.json().error.code).toBe('invalid_body');
@@ -363,16 +507,35 @@ describe('MCP gateway (F35)', () => {
           method: 'POST',
           url: '/api/mcp-servers',
           payload: {
-            name: 'X',
-            slug: 'x',
-            transport: 'http',
-            url: 'https://x.test/mcp',
-            headerRefs: { Authorization: 'Bearer sk-123' },
+            server: {
+              name: 'X',
+              slug: 'x',
+              transport: 'http',
+              url: 'https://x.test/mcp',
+              headerRefs: { Authorization: 'Bearer sk-123' },
+            },
           },
         });
         expect(literal.statusCode).toBe(400);
+        const secretArg = await app.inject({
+          method: 'POST',
+          url: '/api/mcp-servers',
+          payload: {
+            server: {
+              name: 'PG',
+              slug: 'pg',
+              transport: 'stdio',
+              command: 'npx',
+              args: ['-y', 'pg-mcp', 'postgresql://me:hunter22@db.test/app'],
+            },
+          },
+        });
+        expect(secretArg.statusCode).toBe(400);
+        expect(secretArg.json().error.message).toMatch(/Looks like a secret/);
 
-        const payload = { name: 'Echo', slug: 'echo', transport: 'stdio', command: 'node', args: [FIXTURE] };
+        const payload = {
+          server: { name: 'Echo', slug: 'echo', transport: 'stdio', command: 'node', args: [FIXTURE] },
+        };
         const created = await app.inject({ method: 'POST', url: '/api/mcp-servers', payload });
         expect(created.statusCode).toBe(201);
         const id = created.json().id as string;

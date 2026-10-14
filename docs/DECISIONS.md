@@ -774,3 +774,38 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Mock:** `[mock:mcp]` calls each `gw:<slug>__<tool>` named in the prompt (adds `_approval_id` if an `apr_…` id is
   there). `inProcessPlatform()` routes the mock's calls exactly like the HTTP endpoint. Test fixture:
   `tests/fixtures/mcp-echo/server.mjs`, plain JSON-RPC, no dependencies (`__crash__` / `__key__` test hooks).
+
+## F35 — MCP gateway (session 2: UI, presets, web research)
+- **Settings → MCP servers is its own page (`/settings/mcp`)**, linked from a card on Settings: list with status, enable,
+  Test connection, per-tool policy table, edit/remove, and three ways to add: form, pasted `mcpServers` JSON, presets.
+  Per-bot access is a section on each bot's page (server checkboxes, "every tool" or a per-tool allowlist).
+- **New columns (migration 0012):** `description` (shown to granted bots) and `domains_json` (what to allow in the
+  sandbox network policy; empty = derived: the URL host, `registry.npmjs.org` for npx, `pypi.org` +
+  `files.pythonhosted.org` for uv/uvx). `${NAME}` references also work in stdio arguments (e.g. a Postgres URL with a
+  password); a literal secret-looking argument or header is rejected by the schema.
+- **Pasted JSON is parsed in the browser** (`parseMcpServersJson`, shared): every env value, every header value and any
+  secret-looking argument becomes a `${NAME}` reference; the preview lists the variables to put in `.env.local` (names
+  only, never the values), so literal secrets never reach the runner or the DB.
+- **Presets are templates** (`MCP_PRESETS`, shared): web fetch, Context7 docs, sequential thinking, Notion, Slack,
+  Postgres, SQLite, Linear, Jira/Confluence, Google Drive, Figma, Sentry. Each lists its env vars and domains; nothing is
+  created until the owner presses Add. Package names were checked on the npm registry (pypi was blocked).
+- **Team defaults:** adding a server with "give it to every specialist" (pre-ticked for the fetch and docs presets) grants
+  it to every non-lead bot; existing grants are kept. Agent A (the lead) only gets servers explicitly.
+- **Network:** saving a server appends `(F35) Allow the network for the MCP server …` with the exact
+  `sbx policy allow network --sandbox <SANDBOX_NAME> <domains>` to HUMAN_TODO.md (once per command; `AGENTA_HUMAN_TODO`
+  overrides the path, e2e uses `data/e2e/HUMAN_TODO.md`) and shows it on the card. A blocked connection names the
+  domain from the proxy's "Approval required for …" / "Blocked by network policy" message.
+- **OAuth is supported** with the MCP SDK's client flow (metadata discovery, dynamic client registration, PKCE,
+  refresh): "Sign in" appears after a 401 on a server without headers; the browser goes to the server's sign-in page and
+  comes back to `<web origin>/api/mcp-oauth/callback`, which the web app's `/api` proxy forwards to the runner (still
+  bound to 127.0.0.1). Client info and tokens live in `data/secrets/mcp-oauth/<server>.json` (0600), never in the DB, a
+  response or a log; token values are redacted from results. Tested against a local fake OAuth server only: real
+  providers also need their sign-in domains allowed in the network policy.
+- **Web research:** Claude's WebSearch/WebFetch are already on; Codex gets `web_search = "live"` (see engines.md). Every
+  bot's instructions get a `## Research` section ("For research, use web search/fetch or the docs-lookup MCP; cite your
+  sources.") and bots with granted servers a `## Your tools` section (server, what it is for, tool names). Settings
+  choice `research.webAccess`: **per-domain** (default, safer: bots tell the owner which blocked domain to allow) or
+  **broad** (`sbx policy allow network --sandbox agent-a "**"` for the whole VM; the sandbox policy cannot tell bots
+  apart, so "for research bots" means all bot computers). The matching command goes to HUMAN_TODO.md on save.
+- **Tool cards** show gateway calls as `<server-slug>: <Tool>` with "via the MCP gateway" (and the approval id on a
+  retry), hiding `_approval_id` from the arguments.

@@ -1,6 +1,7 @@
 # Codex config for an Agent A bot. The container is the sandbox, so Codex runs without its own.
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
+web_search = "live"
 
 [mcp_servers.playwright]
 command = "playwright-mcp"

@@ -302,6 +302,8 @@ export function renderCodexConfig(servers: Record<string, McpServer>): string {
     '# Rendered by Agent A before each Codex run. Edits here are overwritten.',
     'approval_policy = "never"',
     'sandbox_mode = "danger-full-access"',
+    // Live web search for research (F35): the CLI's top-level --search, which `codex exec` does not take.
+    'web_search = "live"',
   ];
   for (const [name, s] of Object.entries({ ...DEFAULT_SERVERS, ...servers })) {
     lines.push('', `[mcp_servers.${tomlKey(name)}]`);

@@ -24,3 +24,4 @@ export * from './notifications';
 export * from './usage';
 export * from './connectors';
 export * from './mcp-gateway';
+export * from './mcp-presets';

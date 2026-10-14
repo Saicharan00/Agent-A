@@ -217,3 +217,16 @@ JSONL events seen:
   `http_headers` (the runtime config uses the header, not the template's `bearer_token_env_var`).
 - Verified 2026-10-13 from inside a bot container with curl: no/wrong token → 401; `tools/call whoami` with the bot's
   token → its identity. Tools appear to engines as `mcp__agenta__<tool>`.
+
+## MCP gateway & web research (F35, observed 2026-10-14)
+- Gateway tools of external MCP servers are listed by the same `agenta` server, so engines see them as
+  `mcp__agenta__<server-slug>__<tool>` (Codex events map to the same name). Nothing else changes in the engines' configs:
+  external servers and their keys stay in the runner.
+- **Claude Code web search/fetch:** `WebSearch` and `WebFetch` are built-in tools and are on by default; the adapter
+  passes no `--tools`/`--allowed-tools` limits and runs with `--dangerously-skip-permissions`, so both are available
+  headless. WebSearch runs on Anthropic's side; WebFetch downloads the page from the bot computer, so the page's
+  domain must be allowed in the sandbox network policy.
+- **Codex web search:** `--search` ("Enable live web search … no per-call approval") is a top-level `codex` flag that
+  `codex exec` does not accept. Its config equivalent is `web_search = "live"` (valid values observed with
+  `--strict-config`: `disabled`, `cached`, `indexed`, `live`; an unknown key or value is rejected). Rendered into every
+  bot's `~/.codex/config.toml` and the image template. The search runs on OpenAI's side (no sandbox domain needed).

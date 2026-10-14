@@ -6,6 +6,9 @@ export const queryKeys = {
   engineState: ['engine-state'] as const,
   guardTerms: ['guard', 'terms'] as const,
   connectors: ['settings', 'connectors'] as const,
+  mcpServers: ['settings', 'mcp-servers'] as const,
+  research: ['settings', 'research'] as const,
+  botMcpAccess: (botId: string) => ['bots', 'mcp-access', botId] as const,
   /** Prefix of every bot list; `botList` adds the archived filter. */
   bots: ['bots', 'list'] as const,
   botList: (archived: 'exclude' | 'include' | 'only' = 'exclude') => ['bots', 'list', archived] as const,

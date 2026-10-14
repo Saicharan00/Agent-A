@@ -203,6 +203,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -240,6 +244,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -359,6 +367,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -593,6 +605,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -667,6 +683,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -825,6 +845,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -895,6 +919,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -1011,6 +1039,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -1080,6 +1112,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -1194,6 +1230,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -1263,6 +1303,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -1392,6 +1436,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -1462,6 +1510,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -1604,6 +1656,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
 
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
+
 ## Memory
 
 _Durable facts you saved (pinned first, then the newest). Save more with \`save_memory\` (never secrets); find older ones with \`search_memory\`._
@@ -1673,6 +1729,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 
@@ -1812,6 +1872,10 @@ The \`agenta\` MCP tools connect you to the team and the owner: \`whoami\`, \`li
 ## Approvals
 
 Call \`request_approval\` and wait until \`check_approval\` says approved before you: push to a remote git repository; send anything outside this computer (email, messages, posts, uploads, connectors); delete files outside \`/home/bot/work\`; install system packages (apt, global npm/pip); or do anything the owner told you needs approval. Check again later while it is pending. If it is denied or expired, do not do it: read the owner's note, tell them, and pick another way or stop.
+
+## Research
+
+For research, use web search/fetch or the docs-lookup MCP; cite your sources. Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ("Blocked by network policy" or "Approval required"), use other sources and tell the owner with \`notify_owner\` which domain to allow.
 
 ## Memory
 

@@ -258,6 +258,7 @@ describe('Codex config', () => {
         '# Rendered by Agent A before each Codex run. Edits here are overwritten.',
         'approval_policy = "never"',
         'sandbox_mode = "danger-full-access"',
+        'web_search = "live"',
         '',
         '[mcp_servers.playwright]',
         'command = "playwright-mcp"',

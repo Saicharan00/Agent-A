@@ -6,14 +6,24 @@ import {
   type BotMcpAccessInput,
   type McpServerCreateInput,
   type McpServerUpdateInput,
+  type McpOAuthStart,
   type McpServerView,
   type McpToolInfo,
   type McpToolPolicy,
+  type ResearchSettings,
+  VAR_REF_RE,
+  type WebAccessMode,
+  defaultDomains,
   mcpServerCreateSchema,
+  networkAllowCommand,
+  templateVars,
 } from '@agenta/shared';
 import type { ApprovalService } from '../approvals/service';
+import type { InstructionMcpServer, InstructionTools } from '../engines/prompt';
 import { type SecretSource, redactSecrets } from '../engines/secrets';
+import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 import { type ConnectSpec, McpConnections, stdioEnv } from './connections';
+import type { GatewayOAuth } from './oauth';
 
 type Log = {
   info(obj: object, msg?: string): void;
@@ -42,10 +52,16 @@ export type GatewayServiceOptions = {
   approvals: Pick<ApprovalService, 'request' | 'get'>;
   log: Log;
   connections?: McpConnections;
+  /** This sandbox's name, for the owner's `sbx policy allow network --sandbox <name>` commands. */
+  sandboxName?: string;
+  /** Records an owner action in HUMAN_TODO.md (idempotent per `key`); unset: not recorded. */
+  humanTodo?: (item: { key: string; text: string }) => void;
+  /** OAuth sign-in for remote servers; unset: OAuth servers are reported as not supported. */
+  oauth?: GatewayOAuth;
 };
 
-const VAR_REF = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const MAX_RESULT_CHARS = 50_000;
+const RESEARCH_KEY = 'research.webAccess';
 
 /** The default policy of a tool the owner did not set: read-only tools run, others ask (or the server's default). */
 export function annotationPolicy(tool: McpToolInfo | undefined, serverDefault: McpToolPolicy): McpToolPolicy {
@@ -67,12 +83,17 @@ function canonical(v: unknown): string {
 export const callFingerprint = (args: Record<string, unknown>) =>
   createHash('sha256').update(canonical(args)).digest('hex').slice(0, 16);
 
-/** The .env.local variables a server references (env values and ${NAME} in header templates). */
-export function secretNames(server: Pick<McpServer, 'envRefs' | 'headerRefs'>): string[] {
+/** The .env.local variables a server references (env values, and ${NAME} in header templates and arguments). */
+export function secretNames(server: Pick<McpServer, 'envRefs' | 'headerRefs' | 'args'>): string[] {
   const names = new Set(Object.values(server.envRefs));
-  for (const t of Object.values(server.headerRefs)) for (const m of t.matchAll(VAR_REF)) names.add(m[1]!);
+  for (const t of [...Object.values(server.headerRefs), ...server.args])
+    for (const n of templateVars(t)) names.add(n);
   return [...names];
 }
+
+/** The saved domains, or the defaults for the server's command / URL. */
+export const serverDomains = (s: Pick<McpServer, 'domains' | 'transport' | 'command' | 'url'>) =>
+  s.domains.length ? s.domains : defaultDomains(s);
 
 /**
  * The MCP gateway (PLAN F35): the owner registers external MCP servers; the runner connects to them on the bots'
@@ -101,12 +122,26 @@ export class GatewayService {
     return this.view(this.server(id));
   }
 
-  create(input: McpServerCreateInput): McpServerView {
+  /** Adds a server; `grantTo` gives it at once to every specialist (non-lead) or every bot (team defaults). */
+  create(input: McpServerCreateInput, grantTo?: 'specialists' | 'all'): McpServerView {
     const data = mcpServerCreateSchema.parse(input);
-    if (this.opts.repos.mcpServers.getBySlug(data.slug))
+    const { repos } = this.opts;
+    if (repos.mcpServers.getBySlug(data.slug))
       throw new GatewayError('slug_taken', `A server with slug "${data.slug}" already exists`, 409);
-    const s = this.opts.repos.mcpServers.create(data);
+    const s = repos.mcpServers.create(data);
     this.opts.log.info({ serverId: s.id, slug: s.slug, transport: s.transport }, 'MCP server added');
+    if (grantTo)
+      for (const bot of repos.bots.list())
+        if (grantTo === 'all' || !bot.isLead)
+          repos.mcpServers.setAccess(bot.id, [
+            ...repos.mcpServers.accessForBot(bot.id).map((a) => ({
+              serverId: a.serverId,
+              tools: a.toolAllowlist,
+              toolPolicies: a.toolPolicies,
+            })),
+            { serverId: s.id },
+          ]);
+    this.recordNetwork(s);
     return this.view(s);
   }
 
@@ -114,17 +149,37 @@ export class GatewayService {
     const before = this.server(id);
     if (input.slug && input.slug !== before.slug && this.opts.repos.mcpServers.getBySlug(input.slug))
       throw new GatewayError('slug_taken', `A server with slug "${input.slug}" already exists`, 409);
-    const s = this.opts.repos.mcpServers.update(id, input)!;
-    if (s.transport === 'stdio' ? !s.command : !s.url)
+    const merged = { ...before, ...input };
+    if (merged.transport === 'stdio' ? !merged.command : !merged.url)
       throw new GatewayError('invalid_body', 'A stdio server needs a command; an http server needs a url');
+    const s = this.opts.repos.mcpServers.update(id, input)!;
     // Connection settings may have changed: reconnect on next use.
     await this.connections.close(id);
+    this.recordNetwork(s);
     return this.view(s);
+  }
+
+  /** The bot's "Your tools" servers and the research setting, for its instruction files. */
+  instructionTools(botId: string): InstructionTools {
+    return { mcpServers: this.forRender(botId), webAccess: this.research().webAccess };
+  }
+
+  /** What a bot's instruction files list under "Your tools": its enabled, granted servers and visible tools. */
+  forRender(botId: string): InstructionMcpServer[] {
+    return this.grants(botId).map(({ server, access }) => ({
+      name: server.name,
+      slug: server.slug,
+      description: server.description,
+      tools: (server.toolsCache ?? [])
+        .filter((t) => this.allowed(access, t.name) && this.policy(server, access, t.name) !== 'deny')
+        .map((t) => `${server.slug}${GATEWAY_TOOL_SEPARATOR}${t.name}`),
+    }));
   }
 
   async remove(id: string): Promise<void> {
     this.server(id);
     await this.connections.close(id);
+    this.opts.oauth?.signOut(id);
     this.opts.repos.mcpServers.delete(id);
   }
 
@@ -140,6 +195,77 @@ export class GatewayService {
       this.opts.log.warn({ serverId: id, error }, 'MCP server check failed');
       return this.view(this.opts.repos.mcpServers.recordCheck(id, { error })!);
     }
+  }
+
+  // ---- OAuth sign-in for remote servers ----
+
+  /** Starts the owner's sign-in: returns the server's sign-in page, or `authorized` if tokens already work. */
+  async oauthStart(id: string): Promise<McpOAuthStart> {
+    const s = this.server(id);
+    const oauth = this.opts.oauth;
+    if (!oauth || s.transport !== 'http' || !s.url)
+      throw new GatewayError('oauth_unavailable', 'Only remote (http) servers can sign in with OAuth');
+    try {
+      const result = await auth(oauth.provider(id), { serverUrl: s.url });
+      if (result === 'AUTHORIZED') return { status: 'authorized', authorizationUrl: null };
+      const url = oauth.takeAuthorizationUrl(id);
+      if (!url) throw new Error('The server did not return a sign-in page');
+      this.opts.log.info({ serverId: id }, 'MCP OAuth sign-in started');
+      return { status: 'redirect', authorizationUrl: url.toString() };
+    } catch (err) {
+      throw new GatewayError('oauth_failed', `Sign-in could not start: ${this.explain(s, err)}`, 502);
+    }
+  }
+
+  /** The browser came back from the sign-in page: exchange the code, then test the connection. */
+  async oauthCallback(state: string, code: string): Promise<McpServerView> {
+    const oauth = this.opts.oauth;
+    const id = oauth?.serverForState(state);
+    const s = id ? this.opts.repos.mcpServers.get(id) : undefined;
+    if (!oauth || !id || !s?.url)
+      throw new GatewayError('oauth_state', 'Unknown or expired sign-in; start again', 400);
+    try {
+      await auth(oauth.provider(id), { serverUrl: s.url, authorizationCode: code });
+    } catch (err) {
+      throw new GatewayError('oauth_failed', `Sign-in failed: ${this.explain(s, err)}`, 502);
+    }
+    this.opts.log.info({ serverId: id }, 'MCP OAuth sign-in completed');
+    return this.test(id);
+  }
+
+  async oauthSignOut(id: string): Promise<McpServerView> {
+    this.server(id);
+    this.opts.oauth?.signOut(id);
+    await this.connections.close(id);
+    return this.get(id);
+  }
+
+  // ---- web research (PLAN F35) ----
+
+  research(): ResearchSettings {
+    const webAccess = this.opts.repos.settings.get<WebAccessMode>(RESEARCH_KEY) ?? 'per-domain';
+    return { webAccess, command: this.researchCommand(webAccess) };
+  }
+
+  setResearch(webAccess: WebAccessMode): ResearchSettings {
+    this.opts.repos.settings.set(RESEARCH_KEY, webAccess);
+    const command = this.researchCommand(webAccess);
+    this.opts.humanTodo?.({
+      key: command,
+      text:
+        webAccess === 'broad'
+          ? `(F35) Web research: let the bots reach any website (broad allowance, chosen in Settings). In Windows ` +
+            `PowerShell: \`${command}\`. Undo with \`sbx policy rm network --sandbox ${this.sandbox} --resource "**"\`.`
+          : `(F35) Web research, per-domain (chosen in Settings): when a bot reports a blocked page, allow just that ` +
+            `domain in Windows PowerShell: \`${command}\`.`,
+    });
+    return { webAccess, command };
+  }
+
+  private researchCommand(mode: WebAccessMode): string {
+    return mode === 'broad'
+      ? `sbx policy allow network --sandbox ${this.sandbox} "**"`
+      : `sbx policy allow network --sandbox ${this.sandbox} <domain>`;
   }
 
   // ---- per-bot access ----
@@ -367,31 +493,68 @@ export class GatewayService {
     const value = (n: string) => this.opts.secrets.get(n)!;
     if (s.transport === 'stdio') {
       const env = Object.fromEntries(Object.entries(s.envRefs).map(([k, ref]) => [k, value(ref)]));
-      return { transport: 'stdio', command: s.command!, args: s.args, cwd: s.cwd, env: stdioEnv(env) };
+      const args = s.args.map((a) => a.replace(VAR_REF_RE, (_, n: string) => value(n)));
+      return { transport: 'stdio', command: s.command!, args, cwd: s.cwd, env: stdioEnv(env) };
     }
     const headers = Object.fromEntries(
-      Object.entries(s.headerRefs).map(([k, t]) => [k, t.replace(VAR_REF, (_, n: string) => value(n))]),
+      Object.entries(s.headerRefs).map(([k, t]) => [k, t.replace(VAR_REF_RE, (_, n: string) => value(n))]),
     );
-    return { transport: 'http', url: s.url!, headers };
+    const signedIn = this.opts.oauth?.hasTokens(s.id);
+    return {
+      transport: 'http',
+      url: s.url!,
+      headers,
+      ...(signedIn ? { authProvider: this.opts.oauth!.provider(s.id) } : {}),
+    };
   }
 
   private secretValues(s: McpServer): string[] {
-    return secretNames(s)
-      .map((n) => this.opts.secrets.get(n))
-      .filter((v): v is string => !!v);
+    return [
+      ...secretNames(s)
+        .map((n) => this.opts.secrets.get(n))
+        .filter((v): v is string => !!v),
+      ...(this.opts.oauth?.secretValues(s.id) ?? []),
+    ];
   }
 
   /** A readable, redacted error; a sandbox network-policy block says which domain to allow. */
   private explain(s: McpServer, err: unknown): string {
     const msg = redactSecrets((err as Error)?.message ?? String(err), this.secretValues(s)).slice(0, 2_000);
     if (/Blocked by|Approval required|network policy/i.test(msg) || /\b403\b.*proxy/i.test(msg)) {
-      const host = s.url ? new URL(s.url).hostname : '<domain>';
+      // e.g. "Approval required for mcp.context7.com:443." or "Blocked by network policy: domain x.com"
+      const blocked =
+        /(?:Blocked by network policy: domain|Approval required for) ([a-z0-9.-]*[a-z0-9])/i.exec(msg);
+      const domains = blocked ? [blocked[1]!.toLowerCase()] : serverDomains(s);
       return (
-        `Blocked by the sandbox network policy. Allow the server's domain on the host: ` +
-        `sbx policy allow network --sandbox agent-a ${host}\n${msg}`
+        `Blocked by the sandbox network policy. Allow the domain on the host: ` +
+        `${networkAllowCommand(domains, this.sandbox) ?? 'sbx policy allow network <domain>'}\n${msg}`
       );
     }
+    if (s.transport === 'http' && /\b401\b|Unauthorized|invalid_token/i.test(msg)) {
+      if (Object.keys(s.headerRefs).length)
+        return `The server rejected the credentials (401). Check the .env.local value the headers reference.\n${msg}`;
+      return this.opts.oauth
+        ? `This server needs an OAuth sign-in: press "Sign in" on its card (its sign-in domains may need allowing too).\n${msg}`
+        : 'This server needs an OAuth sign-in, which is not supported here. Use its API-key or token option ' +
+            `(a header like Authorization = Bearer \${NAME}) or a local (stdio) version.\n${msg}`;
+    }
     return msg;
+  }
+
+  private get sandbox(): string {
+    return this.opts.sandboxName ?? 'agent-a';
+  }
+
+  /** On save: the owner must allow the server's domains in the sandbox network policy (PLAN F35). */
+  private recordNetwork(s: McpServer): void {
+    const command = networkAllowCommand(serverDomains(s), this.sandbox);
+    if (!command) return;
+    this.opts.humanTodo?.({
+      key: command,
+      text:
+        `(F35) Allow the network for the MCP server "${s.name}". In Windows PowerShell: \`${command}\`. ` +
+        'Then press "Test connection" in Settings → MCP servers.',
+    });
   }
 
   private server(id: string): McpServer {
@@ -406,6 +569,9 @@ export class GatewayService {
       id: s.id,
       name: s.name,
       slug: s.slug,
+      description: s.description,
+      domains: serverDomains(s),
+      networkCommand: networkAllowCommand(serverDomains(s), this.sandbox),
       transport: s.transport,
       command: s.command,
       args: s.args,
@@ -421,6 +587,7 @@ export class GatewayService {
       state: this.connections.isConnected(s.id) ? 'connected' : s.lastError ? 'error' : 'idle',
       lastCheckAt: s.lastCheckAt,
       lastError: s.lastError,
+      oauth: this.opts.oauth?.hasTokens(s.id) ? 'signed-in' : 'none',
       botIds: mcpServers.botIds(s.id),
       createdAt: s.createdAt,
     };

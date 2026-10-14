@@ -85,6 +85,17 @@ export function describeTool(name: string, input: unknown): ToolView {
   if (name.startsWith('mcp__')) {
     const [, server = '', ...rest] = name.split('__');
     const tool = rest.join('__');
+    if (server === 'agenta' && tool.includes('__')) {
+      // An external MCP server's tool through the gateway (F35): mcp__agenta__<server-slug>__<tool>.
+      const [gwServer = '', ...gwTool] = tool.split('__');
+      const { _approval_id: approvalId, ...args } = i;
+      return {
+        kind: 'mcp',
+        label: `${gwServer}: ${humanize(gwTool.join('__'))}`,
+        detail: `via the MCP gateway${typeof approvalId === 'string' ? ` · approved ${approvalId}` : ''}`,
+        json: pretty(args),
+      };
+    }
     if (server === 'agenta') {
       return { kind: 'platform', label: PLATFORM_LABELS[tool] ?? humanize(tool), json: pretty(input) };
     }

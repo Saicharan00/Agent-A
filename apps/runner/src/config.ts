@@ -22,6 +22,10 @@ const configSchema = z.object({
   secretsDir: z.string().min(1),
   /** .env.local, re-read for CLAUDE_CODE_OAUTH_TOKEN so a pasted token works without a restart. */
   envFile: z.string().min(1),
+  /** HUMAN_TODO.md, where owner actions (network allow commands, F35) are appended. AGENTA_HUMAN_TODO overrides. */
+  humanTodoFile: z.string().min(1),
+  /** This Docker Sandbox's name for `sbx` commands shown to the owner (SANDBOX_NAME in the VM). */
+  sandboxName: z.string().min(1),
   /** Set AGENTA_DOCKER=0 to run without Docker (container routes then return docker_unavailable). */
   dockerEnabled: z.boolean(),
 });
@@ -48,6 +52,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     teamDir: join(root, 'templates/team'),
     secretsDir: repoPath(root, env.AGENTA_SECRETS_DIR, 'data/secrets'),
     envFile: join(root, '.env.local'),
+    humanTodoFile: repoPath(root, env.AGENTA_HUMAN_TODO, 'HUMAN_TODO.md'),
+    sandboxName: env.SANDBOX_NAME || 'agent-a',
     dockerEnabled: env.AGENTA_DOCKER !== '0',
   });
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // A tiny stdio MCP server for gateway tests (PLAN F35): one read tool (echo) and one write tool (save_note).
 // Plain newline-delimited JSON-RPC, no dependencies. Test hooks: echo "__crash__" exits the process;
-// echo "__key__" answers with the ECHO_API_KEY it was started with (the gateway must redact it).
+// echo "__key__" / "__args__" answer with the ECHO_API_KEY / arguments it was started with (the gateway must redact
+// secrets in them).
 import { createInterface } from 'node:readline';
 
 const notes = [];
@@ -27,6 +28,7 @@ function call(name, args) {
   if (name === 'echo') {
     if (args.text === '__crash__') process.exit(3);
     if (args.text === '__key__') return text(`key=${process.env.ECHO_API_KEY ?? ''}`);
+    if (args.text === '__args__') return text(`args=${process.argv.slice(2).join(' ')}`);
     return text(`echo: ${args.text}`);
   }
   if (name === 'save_note') {

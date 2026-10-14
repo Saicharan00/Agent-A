@@ -20,6 +20,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { BotForm } from './bot-form';
+import { BotMcpAccess } from './bot-mcp-access';
 import { EngineBadge } from './bot-card';
 import { DeleteBotDialog } from './delete-bot-dialog';
 
@@ -170,6 +171,8 @@ function BotDetailLoaded({ bot }: { bot: BotView }) {
                 );
             }}
           />
+
+          <BotMcpAccess botId={bot.id} />
 
           <section
             aria-labelledby="danger-zone"

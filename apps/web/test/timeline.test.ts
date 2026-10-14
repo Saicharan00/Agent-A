@@ -140,6 +140,15 @@ describe('describeTool', () => {
     });
     expect(describeTool('Mystery', { a: 1 })).toMatchObject({ kind: 'other', json: '{\n  "a": 1\n}' });
   });
+
+  it('names the external MCP server of a gateway tool (F35)', () => {
+    expect(describeTool('mcp__agenta__echo__save_note', { text: 'x', _approval_id: 'apr_1' })).toEqual({
+      kind: 'mcp',
+      label: 'echo: Save note',
+      detail: 'via the MCP gateway · approved apr_1',
+      json: '{\n  "text": "x"\n}',
+    });
+  });
 });
 
 describe('output helpers', () => {

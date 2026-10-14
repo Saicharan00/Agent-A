@@ -1,7 +1,12 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Bot, Goal, Message, Task, Thread } from '@agenta/db';
-import { type ConnectorType, MAX_REVISION_ROUNDS, goalArtifactsDir } from '@agenta/shared';
+import {
+  type ConnectorType,
+  MAX_REVISION_ROUNDS,
+  type WebAccessMode,
+  goalArtifactsDir,
+} from '@agenta/shared';
 
 // Turns platform state into what an engine reads: the per-turn prompt, a system-prompt addition, and the
 // instruction files the CLIs load on their own (/home/bot/CLAUDE.md for Claude Code, AGENTS.md for Codex).
@@ -302,6 +307,12 @@ export type InstructionMemory = { title: string; contentMd: string; scope: 'bot'
 
 export type InstructionFiles = { 'CLAUDE.md': string; 'AGENTS.md': string };
 
+/** A granted MCP gateway server as the "Your tools" section lists it (F35). */
+export type InstructionMcpServer = { name: string; slug: string; description: string; tools: string[] };
+/** Extra tools and research settings for the instruction files (F35). */
+export type InstructionTools = { mcpServers: InstructionMcpServer[]; webAccess: WebAccessMode };
+export const NO_EXTRA_TOOLS: InstructionTools = { mcpServers: [], webAccess: 'per-domain' };
+
 /** A team skill as the instruction files show it (F21). */
 export type InstructionSkill = { name: string; description: string; body: string };
 
@@ -315,6 +326,7 @@ export function renderInstructionFiles(
   memories: InstructionMemory[] = [],
   skills: InstructionSkill[] = [],
   connectors: ConnectorType[] = [],
+  tools: InstructionTools = NO_EXTRA_TOOLS,
 ): InstructionFiles {
   const own = memories.filter((m) => m.scope === 'bot');
   const shared = memories.filter((m) => m.scope === 'shared');
@@ -355,6 +367,8 @@ export function renderInstructionFiles(
       "owner's note, tell them, and pick another way or stop.",
     ].join(' '),
     connectors.includes('github') ? GITHUB_SECTION : '',
+    researchSection(tools.webAccess),
+    toolsSection(tools.mcpServers),
     '## Memory',
     '_Durable facts you saved (pinned first, then the newest). Save more with `save_memory` (never secrets); find older ones with `search_memory`._',
     mem(own),
@@ -372,6 +386,41 @@ export function renderInstructionFiles(
       .map((s) => `### Skill: ${s.name}\n\n_${s.description}_\n\n${s.body.trim()}`)
       .join('\n\n')}\n`,
   };
+}
+
+/** Every bot (F35): built-in web search/fetch of both engines, plus how blocked pages are handled. */
+function researchSection(webAccess: WebAccessMode): string {
+  return [
+    '## Research',
+    [
+      'For research, use web search/fetch or the docs-lookup MCP; cite your sources.',
+      webAccess === 'broad'
+        ? 'The owner opened the web for research; still never send private or secret data to a website.'
+        : 'Pages you fetch or browse pass the sandbox network policy, allowed per domain: if one is blocked ' +
+          '("Blocked by network policy" or "Approval required"), use other sources and tell the owner with ' +
+          '`notify_owner` which domain to allow.',
+    ].join(' '),
+  ].join('\n\n');
+}
+
+/** Only for bots granted MCP gateway servers (F35): what each is for and its tools. */
+function toolsSection(servers: InstructionMcpServer[]): string {
+  if (!servers.length) return '';
+  return [
+    '## Your tools',
+    [
+      'The owner connected these MCP servers for you. Their tools are in your `agenta` MCP server, named',
+      '`<server>__<tool>`. Some need the owner’s approval: the first call returns an `approval_id`; once',
+      '`check_approval` says approved, call the tool again with the same arguments plus `_approval_id`.',
+    ].join(' '),
+    servers
+      .map(
+        (s) =>
+          `- **${s.name}** (\`${s.slug}\`)${s.description ? `: ${s.description}` : ''}` +
+          (s.tools.length ? ` Tools: ${s.tools.map((t) => `\`${t}\``).join(', ')}.` : ''),
+      )
+      .join('\n'),
+  ].join('\n\n');
 }
 
 /** Only for bots with the GitHub connector (F29): GH_TOKEN is in their exec env, never in a file. */

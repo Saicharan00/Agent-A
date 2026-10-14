@@ -35,6 +35,8 @@ import { NotificationService } from './notifications/service';
 import { envFileSource } from './engines/secrets';
 import { ConnectorService } from './connectors/service';
 import { GatewayService } from './gateway/service';
+import { appendHumanTodo } from './gateway/human-todo';
+import { GatewayOAuth } from './gateway/oauth';
 import { LOG_REDACT, buildServer } from './server';
 import pino from 'pino';
 
@@ -71,7 +73,15 @@ const containers = config.dockerEnabled
         await engineAuth.prepareHome(botId, home);
         // Instruction files and skills are in the home from the first start, not only after the first run.
         const bot = repos.bots.get(botId);
-        if (bot) renderHome(home, bot, skillsDir, memories.forRender(botId), connectors.forBot(botId));
+        if (bot)
+          renderHome(
+            home,
+            bot,
+            skillsDir,
+            memories.forRender(botId),
+            connectors.forBot(botId),
+            gateway.instructionTools(botId),
+          );
       },
     })
   : undefined;
@@ -123,6 +133,7 @@ const runs = new RunService({
     skillsDir,
     memories: (botId) => memories.forRender(botId),
     connectors: (botId) => connectors.forBot(botId),
+    tools: (botId) => gateway.instructionTools(botId),
   }),
 });
 const bots = new BotService({
@@ -184,7 +195,16 @@ const platformTools = new PlatformTools({
   learn,
   log: rootLog.child({ module: 'platform-tools' }),
 });
-const gateway = new GatewayService({ repos, secrets, approvals, log: rootLog.child({ module: 'gateway' }) });
+const gateway = new GatewayService({
+  repos,
+  secrets,
+  approvals,
+  log: rootLog.child({ module: 'gateway' }),
+  sandboxName: config.sandboxName,
+  humanTodo: (item) => appendHumanTodo(config.humanTodoFile, item),
+  // The owner's browser comes back through the web app's /api proxy (F01), so the runner stays on 127.0.0.1.
+  oauth: new GatewayOAuth(join(config.secretsDir, 'mcp-oauth'), `${config.webOrigin}/api/mcp-oauth/callback`),
+});
 const platformMcp = new PlatformMcpServer({
   repos,
   tools: platformTools,

@@ -16,7 +16,12 @@ import { bootstrapHome, botHomeDir } from '../containers/home';
 import type { ContainerManager } from '../containers/manager';
 import { MCP_TOKEN_FILE } from '../bots/mcp-token';
 import { withManagedServers } from '../engines/mcp-config';
-import { type InstructionMemory, renderInstructionFiles, writeInstructionFiles } from '../engines/prompt';
+import {
+  type InstructionMemory,
+  type InstructionTools,
+  renderInstructionFiles,
+  writeInstructionFiles,
+} from '../engines/prompt';
 import type { PrepareComputer } from './service';
 
 /**
@@ -38,6 +43,8 @@ export function computerPreparer(opts: {
   memories?: (botId: string) => InstructionMemory[];
   /** The bot's usable connectors, for its instruction files (F29); unset: none. */
   connectors?: (botId: string) => ConnectorType[];
+  /** Granted MCP gateway servers and the web research setting, for its instruction files (F35); unset: none. */
+  tools?: (botId: string) => InstructionTools;
 }): PrepareComputer {
   return async (bot: Bot, engine: Engine) => {
     if (engine === 'mock') return () => undefined;
@@ -49,7 +56,14 @@ export function computerPreparer(opts: {
       const home = botHomeDir(opts.botsDir, bot.id);
       bootstrapHome(home);
       opts.ensureToken?.(bot.id);
-      renderHome(home, bot, opts.skillsDir, opts.memories?.(bot.id), opts.connectors?.(bot.id));
+      renderHome(
+        home,
+        bot,
+        opts.skillsDir,
+        opts.memories?.(bot.id),
+        opts.connectors?.(bot.id),
+        opts.tools?.(bot.id),
+      );
       writeMcpConfig(home, opts.platformMcpUrl);
     } catch (err) {
       release();
@@ -69,10 +83,11 @@ export function renderHome(
   skillsDir?: string,
   memories: InstructionMemory[] = [],
   connectors: ConnectorType[] = [],
+  tools?: InstructionTools,
 ): void {
   const all = skillsDir ? loadSkills(skillsDir) : new Map<string, TeamSkill>();
   const skills = (bot.settings.skills ?? []).flatMap((n) => all.get(n) ?? []);
-  writeInstructionFiles(home, renderInstructionFiles(bot, memories, skills, connectors));
+  writeInstructionFiles(home, renderInstructionFiles(bot, memories, skills, connectors, tools));
   writeSkills(home, skills);
 }
 
