@@ -15,6 +15,7 @@ import { type PromptGoal, buildPrompt } from '../engines/prompt';
 import { RunError, type RunService } from '../runs/service';
 import type { TaskService } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
+import { notify } from '../notifications/service';
 
 type Log = { info(obj: object, msg?: string): void; warn(obj: object, msg?: string): void };
 
@@ -186,7 +187,7 @@ export class GoalService {
     const reason = err instanceof Error ? err.message : String(err);
     this.opts.log.warn({ goalId: goal.id, err: reason }, `goal: ${what}`);
     this.say(goal, `Could not ${what}: ${reason}.`);
-    this.opts.repos.notifications.create({
+    notify(this.opts.repos, this.opts.bus, {
       kind: 'goal.blocked',
       title: `Goal "${goal.title}" needs you`,
       body: `Could not ${what}: ${reason}.`,
@@ -274,7 +275,7 @@ export class GoalService {
     const goal = task.goalId ? this.opts.repos.goals.get(task.goalId) : undefined;
     const text = `${lead.name} still wants changes on "${task.title}" after ${task.revisionCount} rounds, so it is your call: approve it or request changes on the task board.\n\n> ${feedback.replace(/\n/g, '\n> ')}`;
     if (goal) this.say(goal, text);
-    this.opts.repos.notifications.create({
+    notify(this.opts.repos, this.opts.bus, {
       kind: 'task.escalated',
       title: `Your review is needed: ${task.title}`,
       body: text.slice(0, 2000),
@@ -355,7 +356,7 @@ export class GoalService {
     const goal = this.opts.repos.goals.get(run.goalId);
     if (!goal || goal.reportRunId !== run.id || goal.status === 'done') return;
     this.opts.repos.goals.update(goal.id, { status: 'done', finishedAt: nowIso() });
-    this.opts.repos.notifications.create({
+    notify(this.opts.repos, this.opts.bus, {
       kind: 'goal.done',
       title: `Goal done: ${goal.title}`,
       body: 'Agent A posted the goal report.',

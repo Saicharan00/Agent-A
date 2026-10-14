@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { HomeApprovals } from '@/components/approvals/home-approvals';
 import { EmptyState } from '@/components/empty-state';
 import { HomeGoals } from '@/components/goals/home-goals';
+import { HomeActivity } from '@/components/notifications/home-activity';
 import { Page, PageHeader } from '@/components/page-header';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -15,6 +16,7 @@ export default function HomePage() {
       />
       <HomeApprovals />
       <HomeGoals />
+      <HomeActivity />
       <div className="grid gap-4 md:grid-cols-3">
         <EmptyState
           icon={Sparkles}

@@ -14,6 +14,7 @@ import { LearnError, LearnService } from '../learn/service';
 import { MemoryError, MemoryService } from '../memories/service';
 import { publishTaskChanged, type TaskService } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
+import { notify } from '../notifications/service';
 
 type Log = { info(obj: object, msg?: string): void; debug(obj: object, msg?: string): void };
 
@@ -382,8 +383,18 @@ export class PlatformTools {
         throw new ToolError('invalid_input', 'Give a status or a note');
       if (status && task.status === 'done') throw new ToolError('task_done', 'This task is done');
       const updated = status ? this.opts.repos.tasks.update(id, { status })! : task;
-      if (status && status !== task.status)
+      if (status && status !== task.status) {
         this.event(task, bot, 'status', { from: task.status, to: status });
+        if (status === 'blocked') {
+          notify(this.opts.repos, this.opts.bus, {
+            botId: bot.id,
+            kind: 'task.blocked',
+            title: `${bot.name} is blocked: ${task.title}`,
+            body: note ?? '',
+            link: '/tasks',
+          });
+        }
+      }
       if (note) this.event(task, bot, 'note', { note });
       return this.taskView(updated);
     },
@@ -400,8 +411,17 @@ export class PlatformTools {
         artifacts,
       })!;
       this.event(task, bot, 'submitted', { summary, artifacts, runId: this.currentRun(bot.id)?.id ?? null });
-      // In a goal, the lead reviews it next.
-      this.opts.goals?.onSubmitted(updated);
+      // In a goal, the lead reviews it next; otherwise the owner does.
+      if (updated.goalId) this.opts.goals?.onSubmitted(updated);
+      else {
+        notify(this.opts.repos, this.opts.bus, {
+          botId: bot.id,
+          kind: 'task.review',
+          title: `Ready for your review: ${task.title}`,
+          body: summary.slice(0, 2_000),
+          link: '/tasks',
+        });
+      }
       return this.taskView(updated);
     },
 
@@ -502,7 +522,8 @@ export class PlatformTools {
     },
 
     notify_owner: (bot, { title, body }) => {
-      const n = this.opts.repos.notifications.create({
+      const n = notify(this.opts.repos, this.opts.bus, {
+        botId: bot.id,
         kind: 'bot.notice',
         title: `${bot.name}: ${title}`,
         body,

@@ -14,6 +14,7 @@ import {
 } from '@agenta/shared';
 import { Cron } from 'croner';
 import type { EventBus } from '../bus';
+import { notify } from '../notifications/service';
 import type { ThreadService } from '../threads/service';
 
 type Log = {
@@ -249,7 +250,17 @@ export class ScheduleService {
     manual = false,
     refs: { runId?: string | null; threadId?: string | null } = {},
   ): ScheduleRun {
-    return this.opts.repos.schedules.addRun(
+    const { repos, bus } = this.opts;
+    if (outcome === 'failed') {
+      notify(repos, bus, {
+        botId: s.botId,
+        kind: 'schedule.failed',
+        title: `Schedule failed: ${s.name}`,
+        body: reason ?? '',
+        link: '/schedules',
+      });
+    }
+    return repos.schedules.addRun(
       { scheduleId: s.id, outcome, reason, manual, ...refs },
       this.now().toISOString(),
     );

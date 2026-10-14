@@ -31,4 +31,5 @@ export const STORAGE_KEYS = {
   computerOpen: 'agenta.computerOpen',
   computerTab: 'agenta.computerTab',
   filesShowHidden: 'agenta.filesShowHidden',
+  desktopAsked: 'agenta.desktopNotificationsAsked',
 } as const;

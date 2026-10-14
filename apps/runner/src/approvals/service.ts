@@ -9,6 +9,7 @@ import {
   approvalViewSchema,
 } from '@agenta/shared';
 import type { EventBus } from '../bus';
+import { notify } from '../notifications/service';
 
 type Log = { info(obj: object, msg?: string): void };
 
@@ -52,7 +53,8 @@ export class ApprovalService {
       detailsMd: input.details,
       risk: input.risk,
     });
-    repos.notifications.create({
+    notify(repos, this.opts.bus, {
+      botId: bot.id,
       kind: 'approval.requested',
       title: `${bot.name} asks to: ${input.action}`,
       body: `Risk: ${input.risk}. ${input.details}`.slice(0, 2_000),

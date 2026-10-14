@@ -63,7 +63,7 @@ test.describe('approvals', () => {
     const bell = page.getByTestId('notifications-bell');
     await expect(bell).toHaveAccessibleName(/approvals? waiting/);
     await bell.click();
-    const panel = page.getByRole('dialog', { name: 'Approvals' });
+    const panel = page.getByRole('dialog', { name: 'Notifications' });
     await card(panel).getByLabel('Note for the bot').fill('Only main, no force push');
     await card(panel).getByRole('button', { name: 'Approve' }).click();
     await expect(card(panel)).toHaveCount(0);

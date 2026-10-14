@@ -691,3 +691,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Default time zone `America/New_York`** per schedule (editable in the form); invalid IANA names are rejected by zod.
 - **Seeded schedules live in `templates/team/team.json`** (Daily plan weekdays 08:45, Weekly review Fridays 16:45, for
   Agent A), created switched off if no schedule of that name exists; the owner's edits are never overwritten.
+
+## F27 — Notifications & activity inbox
+- **One `notify()` helper** (`apps/runner/src/notifications/service.ts`) stores the row and publishes
+  `notification.changed` on `global`; every service that already had the bus calls it (no new wiring). Read changes
+  publish the same event with `notification: null` so other tabs refetch.
+- **"Owner is viewing the thread" = a browser tab is subscribed to `thread:<id>`** (`EventBus.listenerCount`; only the
+  live hub subscribes to thread channels). A background tab still counts as viewing; no presence API.
+- **Which runs notify:** owner turns (`user`) and `schedule` turns when they end (succeeded/failed) unseen; bot-to-bot
+  `mention` turns only when they end with a question. Task, delegation and review turns are covered by task/goal
+  notifications instead. A failed scheduled run is always reported (`schedule.failed`), as is a schedule that could not start.
+- **Question heuristic:** the reply's last paragraph ends with `?` (trailing markdown/quotes ignored) → `bot.question`.
+- **Task notifications:** `blocked` (via `update_task`) always; `in_review` only outside a goal (inside one, Agent A
+  reviews and escalations already notify the owner).
+- **New `notifications.bot_id` column** (migration 0010, `ON DELETE SET NULL`, added by hand because drizzle-kit drops
+  the action on `ALTER TABLE ADD`). The bot's notification setting decides only the desktop pop-up: `all` = every kind,
+  `mentions` = kinds that need the owner (`OWNER_NOTIFICATION_KINDS`), `none` = never. The in-app inbox always lists it.
+- **Desktop permission is asked once,** on the first bell click (a user gesture), remembered in localStorage.
+- **The bell merges approvals and notifications** (dialog "Notifications"); the old approvals-only bell was replaced.

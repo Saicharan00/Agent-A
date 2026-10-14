@@ -391,6 +391,7 @@ export const notifications = sqliteTable(
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     link: text('link'),
+    botId: text('bot_id').references(() => bots.id, { onDelete: 'set null' }),
     readAt: text('read_at'),
     createdAt: createdAt(),
   },

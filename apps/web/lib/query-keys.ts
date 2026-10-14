@@ -44,4 +44,7 @@ export const queryKeys = {
   schedules: ['schedules'] as const,
   scheduleList: ['schedules', 'list'] as const,
   scheduleHistory: (id: string) => ['schedules', 'history', id] as const,
+  /** Prefix of every notification query (refetched on notification.changed). */
+  notifications: ['notifications'] as const,
+  notificationList: (unread: boolean, limit: number) => ['notifications', 'list', { unread, limit }] as const,
 };

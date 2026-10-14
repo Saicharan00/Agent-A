@@ -346,6 +346,8 @@ export const notificationCreateSchema = z.object({
   title: z.string().min(1).max(300),
   body: z.string().default(''),
   link: z.string().nullable().default(null),
+  /** The bot it is about; its notification setting decides on a desktop notification (F27). */
+  botId: z.string().nullable().default(null),
 });
 export type NotificationCreateInput = z.input<typeof notificationCreateSchema>;
 

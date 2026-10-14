@@ -15,6 +15,11 @@ export class EventBus {
     this.emitter.emit(channel, event);
   }
 
+  /** How many listeners a channel has (a browser tab watching `thread:<id>` counts as one). */
+  listenerCount(channel: string): number {
+    return this.emitter.listenerCount(channel);
+  }
+
   /** Returns an unsubscribe function. */
   subscribe(channel: string, listener: BusListener): () => void {
     this.emitter.on(channel, listener);

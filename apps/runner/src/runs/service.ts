@@ -18,6 +18,7 @@ import type { EngineRegistry } from '../engines/registry';
 import type { EngineRunInput } from '../engines/types';
 import { publishEngineFileChange } from '../files/service';
 import { RunEventWriter } from './events';
+import { notify, notifyRunFinished } from '../notifications/service';
 
 // The run orchestrator (F10): every bot turn is a `runs` row that a single in-process scheduler moves
 // queued → running → finished. Runs are owned by the runner, not the browser: events are persisted to
@@ -339,6 +340,12 @@ export class RunService {
       repos.engineState.clearLimit(row.engine);
       this.opts.log.info({ engine: row.engine }, 'engine usage limit reset');
       this.publishEngineState(row.engine, null);
+      notify(repos, this.opts.bus, {
+        kind: 'engine.resumed',
+        title: `${ENGINE_LABELS[row.engine]} is available again`,
+        body: 'Its usage limit has reset; queued runs continue.',
+        link: '/usage',
+      });
     }
   }
 
@@ -415,14 +422,18 @@ export class RunService {
       ...(turn.hasUsage ? { usage: turn.usage } : {}),
     });
     log.info({ runId: run.id, status, error }, 'run finished');
-    if (finished) this.publishRun(finished);
-    if (finished && status === 'succeeded' && turn.messageId) {
-      const reply = repos.messages.get(turn.messageId);
-      try {
-        if (reply) this.onReply?.(finished, reply);
-      } catch (err) {
-        log.error({ runId: run.id, err: (err as Error).message }, 'reply routing failed');
-      }
+    if (!finished) return;
+    this.publishRun(finished);
+    const reply = status === 'succeeded' && turn.messageId ? repos.messages.get(turn.messageId) : undefined;
+    try {
+      notifyRunFinished(repos, this.opts.bus, finished, reply?.contentMd);
+    } catch (err) {
+      log.error({ runId: run.id, err: (err as Error).message }, 'run notification failed');
+    }
+    try {
+      if (reply) this.onReply?.(finished, reply);
+    } catch (err) {
+      log.error({ runId: run.id, err: (err as Error).message }, 'reply routing failed');
     }
   }
 
@@ -510,7 +521,7 @@ export class RunService {
     }
     const bot = repos.bots.get(run.botId);
     const engineName = ENGINE_LABELS[run.engine];
-    repos.notifications.create({
+    notify(repos, this.opts.bus, {
       kind: 'engine.limited',
       title: `${engineName} usage limit reached`,
       body: [
