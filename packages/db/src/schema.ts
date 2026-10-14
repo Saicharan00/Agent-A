@@ -292,6 +292,8 @@ export const memories = sqliteTable(
 
 export const decisions = sqliteTable('decisions', {
   id: text('id').primaryKey(),
+  /** ADR number (1, 2, …): the file is exported as /shared/decisions/ADR-0001-<slug>.md. */
+  number: integer('number').notNull().default(0),
   title: text('title').notNull(),
   contextMd: text('context_md').notNull().default(''),
   optionsMd: text('options_md').notNull().default(''),

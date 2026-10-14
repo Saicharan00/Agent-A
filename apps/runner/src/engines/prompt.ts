@@ -194,11 +194,22 @@ function renderTask(t: PromptTask, goal?: PromptGoal | null): string {
   return lines.join('\n');
 }
 
+/** The four sections every answer ends with while Explain mode is on (PLAN F23). */
+export const EXPLAIN_SECTIONS = [
+  'Why this approach',
+  'Trade-offs considered',
+  'What a lead would watch for',
+  'Lesson',
+] as const;
+
 export const EXPLAIN_MODE_TEXT = `## Explain mode is on
-The owner is learning from you. Alongside doing the work:
-- Before acting, say in one or two sentences what you are about to do and why.
-- Name the trade-offs you considered and why you picked this option.
-- Afterwards, list the key takeaways a strong engineer would remember from this turn.`;
+The owner is learning from you, so teach while you work. End every answer with these four short sections, as
+\`###\` headings in this order:
+${EXPLAIN_SECTIONS.map((s) => `- **${s}**`).join('\n')}
+
+"Why this approach" names the principle behind what you did; "Trade-offs considered" lists the options you weighed
+and why you picked this one; "What a lead would watch for" names the risks and checks a senior engineer would keep in
+mind; "Lesson" is one takeaway in plain words. If the lesson is worth keeping, also save it with \`add_lesson\`.`;
 
 /** What is appended to a queued turn's prompt when another trigger for the same bot is merged into it. */
 export function renderFollowUp(bot: PromptBot, messages: PromptMessage[]): string {

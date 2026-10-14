@@ -1,6 +1,5 @@
-import { GraduationCap } from 'lucide-react';
 import type { Metadata } from 'next';
-import { EmptyState } from '@/components/empty-state';
+import { LearnView } from '@/components/learn/learn-view';
 import { Page, PageHeader } from '@/components/page-header';
 
 export const metadata: Metadata = { title: 'Learn' };
@@ -8,12 +7,11 @@ export const metadata: Metadata = { title: 'Learn' };
 export default function LearnPage() {
   return (
     <Page>
-      <PageHeader title="Learn" description="Decisions, lessons and how the work was split." />
-      <EmptyState
-        icon={GraduationCap}
-        title="Nothing to review yet"
-        description="Lessons and decision records arrive in F23."
+      <PageHeader
+        title="Learn"
+        description="Why the team decided what it decided, and the lessons worth reviewing until they stick."
       />
+      <LearnView />
     </Page>
   );
 }

@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 import type { EventBus } from '../bus';
 import type { GoalService } from '../goals/service';
+import { LearnService } from '../learn/service';
 import { MemoryError, MemoryService } from '../memories/service';
 import { publishTaskChanged, type TaskService } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
@@ -76,6 +77,8 @@ export type PlatformToolsOptions = {
   goals?: Pick<GoalService, 'onSubmitted' | 'escalate'>;
   /** save_memory/search_memory (F22); default: one without a /shared mirror or live events. */
   memories?: MemoryService;
+  /** record_decision/add_lesson (F23); default: one without the /shared export or live events. */
+  learn?: LearnService;
 };
 
 /**
@@ -84,9 +87,11 @@ export type PlatformToolsOptions = {
  */
 export class PlatformTools {
   private readonly memories: MemoryService;
+  private readonly learn: LearnService;
 
   constructor(private readonly opts: PlatformToolsOptions) {
     this.memories = opts.memories ?? new MemoryService({ repos: opts.repos });
+    this.learn = opts.learn ?? new LearnService({ repos: opts.repos });
   }
 
   /** The turn the bot is in now (a bot runs one turn at a time), so calls can be tied to it. */
@@ -437,32 +442,31 @@ export class PlatformTools {
 
     record_decision: (bot, input) => {
       if (input.task_id) this.task(input.task_id);
-      const d = this.opts.repos.decisions.create({
-        title: input.title,
-        contextMd: input.context,
-        optionsMd: input.options,
-        decisionMd: input.decision,
-        consequencesMd: input.consequences,
-        status: input.status,
-        taskId: input.task_id ?? null,
-        threadId: this.currentRun(bot.id)?.threadId ?? null,
-        createdBy: bot.id,
-      });
+      const d = this.learn.createDecision(
+        {
+          title: input.title,
+          contextMd: input.context,
+          optionsMd: input.options,
+          decisionMd: input.decision,
+          consequencesMd: input.consequences,
+          status: input.status,
+          taskId: input.task_id,
+          threadId: this.currentRun(bot.id)?.threadId ?? undefined,
+        },
+        bot.id,
+      );
       if (input.task_id)
         this.event(this.task(input.task_id), bot, 'decision', { decisionId: d.id, title: d.title });
-      return { id: d.id, title: d.title, status: d.status };
+      return { id: d.id, title: d.title, status: d.status, path: d.path };
     },
 
     add_lesson: (bot, input) => {
       if (input.task_id) this.task(input.task_id);
       const runId = this.currentRun(bot.id)?.id ?? null;
-      const l = this.opts.repos.lessons.create({
-        topic: input.topic,
-        lessonMd: input.lesson,
-        whyItMattersMd: input.why_it_matters,
-        source: input.task_id ? 'task' : runId ? 'run' : 'manual',
-        sourceId: input.task_id ?? runId,
-      });
+      const l = this.learn.createLesson(
+        { topic: input.topic, lessonMd: input.lesson, whyItMattersMd: input.why_it_matters },
+        { source: input.task_id ? 'task' : runId ? 'run' : 'manual', sourceId: input.task_id ?? runId },
+      );
       return { id: l.id, topic: l.topic };
     },
 

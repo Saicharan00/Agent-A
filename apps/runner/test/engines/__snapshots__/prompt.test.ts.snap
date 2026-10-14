@@ -20,10 +20,16 @@ Check the new OAuth callback handler.
 - Tests cover the error path
 
 ## Explain mode is on
-The owner is learning from you. Alongside doing the work:
-- Before acting, say in one or two sentences what you are about to do and why.
-- Name the trade-offs you considered and why you picked this option.
-- Afterwards, list the key takeaways a strong engineer would remember from this turn.
+The owner is learning from you, so teach while you work. End every answer with these four short sections, as
+\`###\` headings in this order:
+- **Why this approach**
+- **Trade-offs considered**
+- **What a lead would watch for**
+- **Lesson**
+
+"Why this approach" names the principle behind what you did; "Trade-offs considered" lists the options you weighed
+and why you picked this one; "What a lead would watch for" names the risks and checks a senior engineer would keep in
+mind; "Lesson" is one takeaway in plain words. If the lesson is worth keeping, also save it with \`add_lesson\`.
 
 Work on the task above and report what you did. When it meets the acceptance criteria, hand it in with \`submit_task_result\` (id tsk_1, a summary and your artifacts' paths)."
 `;

@@ -17,6 +17,7 @@ import { PlatformTools } from './mcp/tools';
 import { ContainerLauncher } from './engines/process';
 import { FilesService } from './files/service';
 import { GoalService } from './goals/service';
+import { LearnService } from './learn/service';
 import { MemoryService } from './memories/service';
 import { EngineRegistry } from './engines/registry';
 import { DockerMonitor } from './live/docker-monitor';
@@ -44,6 +45,12 @@ const memories = new MemoryService({
   repos,
   bus,
   log: rootLog.child({ module: 'memories' }),
+  sharedDir: config.sharedDir,
+});
+const learn = new LearnService({
+  repos,
+  bus,
+  log: rootLog.child({ module: 'learn' }),
   sharedDir: config.sharedDir,
 });
 const skillsDir = join(config.teamDir, 'skills');
@@ -154,6 +161,7 @@ const platformTools = new PlatformTools({
   tasks,
   goals,
   memories,
+  learn,
   log: rootLog.child({ module: 'platform-tools' }),
 });
 const platformMcp = new PlatformMcpServer({
@@ -188,6 +196,7 @@ const app = await buildServer(config, {
   tasks,
   goals,
   memories,
+  learn,
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();

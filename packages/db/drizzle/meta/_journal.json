@@ -50,6 +50,13 @@
       "when": 1791939989260,
       "tag": "0006_strong_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791942862404,
+      "tag": "0007_natural_paibok",
+      "breakpoints": true
     }
   ]
 }

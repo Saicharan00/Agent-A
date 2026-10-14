@@ -14,6 +14,8 @@ import { registerFileRoutes } from './files/routes';
 import type { FilesService } from './files/service';
 import { registerGoalRoutes } from './goals/routes';
 import type { GoalService } from './goals/service';
+import { registerLearnRoutes } from './learn/routes';
+import type { LearnService } from './learn/service';
 import { registerMemoryRoutes } from './memories/routes';
 import type { MemoryService } from './memories/service';
 import { registerEngineRoutes } from './engines/routes';
@@ -63,6 +65,8 @@ export type ServerDeps = {
   goals?: GoalService;
   /** Memory system (F22): /api/memories*. */
   memories?: MemoryService;
+  /** Learn (F23): /api/decisions*, /api/lessons*. */
+  learn?: LearnService;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -116,6 +120,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.tasks) registerTaskRoutes(app, deps.tasks);
   if (deps.goals) registerGoalRoutes(app, deps.goals);
   if (deps.memories) registerMemoryRoutes(app, deps.memories);
+  if (deps.learn) registerLearnRoutes(app, deps.learn);
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });

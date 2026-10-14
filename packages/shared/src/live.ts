@@ -5,6 +5,7 @@ import { AUTHOR_TYPES, ENGINES, RUN_STATUSES } from './enums';
 import { engineEventSchema } from './events';
 import type { LiveFilesChanged } from './files';
 import type { LiveGoalChanged } from './goals';
+import type { LiveLearnChanged } from './learn';
 import type { LiveMemoryChanged } from './memories';
 import type { LiveTaskChanged } from './tasks';
 import type { LiveThreadActivity } from './threads';
@@ -80,7 +81,8 @@ export type LiveEvent =
   | LiveFilesChanged
   | LiveTaskChanged
   | LiveGoalChanged
-  | LiveMemoryChanged;
+  | LiveMemoryChanged
+  | LiveLearnChanged;
 
 // ---------- WebSocket wire protocol (GET /ws, F11) ----------
 // One socket per browser tab carries any number of channel subscriptions. Every frame is one JSON object.

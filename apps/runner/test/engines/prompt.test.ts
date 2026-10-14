@@ -92,6 +92,8 @@ describe('buildPrompt', () => {
   it('explainMode argument overrides the thread flag', () => {
     const p = buildPrompt({ bot, thread: dm, newMessages: [msg({})], explainMode: true });
     expect(p).toContain('## Explain mode is on');
+    for (const s of ['Why this approach', 'Trade-offs considered', 'What a lead would watch for', 'Lesson'])
+      expect(p).toContain(`- **${s}**`);
   });
 });
 

@@ -145,7 +145,7 @@ function ThreadHeader({
           size="sm"
           aria-pressed={explainMode}
           onClick={onToggleExplain}
-          title="Explain mode: the bot says what it is doing and why, and lists takeaways (applies from the next message)"
+          title="Explain mode: every answer ends with why this approach, trade-offs, what a lead would watch for, and a lesson (applies from the next message)"
           className={cn(explainMode && 'bg-primary/15 text-primary hover:bg-primary/20')}
         >
           <GraduationCap aria-hidden />

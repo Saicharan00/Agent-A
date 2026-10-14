@@ -141,6 +141,9 @@ export function applyLiveEvent(cache: Cache, event: LiveEvent): void {
     case 'memory.changed':
       void cache.invalidateQueries({ queryKey: queryKeys.memories });
       return;
+    case 'learn.changed':
+      void cache.invalidateQueries({ queryKey: queryKeys.learn });
+      return;
     case 'run.event':
       return;
   }

@@ -619,3 +619,16 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   mirror write is logged, not fatal.
 - **All writes go through `MemoryService`** (owner API and bots' `save_memory`), so the guard, mirror and live
   `memory.changed` event apply to both.
+
+## F23 — Mentor & learning (session 1)
+- **ADR numbers are a `decisions.number` column** (migration 0007, existing rows backfilled in creation order),
+  assigned max+1 on insert. Exports are `/shared/decisions/ADR-0001-<slug>.md`, one-way from the DB; a renamed
+  decision's old file (same number prefix) is replaced. A failed export is logged, not fatal.
+- **All decision/lesson writes go through `LearnService`** (owner API and bots' `record_decision`/`add_lesson`), so
+  the export and the live `learn.changed` event apply to both.
+- **Spaced review:** `reviewedCount` counts "got it"s in a row; steps are 1d, 3d, 7d, then 21d repeating. "Review
+  again" resets to 0 and 1 day. New lessons (owner or bot) are first due one day after creation.
+- **Lesson "topic tags" = the existing single `topic` column** (one tag per lesson, filterable chips); no new table.
+- **Explain mode format applies to every bot in the thread, not only Agent A:** the four closing sections (Why this
+  approach · Trade-offs considered · What a lead would watch for · Lesson) are useful from any specialist, and one
+  prompt text keeps it simple. The prompt also asks the bot to save worthwhile lessons with `add_lesson`.

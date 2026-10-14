@@ -30,4 +30,8 @@ export const queryKeys = {
   /** Prefix of every memory query (refetched on memory.changed). */
   memories: ['memories'] as const,
   memoryList: (f: { scope: string; botId?: string; q?: string }) => ['memories', 'list', f] as const,
+  /** Prefix of every Learn query (refetched on learn.changed). */
+  learn: ['learn'] as const,
+  decisions: (status?: string) => ['learn', 'decisions', status ?? 'all'] as const,
+  lessons: ['learn', 'lessons'] as const,
 };

@@ -103,9 +103,14 @@ export function makeDecisionsRepo(db: Db) {
   return {
     create(input: DecisionCreateInput): Decision {
       const data = decisionCreateSchema.parse(input);
+      // Synchronous driver, one process: max+1 cannot race.
+      const last = db
+        .select({ n: sql<number>`coalesce(max(${decisions.number}), 0)` })
+        .from(decisions)
+        .get();
       return db
         .insert(decisions)
-        .values({ ...data, id: newId('decision'), createdAt: nowIso() })
+        .values({ ...data, number: (last?.n ?? 0) + 1, id: newId('decision'), createdAt: nowIso() })
         .returning()
         .get();
     },

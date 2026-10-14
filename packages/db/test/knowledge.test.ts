@@ -60,6 +60,12 @@ describe('decisionsRepo', () => {
     expect(t.repos.decisions.list({ status: 'proposed' })).toEqual([]);
     expect(t.repos.decisions.delete(d.id)).toBe(true);
   });
+
+  it('numbers decisions 1, 2, … for ADR file names', () => {
+    const a = t.repos.decisions.create({ title: 'A' });
+    const b = t.repos.decisions.create({ title: 'B' });
+    expect([a.number, b.number]).toEqual([1, 2]);
+  });
 });
 
 describe('lessonsRepo', () => {
