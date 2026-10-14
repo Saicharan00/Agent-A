@@ -103,6 +103,16 @@ export const platformToolInputs = {
     lesson: text.describe('Markdown: the lesson for the owner, in plain words'),
     why_it_matters: z.string().max(20_000).default(''),
     task_id: id.optional().describe('The task it came from, if any'),
+    review_today: z
+      .boolean()
+      .default(false)
+      .describe('True for weekly-review questions: due for the owner today instead of tomorrow'),
+  }),
+  save_handoff_brief: z.object({
+    title: z.string().trim().min(1).max(200),
+    content: text.describe(
+      'Markdown: What to do, Steps, Checks, Risks. Sanitized: no secrets, names, hosts or company details',
+    ),
   }),
   request_approval: z.object({
     action: z.string().trim().min(1).max(200).describe('What you want to do, e.g. "Push to main"'),

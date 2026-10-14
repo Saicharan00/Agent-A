@@ -9,7 +9,7 @@ import {
 import { z } from 'zod';
 import type { EventBus } from '../bus';
 import type { GoalService } from '../goals/service';
-import { LearnService } from '../learn/service';
+import { LearnError, LearnService } from '../learn/service';
 import { MemoryError, MemoryService } from '../memories/service';
 import { publishTaskChanged, type TaskService } from '../tasks/service';
 import type { ThreadService } from '../threads/service';
@@ -52,6 +52,8 @@ export const PLATFORM_TOOL_DESCRIPTIONS: Record<PlatformToolName, string> = {
   record_decision:
     'Record a design decision (context, options, decision, consequences) for the team and the owner.',
   add_lesson: 'Add a lesson for the owner to learn from: what happened and why it matters.',
+  save_handoff_brief:
+    'Save a sanitized carry-over brief for the owner to /shared/handoff (checked for secrets; rejected if any).',
   request_approval:
     'Ask the owner before a risky action (pushing, deleting, spending, contacting people). Returns at once ' +
     'with an approval id; do not act until check_approval says approved.',
@@ -466,8 +468,19 @@ export class PlatformTools {
       const l = this.learn.createLesson(
         { topic: input.topic, lessonMd: input.lesson, whyItMattersMd: input.why_it_matters },
         { source: input.task_id ? 'task' : runId ? 'run' : 'manual', sourceId: input.task_id ?? runId },
+        { dueNow: input.review_today },
       );
-      return { id: l.id, topic: l.topic };
+      return { id: l.id, topic: l.topic, next_review_at: l.nextReviewAt };
+    },
+
+    save_handoff_brief: (_bot, { title, content }) => {
+      try {
+        const b = this.learn.saveBrief({ title, contentMd: content });
+        return { path: b.path, title: b.title };
+      } catch (err) {
+        if (err instanceof LearnError) throw new ToolError(err.code, err.message);
+        throw err;
+      }
     },
 
     request_approval: (bot, { action, details, risk }) => {

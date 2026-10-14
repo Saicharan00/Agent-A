@@ -3,7 +3,7 @@ import type { EngineAdapter, EngineRunInput } from './types';
 
 // Scripted engine for tests and e2e: realistic event streams without spending subscription usage.
 // The scenario is picked by a keyword in the prompt: [mock:hello] [mock:tools] [mock:error] [mock:limit]
-// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan] [mock:remember];
+// [mock:slow] [mock:delegate] [mock:browser] [mock:moderate] [mock:pingpong] [mock:task] [mock:plan] [mock:remember] [mock:brief];
 // anything else echoes the prompt.
 
 export const MOCK_SCENARIOS = [
@@ -19,6 +19,7 @@ export const MOCK_SCENARIOS = [
   'task',
   'plan',
   'remember',
+  'brief',
   'echo',
 ] as const;
 export type MockScenario = (typeof MOCK_SCENARIOS)[number];
@@ -477,6 +478,21 @@ export class MockEngine implements EngineAdapter {
         };
         yield* this.platformCall('mock-mcp-1', call, input, emit);
         yield* reply('Noted: I will remember that you prefer short answers.');
+        return 'succeeded';
+      }
+      case 'brief': {
+        // save_handoff_brief (F23): a sanitized carry-over brief in /shared/handoff.
+        const call = {
+          name: 'mcp__agenta__save_handoff_brief',
+          input: {
+            title: 'Carry-over brief',
+            content:
+              '**What to do:** rebuild the feature by hand.\n\n**Steps:**\n1. Read the task.\n2. Build it.\n\n' +
+              '**Checks:** tests pass.\n\n**Risks:** scope creep.',
+          },
+        };
+        yield* this.platformCall('mock-mcp-1', call, input, emit);
+        yield* reply('Saved the carry-over brief to /shared/handoff.');
         return 'succeeded';
       }
       case 'pingpong': {

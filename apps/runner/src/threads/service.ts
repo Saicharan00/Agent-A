@@ -254,6 +254,56 @@ export class ThreadService {
     return { message: toMessageView(stored), runs: runs.map(toRunView) };
   }
 
+  /**
+   * The owner asks the lead (Agent A) something in `threadId` (default: the lead's DM), even in a thread the lead is
+   * not a member of: the message is posted as the owner's and only the lead gets a turn. Used by "Ask Agent A why",
+   * the weekly review and carry-over briefs (F23).
+   */
+  askLead(threadId: string | null, content: string): SendMessageResponse {
+    const { repos, log } = this.opts;
+    const lead = repos.bots.getLead();
+    if (!lead) throw new ThreadError('no_lead', 'There is no lead bot (Agent A) on the team', 409);
+    const id = threadId ?? repos.threads.findDm(lead.id)?.id;
+    if (!id) throw new ThreadError('thread_not_found', `${lead.name} has no direct messages thread`, 404);
+    const thread = this.writable(id);
+    if (thread.kind === 'goal') this.opts.runs.admitGoal({ threadId: id });
+    const message = repos.messages.create({
+      threadId: id,
+      authorType: 'user',
+      contentMd: content,
+      mentions: thread.kind === 'group' ? [lead.id] : [],
+    });
+    const run = this.opts.runs.enqueue({
+      botId: lead.id,
+      threadId: id,
+      trigger: 'user',
+      prompt: this.promptFor(lead, thread, message),
+    });
+    this.markSeen(run, message.id);
+    const stored = repos.messages.setRunId(message.id, run.id) ?? message;
+    this.publish(stored);
+    log.info({ threadId: id, messageId: message.id, runId: run.id }, 'lead asked');
+    return { message: toMessageView(stored), runs: [toRunView(run)] };
+  }
+
+  /** "Ask Agent A why" on a bot's message: the lead explains the reasoning behind it in the same thread. */
+  askWhy(threadId: string, messageId: string): SendMessageResponse {
+    const { repos } = this.opts;
+    const msg = repos.messages.get(messageId);
+    if (!msg || msg.threadId !== threadId || msg.authorType !== 'bot') {
+      throw new ThreadError('message_not_found', `Bot message ${messageId} is not in this thread`, 404);
+    }
+    const author = msg.authorBotId ? repos.bots.get(msg.authorBotId) : undefined;
+    const lead = repos.bots.getLead();
+    const who = author && author.id === lead?.id ? 'your' : `${author?.name ?? 'a teammate'}'s`;
+    const quoted = clipText(msg.contentMd.trim(), 4_000).replace(/^/gm, '> ');
+    return this.askLead(
+      threadId,
+      `Why? Explain the reasoning behind ${who} message below: the principle it follows, the trade-offs, ` +
+        `and what a lead would check. Keep it short.\n\n${quoted}`,
+    );
+  }
+
   /** The bot has now seen everything up to this message. */
   private markSeen(run: Run, messageId: string): void {
     // Keep the stored engine: a session id from the bot's previous engine must never be resumed by another one.
@@ -597,3 +647,5 @@ export class ThreadService {
     this.opts.bus.publish('global', activity);
   }
 }
+
+const clipText = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}… (truncated)` : s);

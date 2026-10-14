@@ -12,6 +12,7 @@ import {
   Check,
   ChevronRight,
   Copy,
+  HelpCircle,
   FileMinus,
   FilePen,
   FilePlus,
@@ -19,12 +20,14 @@ import {
   RotateCcw,
   Square,
 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { memo, useEffect, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { Markdown } from '@/components/markdown';
 import { useShell } from '@/components/shell/shell-context';
 import { useRunTimeline } from '@/hooks/use-thread';
 import { clockTime } from '@/lib/engines';
+import { learnApi } from '@/lib/learn';
 import { type RunState, isActiveRun, runState } from '@/lib/threads';
 import { type FileChange, type TimelineBlock, timelineText } from '@/lib/timeline';
 import { formatDuration, formatTokens } from '@/lib/tools';
@@ -42,6 +45,21 @@ function Time({ iso }: { iso: string }) {
 
 const ACTION =
   'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50';
+
+/** "Ask Agent A why": the lead explains the reasoning behind this bot message in the same thread (F23). */
+function AskWhyButton({ message }: { message: MessageView }) {
+  const ask = useMutation({
+    mutationFn: () => learnApi.askWhy(message.threadId, message.id),
+    onSuccess: () => toast.success('Asked Agent A why'),
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not ask Agent A'),
+  });
+  return (
+    <button type="button" className={ACTION} onClick={() => ask.mutate()} disabled={ask.isPending}>
+      <HelpCircle className="size-3.5" aria-hidden />
+      Ask Agent A why
+    </button>
+  );
+}
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -150,8 +168,9 @@ export const PlainMessage = memo(function PlainMessage({
     <BotRow bot={bot} data-testid="message-bot" data-message-id={message.id}>
       <BotHeader bot={bot} at={message.createdAt} />
       <Markdown>{message.contentMd}</Markdown>
-      <div className="opacity-0 transition-opacity group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
+      <div className="flex gap-1 opacity-0 transition-opacity group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
         <CopyButton text={message.contentMd} />
+        <AskWhyButton message={message} />
       </div>
     </BotRow>
   );
@@ -345,6 +364,7 @@ export function RunTurn({
           {text && (
             <span className="flex gap-1 opacity-0 transition-opacity group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
               <CopyButton text={text} />
+              {reply && <AskWhyButton message={reply} />}
             </span>
           )}
           {onRetry && (

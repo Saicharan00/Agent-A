@@ -632,3 +632,17 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Explain mode format applies to every bot in the thread, not only Agent A:** the four closing sections (Why this
   approach · Trade-offs considered · What a lead would watch for · Lesson) are useful from any specialist, and one
   prompt text keeps it simple. The prompt also asks the bot to save worthwhile lessons with `add_lesson`.
+
+## F23 — Mentor & learning (session 2)
+- **Work split counts done tasks by `updated_at` week (Monday 00:00 UTC)**; there is no `done_at` column and a done
+  task is rarely edited again. Bots' share = (agent + mixed / 2) / total; target 80% (`WORK_SPLIT_TARGET`).
+- **Weekly review, carry-over briefs and "Ask Agent A why" all go through `ThreadService.askLead`:** it posts the
+  owner's request as a user message and starts a turn for the lead only, in the given thread (or the lead's DM), even
+  where the lead is not a member. The answer is the lead's ordinary reply, so it streams like any other turn.
+- **Weekly review questions are lessons due today:** `add_lesson` gained `review_today`; the review prompt tells Agent
+  A to add 5 (topic "weekly-review").
+- **Briefs are files, not a table:** new MCP tool `save_handoff_brief` writes `/shared/handoff/<date>-<slug>.md` after
+  the secret check (`findSecrets`, until F24's full guard). `GET /api/learn/briefs` re-checks every file on read and
+  withholds the content of any that fails, so a hand-edited file cannot leak through the UI.
+- **Chart is plain divs** (100% stacked bars, dashed target line, legend, hover titles, table view); no chart
+  library added.

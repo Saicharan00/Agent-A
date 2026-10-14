@@ -111,6 +111,14 @@ export async function registerThreadRoutes(app: FastifyInstance, threads: Thread
     return handle(reply, () => threads.messages(req.params.id, q));
   });
 
+  app.post<{ Params: { id: string; messageId: string } }>(
+    '/api/threads/:id/messages/:messageId/ask-why',
+    async (req, reply) => {
+      const res = await handle(reply, () => threads.askWhy(req.params.id, req.params.messageId));
+      if (res) return reply.code(201).send(res);
+    },
+  );
+
   app.post<IdParams>('/api/threads/:id/messages', async (req, reply) => {
     const body = parse(sendMessageRequestSchema, req.body, reply, 'invalid_body');
     if (!body) return;

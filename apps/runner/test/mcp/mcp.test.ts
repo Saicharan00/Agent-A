@@ -141,6 +141,7 @@ describe('Platform MCP server (F17)', () => {
         'record_decision',
         'request_approval',
         'review_task',
+        'save_handoff_brief',
         'save_memory',
         'search_memory',
         'submit_task_result',

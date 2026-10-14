@@ -34,4 +34,6 @@ export const queryKeys = {
   learn: ['learn'] as const,
   decisions: (status?: string) => ['learn', 'decisions', status ?? 'all'] as const,
   lessons: ['learn', 'lessons'] as const,
+  workSplit: ['learn', 'work-split'] as const,
+  briefs: ['learn', 'briefs'] as const,
 };

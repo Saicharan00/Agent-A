@@ -1,5 +1,6 @@
 import {
   apiError,
+  carryOverBriefRequestSchema,
   decisionCreateRequestSchema,
   decisionListQuerySchema,
   decisionUpdateRequestSchema,
@@ -7,6 +8,7 @@ import {
   lessonListQuerySchema,
   lessonReviewRequestSchema,
   lessonUpdateRequestSchema,
+  workSplitQuerySchema,
 } from '@agenta/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { z } from 'zod';
@@ -84,4 +86,23 @@ export function registerLearnRoutes(app: FastifyInstance, learn: LearnService): 
     handle(reply, () => learn.deleteLesson(req.params.id));
     if (!reply.sent) return reply.code(204).send();
   });
+
+  app.get('/api/learn/work-split', async (req, reply) => {
+    const q = parse(workSplitQuerySchema, req.query, reply, 'invalid_query');
+    if (q) return learn.workSplit(q.weeks);
+  });
+
+  app.post('/api/learn/weekly-review', async (_req, reply) => {
+    const res = handle(reply, () => learn.weeklyReview());
+    if (res) return reply.code(201).send(res);
+  });
+
+  app.post('/api/learn/carry-over-brief', async (req, reply) => {
+    const body = parse(carryOverBriefRequestSchema, req.body, reply, 'invalid_body');
+    if (!body) return;
+    const res = handle(reply, () => learn.carryOverBrief(body));
+    if (res) return reply.code(201).send(res);
+  });
+
+  app.get('/api/learn/briefs', async (_req, reply) => handle(reply, () => learn.listBriefs()));
 }

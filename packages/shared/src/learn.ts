@@ -117,7 +117,58 @@ export function scheduleReview(
 /** A decision or lesson was added or changed. Channel: `global`. */
 export const liveLearnChangedSchema = z.object({
   type: z.literal('learn.changed'),
-  kind: z.enum(['decision', 'lesson']),
+  kind: z.enum(['decision', 'lesson', 'brief']),
   id: z.string(),
 });
 export type LiveLearnChanged = z.infer<typeof liveLearnChangedSchema>;
+
+// ---------- session 2: work split, weekly review, carry-over briefs ----------
+
+/** Share of finished work the bots should do (Agent A's 80/20 rule, F21). */
+export const WORK_SPLIT_TARGET = 0.8;
+
+export const workSplitWeekSchema = z.object({
+  /** Monday 00:00 UTC of the week, ISO. */
+  weekStart: z.string(),
+  agent: z.number().int(),
+  human: z.number().int(),
+  mixed: z.number().int(),
+  /** (agent + mixed / 2) / total, or null for a week with no finished tasks. */
+  agentShare: z.number().nullable(),
+});
+export type WorkSplitWeek = z.infer<typeof workSplitWeekSchema>;
+
+/** GET /api/learn/work-split?weeks=: done tasks by who executed them, per week, oldest first. */
+export const workSplitSchema = z.object({ target: z.number(), weeks: z.array(workSplitWeekSchema) });
+export type WorkSplit = z.infer<typeof workSplitSchema>;
+export const workSplitQuerySchema = z.object({ weeks: z.coerce.number().int().min(1).max(52).default(8) });
+
+/** Monday 00:00 UTC of the week containing `at`. */
+export function weekStart(at: Date): Date {
+  const d = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d;
+}
+
+/** POST /api/learn/weekly-review and /api/learn/carry-over-brief: where Agent A was asked, and its run. */
+export const learnRequestResponseSchema = z.object({ threadId: z.string(), runId: z.string() });
+export type LearnRequestResponse = z.infer<typeof learnRequestResponseSchema>;
+
+/** POST /api/learn/carry-over-brief: one of a task or a goal. */
+export const carryOverBriefRequestSchema = z
+  .object({ taskId: z.string().min(1).optional(), goalId: z.string().min(1).optional() })
+  .refine((b) => (b.taskId === undefined) !== (b.goalId === undefined), {
+    message: 'Give exactly one of taskId or goalId',
+  });
+export type CarryOverBriefRequest = z.infer<typeof carryOverBriefRequestSchema>;
+
+/** A brief in /shared/handoff. Content is withheld when the confidentiality check flags it. */
+export const handoffBriefSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  title: z.string(),
+  contentMd: z.string(),
+  updatedAt: z.string(),
+  guard: z.object({ ok: z.boolean(), reason: z.string().optional() }),
+});
+export type HandoffBrief = z.infer<typeof handoffBriefSchema>;

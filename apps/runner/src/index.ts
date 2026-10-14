@@ -47,12 +47,6 @@ const memories = new MemoryService({
   log: rootLog.child({ module: 'memories' }),
   sharedDir: config.sharedDir,
 });
-const learn = new LearnService({
-  repos,
-  bus,
-  log: rootLog.child({ module: 'learn' }),
-  sharedDir: config.sharedDir,
-});
 const skillsDir = join(config.teamDir, 'skills');
 const containers = config.dockerEnabled
   ? new ContainerManager({
@@ -154,6 +148,13 @@ runs.onReply = (run, reply) => {
   threads.routeBotMessage(reply, run);
   goals.onReply(run);
 };
+const learn = new LearnService({
+  repos,
+  bus,
+  log: rootLog.child({ module: 'learn' }),
+  sharedDir: config.sharedDir,
+  threads,
+});
 const platformTools = new PlatformTools({
   repos,
   threads,
