@@ -15,6 +15,7 @@ export default tseslint.config(
       'test-results/**',
       'data/**',
       '.trash-*/**',
+      '.claude/**',
       '**/next-env.d.ts',
     ],
   },

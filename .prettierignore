@@ -8,3 +8,4 @@ pnpm-lock.yaml
 *.md
 apps/web/next-env.d.ts
 .trash-*
+.claude
