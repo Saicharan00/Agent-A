@@ -4,7 +4,7 @@ import { type FileRoot, containerPath } from '@agenta/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Code, Download, Eye, FileWarning, Pencil, RotateCcw, Save } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { Markdown } from '@/components/markdown';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -57,6 +57,8 @@ export function FileViewer({
   const [mdSource, setMdSource] = useState(false);
   // Editing: the draft and the version it started from. Live refreshes never touch the draft.
   const [draft, setDraft] = useState<string | null>(null);
+  // The editor's text right now: a keystroke just before Ctrl+S may not have re-rendered `draft` yet.
+  const latest = useRef<string | null>(null);
   const [base, setBase] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -68,6 +70,7 @@ export function FileViewer({
 
   function startEdit() {
     if (!data || data.content === null) return;
+    latest.current = data.content;
     setDraft(data.content);
     setBase(data.modifiedAt);
     setConflict(false);
@@ -76,19 +79,21 @@ export function FileViewer({
 
   function stopEdit() {
     if (dirty && !window.confirm('Discard your unsaved changes?')) return;
+    latest.current = null;
     setDraft(null);
     setConflict(false);
   }
 
   async function save() {
-    if (draft === null || saving) return;
+    const text = latest.current;
+    if (text === null || saving) return;
     setSaving(true);
     try {
-      const { entry } = await filesApi.save(botId, root, path, draft, base);
+      const { entry } = await filesApi.save(botId, root, path, text, base);
       setBase(entry.modifiedAt);
       setConflict(false);
       // The saved text is what's on disk now.
-      if (data) qc.setQueryData(fileKeys.content(botId, root, path), { ...data, content: draft, ...entry });
+      if (data) qc.setQueryData(fileKeys.content(botId, root, path), { ...data, content: text, ...entry });
       toast.success(`Saved ${baseName(path)}`);
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'modified_elsewhere') setConflict(true);
@@ -99,6 +104,7 @@ export function FileViewer({
   }
 
   async function reloadFromDisk() {
+    latest.current = null;
     setDraft(null);
     setConflict(false);
     await content.refetch();
@@ -169,7 +175,15 @@ export function FileViewer({
           theme={theme}
           readOnly={!editing}
           // Monaco also reports programmatic value changes (e.g. after Reload): never revive a closed draft.
-          onChange={editing ? (v) => setDraft((d) => (d === null ? d : v)) : undefined}
+          onChange={
+            editing
+              ? (v) => {
+                  if (latest.current === null) return;
+                  latest.current = v;
+                  setDraft(v);
+                }
+              : undefined
+          }
           onSave={editing ? () => void save() : undefined}
         />
       </div>

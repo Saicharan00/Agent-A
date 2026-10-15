@@ -142,6 +142,39 @@ describe('RunService (session 2: cancel, timeout, limits, recovery, retries)', (
       expect(h.repos.notifications.list()[0]!.body).toContain('will not be retried');
     });
 
+    it('a goal run whose retry the goal refuses says why, in the timeline and the notification', async () => {
+      const clock = sharedClock();
+      h = makeHarness({ now: clock.now, adapters: [new MockEngine({ clock: clock.mock, tickMs: 1 })] });
+      const botId = h.bot('Lead');
+      const threadId = h.dm(botId);
+      const goal = h.repos.goals.create({
+        title: 'Ship it',
+        slug: 'ship-it',
+        goalMd: 'Ship it',
+        maxRuns: 1,
+        leadBotId: botId,
+        threadId,
+      });
+      const run = h.service.enqueue({
+        botId,
+        threadId,
+        goalId: goal.id,
+        trigger: 'user',
+        prompt: '[mock:limit] go',
+      });
+      await h.service.idle();
+
+      expect(h.repos.runs.get(run.id)!.status).toBe('limited');
+      expect(h.repos.runs.list({ status: 'queued' })).toEqual([]);
+      const system = h.repos.runs.listEvents(run.id).find((e) => e.type === 'system');
+      expect(JSON.stringify(system)).toContain(
+        'This turn was not queued again: The goal \\"Ship it\\" has used all 1',
+      );
+      expect(h.repos.notifications.list()[0]!.body).toContain(
+        'will not be retried: The goal "Ship it" has used all 1',
+      );
+    });
+
     it('pauses for 30 minutes when the limit message has no reset time, and lets other engines run', async () => {
       const clock = sharedClock();
       h = makeHarness({ now: clock.now });

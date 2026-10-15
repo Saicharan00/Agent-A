@@ -32,9 +32,9 @@ import { cn } from '@/lib/utils';
 import { TaskDrawer } from './task-drawer';
 
 const PRIORITY_TONE: Record<TaskPriority, string> = {
-  p0: 'bg-red-500/15 text-red-600 dark:text-red-400',
-  p1: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
-  p2: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
+  p0: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  p1: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
+  p2: 'bg-sky-500/15 text-sky-700 dark:text-sky-400',
   p3: 'bg-muted text-muted-foreground',
 };
 

@@ -214,6 +214,10 @@ test.describe('files', () => {
     await panel.getByRole('button', { name: 'Back to files' }).click();
     await expect(item(work, 'from-shell.txt')).toBeVisible({ timeout: 15_000 });
 
-    await request.post(`/api/bots/${bot.id}/computer/stop`);
+    // Delete the bot so its computer doesn't pile up as a stopped container run after run.
+    const del = await request.delete(`/api/bots/${bot.id}`, {
+      data: { confirmName: bot.name, deleteHome: true },
+    });
+    expect(del.status()).toBe(204);
   });
 });

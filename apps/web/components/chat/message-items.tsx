@@ -138,7 +138,7 @@ function BotRow({
   ...props
 }: { bot: BotView | undefined; children: React.ReactNode } & React.ComponentProps<'div'>) {
   return (
-    <div className="group/msg flex gap-3" {...props}>
+    <div className="group/msg flex gap-3" data-bot-id={bot?.id} {...props}>
       {bot ? (
         <BotAvatar name={bot.name} color={bot.avatarColor} shape={bot.avatarShape} size="sm" />
       ) : (

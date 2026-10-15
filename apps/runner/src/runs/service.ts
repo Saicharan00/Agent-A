@@ -521,6 +521,8 @@ export class RunService {
     log.warn({ runId: run.id, engine: run.engine, limitedUntil }, 'engine usage limit hit; queue paused');
 
     let retry: Run | undefined;
+    // Why the retry was refused (its goal paused or out of runs): said in the timeline and the notification.
+    let refused: string | undefined;
     if (!run.retryOfRunId) {
       try {
         retry = this.enqueue({
@@ -538,10 +540,12 @@ export class RunService {
           message: `Usage limit reached. This turn will run again automatically (${retry.id}) after ${limitedUntil}.`,
         });
       } catch (err) {
-        log.warn(
-          { runId: run.id, err: (err as Error).message },
-          'could not queue the retry of a limited run',
-        );
+        refused = (err as Error).message;
+        log.warn({ runId: run.id, err: refused }, 'could not queue the retry of a limited run');
+        writer.push({
+          type: 'system',
+          message: `Usage limit reached. This turn was not queued again: ${refused}.`,
+        });
       }
     }
     const bot = repos.bots.get(run.botId);
@@ -553,7 +557,9 @@ export class RunService {
         `${engineName} runs are paused until ${limitedUntil} (UTC).`,
         retry
           ? `${bot?.name ?? 'The bot'}'s turn will run again automatically then.`
-          : `${bot?.name ?? 'The bot'}'s turn already hit the limit once before, so it will not be retried.`,
+          : refused
+            ? `${bot?.name ?? 'The bot'}'s turn will not be retried: ${refused}. Ask again once that is sorted.`
+            : `${bot?.name ?? 'The bot'}'s turn already hit the limit once before, so it will not be retried.`,
       ].join(' '),
       link: '/usage',
     });

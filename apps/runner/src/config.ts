@@ -10,6 +10,8 @@ const configSchema = z.object({
   /** Platform MCP server (F17): 127.0.0.1 plus the bot network gateway. 0 picks a free port (tests). */
   mcpPort: z.coerce.number().int().min(0).max(65535),
   webOrigin: z.string().url(),
+  /** Extra host names the API answers to besides loopback and the web origin's (AGENTA_ALLOWED_HOSTS, comma list). */
+  allowedHosts: z.array(z.string().min(1)),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']),
   engineOverride: z.enum(['mock']).optional(),
   dbPath: z.string().min(1),
@@ -46,6 +48,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     port: env.AGENTA_RUNNER_PORT ?? DEFAULT_PORTS.runner,
     mcpPort: env.AGENTA_MCP_PORT ?? DEFAULT_PORTS.mcp,
     webOrigin: env.AGENTA_WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
+    allowedHosts: (env.AGENTA_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean),
     logLevel: env.LOG_LEVEL ?? 'info',
     engineOverride: env.AGENTA_ENGINE_OVERRIDE || undefined,
     dbPath: resolveDbPath(root, env),

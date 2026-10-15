@@ -49,7 +49,9 @@ describe('avatar helpers', () => {
     expect(readableTextColor('#ffffff')).toBe('#000000');
     expect(readableTextColor('#facc15')).toBe('#000000');
     expect(readableTextColor('#1e1b4b')).toBe('#ffffff');
-    expect(readableTextColor('#6366f1')).toBe('#ffffff');
+    // Mid indigo: white is 4.47:1 (fails WCAG AA), black 4.7:1.
+    expect(readableTextColor('#6366f1')).toBe('#000000');
+    expect(readableTextColor('#4f46e5')).toBe('#ffffff');
     expect(readableTextColor('nope')).toBe('#ffffff');
   });
 });

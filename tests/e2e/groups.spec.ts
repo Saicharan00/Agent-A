@@ -26,8 +26,9 @@ async function createGroup(request: APIRequestContext, data: object): Promise<Th
   return (await res.json()) as ThreadView;
 }
 
+// By author id: a turn can quote another bot's name (e.g. "asked by Mod"), so matching on text is ambiguous.
 const turnsBy = (page: Page, bot: BotView) =>
-  page.getByTestId('bot-turn').filter({ has: page.getByText(bot.name, { exact: true }) });
+  page.locator(`[data-testid="bot-turn"][data-bot-id="${bot.id}"]`);
 
 test.describe('group chats', () => {
   let problems: string[];

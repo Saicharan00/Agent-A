@@ -117,7 +117,6 @@ export function TopBar() {
         type="button"
         onClick={() => setPaletteOpen(true)}
         className="flex h-8 w-full max-w-md min-w-40 items-center gap-2 rounded-md border bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
-        aria-label="Search and commands"
       >
         <Search className="size-4 shrink-0" aria-hidden />
         <span className="flex-1 truncate text-left">Search threads, tasks, commands…</span>
@@ -150,7 +149,8 @@ export function TopBar() {
           onClick={() => setComputerOpen(!computerOpen)}
           aria-label={computerOpen ? 'Close computer panel' : 'Open computer panel'}
           aria-pressed={computerOpen}
-          aria-controls="computer-panel"
+          // The panel is unmounted while closed; aria-controls must not point at a missing id.
+          aria-controls={computerOpen ? 'computer-panel' : undefined}
           title={`Computer (${SHORTCUTS.toggleComputer})`}
         >
           <Monitor />

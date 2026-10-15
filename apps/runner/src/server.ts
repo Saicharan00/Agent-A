@@ -47,6 +47,7 @@ import { registerThreadRoutes } from './threads/routes';
 import { registerUsageRoutes } from './usage/routes';
 import { type SystemRouteDeps, registerSystemRoutes } from './system/routes';
 import type { ThreadService } from './threads/service';
+import { registerRequestGuard } from './request-guard';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -125,6 +126,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   app.decorate('repos', deps.repos ?? null);
 
   await app.register(cors, { origin: [config.webOrigin] });
+  registerRequestGuard(app, { webOrigin: config.webOrigin, hosts: config.allowedHosts });
 
   app.setNotFoundHandler((req, reply) => {
     void reply.code(404).send(apiError('not_found', `Route ${req.method} ${req.url} not found`));

@@ -21,7 +21,8 @@ export function readableTextColor(hex: string): '#000000' | '#ffffff' {
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
   const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return L > 0.4 ? '#000000' : '#ffffff';
+  // Higher contrast wins: on black it's (L + 0.05) / 0.05, on white 1.05 / (L + 0.05); they meet near L = 0.179.
+  return (L + 0.05) / 0.05 > 1.05 / (L + 0.05) ? '#000000' : '#ffffff';
 }
 
 export const SHAPE_CLASS: Record<AvatarShape, string> = {

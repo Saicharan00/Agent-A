@@ -112,7 +112,7 @@ test.describe('app shell', () => {
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(/\/schedules$/);
 
-    await page.getByRole('button', { name: 'Search and commands' }).click();
+    await page.getByRole('button', { name: /^Search threads, tasks, commands/ }).click();
     await expect(dialog).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -137,7 +137,9 @@ test.describe('app shell', () => {
       expect(sidebar!.x + sidebar!.width).toBeLessThanOrEqual(main!.x + 1);
       expect(main!.x + main!.width).toBeLessThanOrEqual(panel!.x + 1);
       expect(panel!.x + panel!.width).toBeLessThanOrEqual(width);
-      const search = await page.getByRole('button', { name: 'Search and commands' }).boundingBox();
+      const search = await page
+        .getByRole('button', { name: /^Search threads, tasks, commands/ })
+        .boundingBox();
       expect(search!.width).toBeGreaterThanOrEqual(160);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow).toBeLessThanOrEqual(0);

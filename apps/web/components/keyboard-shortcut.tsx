@@ -4,7 +4,9 @@ import { cn } from '@/lib/utils';
 export function KeyboardShortcut({ combo, className }: { combo: string; className?: string }) {
   const keys = combo.split('+');
   return (
-    <span className={cn('inline-flex items-center gap-0.5', className)} aria-label={combo}>
+    // aria-label isn't allowed on a plain span: screen readers get the combo as hidden text instead.
+    <span className={cn('inline-flex items-center gap-0.5', className)}>
+      <span className="sr-only">{combo}</span>
       {keys.map((k, i) => (
         <kbd
           key={i}

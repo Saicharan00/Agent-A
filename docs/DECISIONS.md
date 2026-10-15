@@ -874,3 +874,26 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   landed at the old caret and the caret then jumped back ("hello team" → "ello teamh" in groups.spec).
 - **Backups list shows the newest 15:** backup.spec asks the API for the daily backup and checks the newest row
   changed, since repeated e2e runs push older rows off the list.
+
+## F33 — Full QA pass (session 2)
+
+- **Request guard in the runner, not Next middleware:** the Next proxy forwards `Origin`, `Sec-Fetch-Site` and
+  `X-Forwarded-Host`, so one Fastify `onRequest` hook covers REST and sockets and is unit-testable with `inject`.
+  Host allowlist on every method (DNS rebinding); Origin / `Sec-Fetch-Site` only on unsafe methods (CSRF), so OAuth
+  callbacks (cross-site GET navigations) still work. New env `AGENTA_ALLOWED_HOSTS` for LAN names. No login added:
+  single owner on loopback; see docs/SECURITY.md.
+- **A limited run whose retry its goal refuses** (paused / out of runs) now says so in the run timeline and the
+  notification instead of claiming it "already hit the limit once"; the owner re-asks once the goal is sorted.
+- **New dev dependency `@axe-core/playwright`:** the standard WCAG rule engine for the accessibility pass
+  (`tests/e2e/a11y.spec.ts`, every page in both themes). Findings fixed: kbd shortcut used `aria-label` on a plain
+  span (now sr-only text), the palette button's name hid its visible text, `aria-controls` pointed at the unmounted
+  computer panel, avatar initials picked black/white at luminance 0.4 instead of the equal-contrast point (~0.18),
+  and light-theme status colours / badges were under 4.5:1.
+- **No virtual list for long threads:** with `content-visibility: auto` rows, 2,000 loaded messages scroll at a
+  17.7 ms p95 frame (`tests/e2e/perf.spec.ts`); a virtualizer isn't needed.
+- **Runner restart and Docker loss stay unit-tested** (`runs/lifecycle.test.ts`, `containers/manager.test.ts`):
+  restarting the runner or the sandbox's Docker daemon inside an e2e run would take down the shared dev server.
+  The WebSocket drop is e2e (`page.routeWebSocket`).
+- **Save reads the editor's latest text from a ref**, not the rendered `draft`: Ctrl+S right after a keystroke could
+  save the text one render behind (the file stayed dirty after "Saved"). Group specs find a bot's turns by
+  `data-bot-id`, since a turn can quote another bot's name.

@@ -22,8 +22,8 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Somet
 export const adrLabel = (n: number) => `ADR-${String(n).padStart(4, '0')}`;
 
 const STATUS_TONE: Record<DecisionStatus, string> = {
-  proposed: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  accepted: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  proposed: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+  accepted: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
   superseded: 'bg-muted text-muted-foreground line-through',
 };
 

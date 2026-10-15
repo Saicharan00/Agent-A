@@ -71,7 +71,7 @@ export function NotificationsBell() {
         {count > 0 && (
           <span
             aria-hidden
-            className="absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-4 font-semibold text-white"
+            className="absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] dark:bg-red-600 leading-4 font-semibold text-white"
           >
             {count}
           </span>
