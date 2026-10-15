@@ -31,7 +31,8 @@
     "smoke:mcp": "vitest run --config tests/smoke/vitest.config.ts mcp",
     "mock:run": "tsx --tsconfig apps/runner/tsconfig.json apps/runner/scripts/mock-run.ts",
     "doctor": "tsx scripts/doctor.ts",
-    "restore": "tsx scripts/restore.ts"
+    "restore": "tsx scripts/restore.ts",
+    "launch": "pnpm install --frozen-lockfile && tsx scripts/launch.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

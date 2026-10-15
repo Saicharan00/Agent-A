@@ -897,3 +897,21 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Save reads the editor's latest text from a ref**, not the rendered `draft`: Ctrl+S right after a keystroke could
   save the text one render behind (the file stayed dirty after "Saved"). Group specs find a bot's turns by
   `data-bot-id`, since a turn can quote another bot's name.
+
+## F34 — Docs, one-command launch & final demo
+
+- **`pnpm launch` = `pnpm install --frozen-lockfile && tsx scripts/launch.ts`:** the install step makes it work on a
+  fresh clone (tsx is not there yet) and after a `git pull`, and is a ~1 s no-op otherwise. The script stays TypeScript
+  so it is typechecked and unit-tested like the other root scripts.
+- **"Build if needed" = the web build's stamp (`apps/web/.next/agenta-build-rev`) differs from git HEAD**, or there is
+  no `BUILD_ID`, or `--rebuild`. Uncommitted edits are not detected (the owner runs committed code; developers use
+  `pnpm dev`). Only the web app is built: the runner runs TypeScript via tsx and its `build` is just a typecheck.
+- **Ensure image = build `agenta-bot:latest` only when it is missing.** A stale image only gets a pointer to
+  `pnpm run doctor`, because a rebuild takes minutes and running bot computers keep the old image until reset anyway.
+  No Docker: the app still starts (bot computers report docker_unavailable).
+- **Readiness = runner `/api/health` direct, then the same through the web proxy;** polling only the web made the Next
+  proxy log ECONNREFUSED while the runner booted. If the app is already up, launch prints the URL and exits.
+- **`scripts/windows/AgentA.cmd` uses `sbx exec -it -w /e/Agent-A-GrokBot agent-a bash -lc "pnpm launch"`** in its own
+  window (`sbx exec` starts a stopped sandbox), polls `/api/health` with Windows' `curl.exe`, then opens the browser.
+  Port 3000 reaches the app through the sandbox's `-p 127.0.0.1:3000:3000` plus `AGENTA_WEB_HOST=0.0.0.0` (F01).
+  CRLF line endings: cmd's `goto` labels can misparse LF-only files.
