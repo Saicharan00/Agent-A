@@ -57,12 +57,14 @@ test.describe('backup, export & reset', () => {
     await page.goto('/settings');
     const section = page.getByRole('region', { name: 'Backups' });
     const rows = section.getByTestId('backup-row');
-    // The runner's first launch of the day already wrote a daily backup.
-    await expect(rows.filter({ hasText: 'daily' })).toHaveCount(1);
-    const before = await rows.count();
+    // The runner's first launch of the day already wrote a daily backup. Asked from the API: the list shows only the
+    // newest 15, and repeated e2e runs push it off with manual and reset backups.
+    const all = (await (await request.get('/api/backups')).json()) as { backups: { reason: string }[] };
+    expect(all.backups.filter((b) => b.reason === 'daily').length).toBeGreaterThanOrEqual(1);
+    const newest = await rows.first().locator('code').textContent();
     await section.getByRole('button', { name: 'Back up now' }).click();
     await expect(page.getByText('Backup written')).toBeVisible();
-    await expect(rows).toHaveCount(before + 1);
+    await expect(rows.first().locator('code')).not.toHaveText(newest ?? '');
     await expect(rows.first()).toContainText('manual');
     await expect(section.getByText(/pnpm restore .*data\/e2e\/backups\//)).toBeVisible();
 

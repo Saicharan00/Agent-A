@@ -26,18 +26,25 @@ export default function CodeEditor({
   path: string;
 }) {
   const saveRef = useRef(onSave);
+  const valueRef = useRef(value);
   useEffect(() => {
     saveRef.current = onSave;
+    valueRef.current = value;
   });
 
   const onMount: OnMount = (editor, monaco) => {
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current?.());
+    // A model kept for this path may hold older text.
+    if (editor.getValue() !== valueRef.current) editor.setValue(valueRef.current);
   };
 
   return (
     <div className="h-full min-h-0" data-testid="code-editor" data-readonly={readOnly ? 'true' : 'false'}>
       <Editor
-        value={value}
+        // While editing, the editor owns its text: the library replaces the whole model whenever `value` differs,
+        // so a render with a slightly older draft would drop keystrokes typed since.
+        value={readOnly ? value : undefined}
+        defaultValue={value}
         language={language}
         path={path}
         theme={theme === 'dark' ? 'vs-dark' : 'light'}

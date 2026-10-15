@@ -2,7 +2,7 @@
 
 import { type BotView, type GuardCheckResponse, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '@agenta/shared';
 import { Loader2, Paperclip, Send, ShieldAlert, Square, X } from 'lucide-react';
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { KeyboardShortcut } from '@/components/keyboard-shortcut';
 import { Button } from '@/components/ui/button';
@@ -82,13 +82,20 @@ export function Composer({
   const mention = mentionable ? mentionAt(text, caret) : null;
   const candidates = mention && mentionable ? mentionCandidates(mentionable, mention.query) : [];
   const suggesting = candidates.length > 0 && dismissedAt !== mention?.start;
+  const pendingCaret = useRef<number | null>(null);
   const pick = (bot: BotView) => {
     if (!mention) return;
     const next = insertMention(text, caret, mention.start, bot.slug);
     setText(next.text);
     setCaret(next.caret);
-    requestAnimationFrame(() => inputRef.current?.setSelectionRange(next.caret, next.caret));
+    pendingCaret.current = next.caret;
   };
+  // Move the caret as soon as the new text is in the DOM: a later frame could land after the next keystroke.
+  useLayoutEffect(() => {
+    if (pendingCaret.current === null) return;
+    inputRef.current?.setSelectionRange(pendingCaret.current, pendingCaret.current);
+    pendingCaret.current = null;
+  });
 
   // Edit and resend: load the draft once per request.
   const draftKey = draft?.key;

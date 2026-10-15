@@ -860,3 +860,17 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   the UI uses plain `<a download>` links (thread header, goal bar, Learn → Decisions / Lessons). Times are UTC in files.
   Embedded documents (ADRs, the goal report) get their headings demoted so they nest; code fences are left alone.
 - **`AGENTA_BACKUPS_DIR`** overrides the folder (e2e uses `data/e2e/backups`).
+
+## F33 — Full QA pass (session 1)
+
+- **One journey spec, not a second copy of every feature spec:** `tests/e2e/journey.spec.ts` walks onboarding → chat
+  with tools → computer tabs → group → goal loop → approvals → learn → schedules → usage → backup on the team the
+  wizard creates, with one `test.step` per stage. Edge cases stay in each feature's own spec.
+- **The code editor owns its text while editing:** `@monaco-editor/react` replaces the whole model whenever the `value`
+  prop differs from the editor, so a render carrying a slightly older draft dropped keystrokes typed since (seen as
+  "Saved ferminal." in files.spec). `CodeEditor` now passes `value` only when read-only; while editing the parent's
+  draft follows `onChange` and is never pushed back. On mount it syncs a reused per-path model to the given value.
+- **Mention pick moves the caret in a layout effect, not a `requestAnimationFrame`:** a key typed before the frame
+  landed at the old caret and the caret then jumped back ("hello team" → "ello teamh" in groups.spec).
+- **Backups list shows the newest 15:** backup.spec asks the API for the daily backup and checks the newest row
+  changed, since repeated e2e runs push older rows off the list.

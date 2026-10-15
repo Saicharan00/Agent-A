@@ -61,7 +61,7 @@ describe('ImageBuilder', () => {
     const b = new ImageBuilder({
       cwd: process.cwd(),
       log: silent,
-      command: node('for (let i = 0; i < 1000; i++) console.log("line " + i); process.exit(3)'),
+      command: node('for (let i = 0; i < 1000; i++) console.log("line " + i); process.exitCode = 3'),
     });
     b.start();
     const s = await settled(b);
