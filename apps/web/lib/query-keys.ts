@@ -57,5 +57,6 @@ export const queryKeys = {
   usageSettings: ['usage', 'settings'] as const,
   doctor: ['settings', 'doctor'] as const,
   appSettings: ['settings', 'app'] as const,
+  backups: ['settings', 'backups'] as const,
   imageBuild: ['settings', 'image-build'] as const,
 };

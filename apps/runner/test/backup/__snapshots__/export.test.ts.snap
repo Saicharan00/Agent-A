@@ -1,0 +1,157 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Markdown exports > decisions and lessons 1`] = `
+"# Decisions
+
+- Count: 2
+- Exported: 2026-10-15 09:30 UTC
+
+---
+
+## ADR-0001: Use SQLite
+
+- Status: accepted
+- Date: 2026-10-14
+- Thread: thr_1
+
+### Context
+
+We need a database.
+
+### Options considered
+
+- SQLite
+- Postgres
+
+### Decision
+
+SQLite.
+
+### Consequences
+
+_None recorded._
+
+---
+
+## ADR-0002: Use croner
+
+- Status: accepted
+- Date: 2026-10-14
+- Thread: thr_1
+
+### Context
+
+We need a database.
+
+### Options considered
+
+- SQLite
+- Postgres
+
+### Decision
+
+SQLite.
+
+### Consequences
+
+_None recorded._
+"
+`;
+
+exports[`Markdown exports > decisions and lessons 2`] = `
+"# Lessons
+
+- Count: 2
+- Exported: 2026-10-15 09:30 UTC
+
+## Git
+
+Small commits.
+
+_Source: task · added 2026-10-13 · reviewed 2×_
+
+## Testing
+
+Mock the engine.
+
+**Why it matters:** Real runs burn limits.
+
+_Source: task · added 2026-10-13 · reviewed 2×_
+"
+`;
+
+exports[`Markdown exports > goal report 1`] = `
+"# Goal: Ship the landing page
+
+- Status: done
+- Started: 2026-10-14 08:00 UTC
+- Finished: 2026-10-15 08:00 UTC
+- Artifacts: /shared/projects/ship-the-landing-page/
+- Exported: 2026-10-15 09:30 UTC
+
+## Goal
+
+A one-page site with a sign-up form.
+
+## Constraints
+
+No paid services.
+
+## Tasks
+
+- [x] Write copy (done, Builder)
+
+  Copy in \`copy.md\`.
+  Two variants.
+
+- [ ] Pick colours (in_progress, unassigned)
+
+## Report
+
+#### Summary
+
+Shipped.
+
+\`\`\`sh
+# not a heading
+\`\`\`
+"
+`;
+
+exports[`Markdown exports > thread 1`] = `
+"# Launch plan
+
+- Kind: group
+- Started: 2026-10-14 08:00 UTC
+- Messages: 4
+- Exported: 2026-10-15 09:30 UTC
+
+---
+
+**You** · 2026-10-14 08:01 UTC
+
+@Builder draft the page
+
+---
+
+**Builder** · 2026-10-14 08:05 UTC
+
+Done: \`index.html\`
+
+\`\`\`html
+<h1>Hi</h1>
+\`\`\`
+
+---
+
+**System** · 2026-10-14 08:06 UTC
+
+Builder joined.
+
+---
+
+**Deleted bot** · 2026-10-14 08:07 UTC
+
+old reply
+"
+`;

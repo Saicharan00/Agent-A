@@ -4,6 +4,8 @@ import { apiError, type HealthResponse } from '@agenta/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pkg from '../package.json' with { type: 'json' };
 import type { Repos } from '@agenta/db';
+import { registerBackupRoutes } from './backup/routes';
+import type { BackupService } from './backup/service';
 import { registerBotRoutes } from './bots/routes';
 import type { BotService } from './bots/service';
 import type { RunnerConfig } from './config';
@@ -94,6 +96,8 @@ export type ServerDeps = {
   gateway?: GatewayService;
   /** Doctor, app settings, image build, onboarding (F31). Onboarding also needs `bots` and `threads`. */
   system?: Omit<SystemRouteDeps, 'bots' | 'threads'>;
+  /** Backups, exports and factory reset (F32): /api/backup*, /api/reset, /api/export/*. Needs `repos`. */
+  backups?: { service: BackupService; dir: string };
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -161,6 +165,7 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.gateway) registerGatewayRoutes(app, deps.gateway);
   if (deps.system && deps.repos)
     registerSystemRoutes(app, { ...deps.system, bots: deps.bots, threads: deps.threads });
+  if (deps.backups && deps.repos) registerBackupRoutes(app, deps.backups.service, deps.backups.dir);
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });

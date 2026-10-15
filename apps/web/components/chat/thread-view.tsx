@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { EmptyState } from '@/components/empty-state';
+import { ExportLink } from '@/components/export-link';
 import { GoalBar } from '@/components/goals/goal-progress';
 import { useShell } from '@/components/shell/shell-context';
 import { StatusPill } from '@/components/status-pill';
@@ -106,12 +107,14 @@ function GroupHeading({ thread }: { thread: Thread }) {
 }
 
 function ThreadHeader({
+  threadId,
   bot,
   group,
   title,
   explainMode,
   onToggleExplain,
 }: {
+  threadId: string;
   bot: BotView | undefined;
   group: Thread | undefined;
   title: string;
@@ -140,6 +143,7 @@ function ThreadHeader({
           </div>
         </>
       )}
+      <ExportLink path={`/export/threads/${threadId}`} />
       {explainMode !== undefined && (
         <Button
           variant="ghost"
@@ -292,6 +296,7 @@ export function ThreadView({ threadId }: { threadId: string }) {
   return (
     <div className="flex h-full flex-col" data-testid="thread-view">
       <ThreadHeader
+        threadId={threadId}
         bot={bot}
         group={isGroup ? thread.data : undefined}
         title={thread.data?.title ?? 'Conversation'}

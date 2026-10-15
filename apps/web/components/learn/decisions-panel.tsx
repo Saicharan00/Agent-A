@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { Markdown } from '@/components/markdown';
+import { ExportLink } from '@/components/export-link';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Input, Select, Textarea } from '@/components/ui/form';
@@ -61,6 +62,7 @@ export function DecisionsPanel() {
           ))}
         </Select>
         <div className="flex-1" />
+        <ExportLink path="/export/decisions" />
         <Button size="sm" onClick={() => setCreating(true)}>
           <Plus /> Record decision
         </Button>

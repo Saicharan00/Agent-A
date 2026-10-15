@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { closeDb, createRepos, openDb } from '@agenta/db';
 import { DEFAULT_PORTS } from '@agenta/shared';
 import { findRepoRoot, loadRootEnv } from '@agenta/shared/env';
+import { BackupService } from './backup/service';
 import { BotService } from './bots/service';
 import { ensureMcpToken } from './bots/mcp-token';
 import { EventBus } from './bus';
@@ -234,6 +235,16 @@ const desktops =
   containers && new DesktopService({ containers, bus, log: rootLog.child({ module: 'desktop' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
 const repoRoot = findRepoRoot();
+const backupsDir = config.backupsDir;
+const backups = new BackupService({
+  db,
+  repos,
+  paths: { backupsDir, botsDir: config.botsDir, sharedDir: config.sharedDir },
+  log: rootLog.child({ module: 'backups' }),
+  runs,
+  containers,
+  gateway,
+});
 const app = await buildServer(config, {
   system: {
     images: new ImageBuilder({ cwd: repoRoot, log: rootLog.child({ module: 'image-build' }) }),
@@ -243,7 +254,7 @@ const app = await buildServer(config, {
       bots: config.botsDir,
       shared: config.sharedDir,
       secrets: config.secretsDir,
-      backups: join(repoRoot, 'data', 'backups'),
+      backups: backupsDir,
     },
     probes: () =>
       realProbes({
@@ -279,9 +290,11 @@ const app = await buildServer(config, {
   notifications,
   connectors,
   gateway,
+  backups: { service: backups, dir: backupsDir },
 });
 app.addHook('onClose', async () => {
   dockerMonitor?.stop();
+  backups.stop();
   schedules.stop();
   await platformMcp.close();
   // Stops the stdio MCP servers the gateway started.
@@ -316,6 +329,8 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'));
 runs.start();
 // Fires due schedules (missed ones are skipped or caught up, per schedule) and then every 30 s.
 schedules.start();
+// The first launch of the day writes a daily backup (keeps the last 7), then checks hourly.
+backups.start();
 await app.listen({ host: config.host, port: config.port });
 await platformMcp.listen(config.host, config.mcpPort);
 if (containers) {

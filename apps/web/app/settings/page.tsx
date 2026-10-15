@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Page, PageHeader } from '@/components/page-header';
+import { BackupsSection } from '@/components/settings/backups-section';
 import { ConnectorsSection } from '@/components/settings/connectors-section';
 import { DoctorSection } from '@/components/settings/doctor-section';
 import { EnginesSection } from '@/components/settings/engines-section';
@@ -16,7 +17,7 @@ export default function SettingsPage() {
     <Page>
       <PageHeader
         title="Settings"
-        description="General, health check, engines, concurrency, team, guard terms, connectors and MCP servers."
+        description="General, health check, engines, concurrency, team, guard terms, connectors, MCP servers and backups."
       />
       <GeneralSection />
       <DoctorSection />
@@ -26,6 +27,7 @@ export default function SettingsPage() {
       <GuardSection />
       <ConnectorsSection />
       <McpSection />
+      <BackupsSection />
     </Page>
   );
 }

@@ -31,6 +31,8 @@ export default defineConfig({
       // Bots created by e2e get their home folders (and MCP tokens) here, never in the owner's data/bots.
       AGENTA_BOTS_DIR: 'data/e2e/bots',
       AGENTA_SHARED_DIR: 'data/e2e/shared',
+      // Backups (F32) of the e2e data stay with it.
+      AGENTA_BACKUPS_DIR: 'data/e2e/backups',
       // MCP gateway (F35): owner actions go to an e2e copy, never the real HUMAN_TODO.md; the echo fixture's key.
       AGENTA_HUMAN_TODO: 'data/e2e/HUMAN_TODO.md',
       E2E_ECHO_KEY: 'e2e-echo-secret-0123456789',

@@ -2,6 +2,7 @@
 
 import type { GoalView } from '@agenta/shared';
 import Link from 'next/link';
+import { ExportLink } from '@/components/export-link';
 import { StatusPill } from '@/components/status-pill';
 import { Button } from '@/components/ui/button';
 import { useGoalActions } from '@/hooks/use-goals';
@@ -97,6 +98,7 @@ export function GoalBar({ goal }: { goal: GoalView }) {
       <Link href="/tasks" className="text-xs text-primary underline">
         Task board
       </Link>
+      <ExportLink path={`/export/goals/${goal.id}`} label="Export report" />
       <GoalActions goal={goal} />
     </div>
   );

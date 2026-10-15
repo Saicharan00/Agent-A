@@ -20,5 +20,6 @@ pnpm dev                     # web on :3000, runner on :3001
 | `pnpm e2e` | Playwright tests against the mock engine |
 | `pnpm check:secrets` | Fail if staged files contain secrets or `data/` paths |
 | `pnpm run doctor` | Environment health check (`pnpm doctor` is a pnpm built-in) |
+| `pnpm restore <backup folder>` | Stop the app and put a backup from `data/backups/` back (Settings → Backups lists them) |
 
 See `docs/architecture.md` and `docs/DECISIONS.md`.

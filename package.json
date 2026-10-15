@@ -30,7 +30,8 @@
     "smoke:github": "vitest run --config tests/smoke/vitest.config.ts github",
     "smoke:mcp": "vitest run --config tests/smoke/vitest.config.ts mcp",
     "mock:run": "tsx --tsconfig apps/runner/tsconfig.json apps/runner/scripts/mock-run.ts",
-    "doctor": "tsx scripts/doctor.ts"
+    "doctor": "tsx scripts/doctor.ts",
+    "restore": "tsx scripts/restore.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

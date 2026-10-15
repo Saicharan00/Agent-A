@@ -20,6 +20,8 @@ const configSchema = z.object({
   teamDir: z.string().min(1),
   /** Engine credentials (F06): <secretsDir>/codex/auth.json. Git-ignored, never mounted into containers. */
   secretsDir: z.string().min(1),
+  /** Backups (F32): <backupsDir>/<timestamp>/. Never inside botsDir/sharedDir, which backups archive. */
+  backupsDir: z.string().min(1),
   /** .env.local, re-read for CLAUDE_CODE_OAUTH_TOKEN so a pasted token works without a restart. */
   envFile: z.string().min(1),
   /** HUMAN_TODO.md, where owner actions (network allow commands, F35) are appended. AGENTA_HUMAN_TODO overrides. */
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     sharedDir: repoPath(root, env.AGENTA_SHARED_DIR, 'data/shared'),
     teamDir: join(root, 'templates/team'),
     secretsDir: repoPath(root, env.AGENTA_SECRETS_DIR, 'data/secrets'),
+    backupsDir: repoPath(root, env.AGENTA_BACKUPS_DIR, 'data/backups'),
     envFile: join(root, '.env.local'),
     humanTodoFile: repoPath(root, env.AGENTA_HUMAN_TODO, 'HUMAN_TODO.md'),
     sandboxName: env.SANDBOX_NAME || 'agent-a',

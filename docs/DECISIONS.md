@@ -830,3 +830,33 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **App settings** live in the `settings` table: `app.timezone` (default for new schedules, default
   America/New_York as before) and `app.botDefaults` (CPUs, RAM, idle stop for new bots and newly created team bots;
   existing bots keep theirs). Concurrency/budgets reuse the F28 form on the Settings page.
+
+## F32 — Backup, export & reset
+
+- **Backup layout:** `data/backups/<UTC timestamp>/` holds `agenta.db` (`VACUUM INTO`, consistent while the runner
+  writes), `shared.tar.gz`, `bots.tar.gz` and `manifest.json` (reason: manual / daily / reset / pre-restore, sizes).
+  Archives come from GNU `tar` (already in the VM) rather than a new npm dependency.
+- **manifest.json is written last and marks a backup complete;** folders without it are never listed or restored.
+  No write-to-`.partial`-then-rename: renaming the folder on the Windows-backed `data/` mount failed with EACCES
+  (a scanner holds a fresh file), seen in the live restore check.
+- **Secrets never get in:** only the DB, the share and the bot homes are read (never `data/secrets`, `.env.local`), and
+  credential files inside homes are excluded (`.codex/auth.json`, `.codex/config.toml`, `.claude/.credentials.json`,
+  `.agenta/mcp-token`, `.agenta/mcp.json`, `.config/gh/hosts.yml`, `.git-credentials`, `.ssh`). The runner re-issues
+  the MCP token/configs before each run and syncs Codex auth from `data/secrets`. Caches (`.cache`, `.npm`,
+  `node_modules`, `.pnpm-store`, `__pycache__`) are left out too.
+- **Daily backup:** on runner start, then hourly, if no daily backup exists for today in the app time zone. Only daily
+  backups are pruned (newest 7 kept); manual, pre-reset and pre-restore backups stay until the owner deletes them.
+- **Restore (`pnpm restore <dir>`):** stops a running runner by SIGTERM to the pid listening on its port (`ss -ltnp`;
+  graceful shutdown handler), stops containers labelled `agenta=1`, writes a `pre-restore` backup of the current data,
+  checks the backup DB's integrity, then replaces the DB (dropping `-wal`/`-shm`), the share and the bot homes.
+  Home credentials are moved aside and put back for bots present in the backup, so logins survive a restore.
+  No HTTP "shutdown" endpoint was added: the web proxy can expose `/api` on the LAN.
+- **Factory reset (`POST /api/reset`, body `{ confirm: "RESET" }`) runs in the live runner:** backup first, stop
+  scheduling, cancel/stop runs, remove bot computers, close gateway MCP servers, delete every row of every ordinary
+  table (`PRAGMA table_list`; FTS shadow tables are left to their triggers; the migrations log is kept), empty the
+  share and bot homes (folders kept: they are bind mounts), recreate the share layout, resume scheduling. Engine logins
+  stay. Home then shows the first-run wizard.
+- **Exports** are `GET /api/export/{threads/:id, goals/:id, decisions, lessons}` returning `text/markdown` downloads;
+  the UI uses plain `<a download>` links (thread header, goal bar, Learn → Decisions / Lessons). Times are UTC in files.
+  Embedded documents (ADRs, the goal report) get their headings demoted so they nest; code fences are left alone.
+- **`AGENTA_BACKUPS_DIR`** overrides the folder (e2e uses `data/e2e/backups`).

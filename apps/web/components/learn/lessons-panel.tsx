@@ -6,6 +6,7 @@ import { Check, Lightbulb, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { EmptyState } from '@/components/empty-state';
 import { Markdown } from '@/components/markdown';
+import { ExportLink } from '@/components/export-link';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Input, Textarea } from '@/components/ui/form';
@@ -135,6 +136,7 @@ export function LessonsPanel() {
               </button>
             ))}
         </div>
+        <ExportLink path="/export/lessons" />
         <Button size="sm" onClick={() => setCreating(true)}>
           <Plus /> Add lesson
         </Button>
