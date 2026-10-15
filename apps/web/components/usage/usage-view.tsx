@@ -145,7 +145,7 @@ export function UsageView() {
           <GoalBudgets goals={r.goals} />
         </>
       )}
-      <SettingsForm />
+      <UsageSettingsForm />
     </div>
   );
 }
@@ -281,7 +281,7 @@ const toDraft = (b: EngineBudgets): BudgetDraft =>
     ]),
   );
 
-function SettingsForm() {
+export function UsageSettingsForm({ title = 'Settings' }: { title?: string }) {
   const settings = useUsageSettings();
   const { saveSettings } = useUsageActions();
   const [maxConcurrent, setMaxConcurrent] = useState('2');
@@ -308,7 +308,7 @@ function SettingsForm() {
 
   return (
     <form onSubmit={submit} aria-label="Usage settings" className="space-y-3 rounded-xl border bg-card p-4">
-      <h2 className="text-base font-semibold">Settings</h2>
+      <h2 className="text-base font-semibold">{title}</h2>
       <Field
         label="Max concurrent runs"
         htmlFor="usage-max-concurrent"

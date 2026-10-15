@@ -2,6 +2,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useAppSettings } from '@/components/settings/general-section';
 import { botsApi, defaultBotForm } from '@/lib/bots';
 import { queryKeys } from '@/lib/query-keys';
 import { toast } from '@/lib/toast';
@@ -10,9 +11,12 @@ import { BotForm } from './bot-form';
 export function NewBot() {
   const router = useRouter();
   const qc = useQueryClient();
+  const settings = useAppSettings();
+  // Wait for the owner's resource defaults (fall back to the built-in ones if they can't be loaded).
+  if (settings.isPending) return <p className="text-sm text-muted-foreground">Loading…</p>;
   return (
     <BotForm
-      initial={defaultBotForm()}
+      initial={defaultBotForm(settings.data?.botDefaults)}
       submitLabel="Create bot"
       onCancel={() => router.push('/bots')}
       onSubmit={async (body) => {

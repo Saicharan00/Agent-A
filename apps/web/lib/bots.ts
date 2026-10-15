@@ -3,6 +3,7 @@
 import {
   type AvatarShape,
   type BotCreateRequest,
+  type BotDefaults,
   type BotUpdateRequest,
   type BotView,
   type Engine,
@@ -61,7 +62,8 @@ export function slugPreview(name: string): string {
   return s || 'bot';
 }
 
-export function defaultBotForm(): BotFormValues {
+/** Empty form; resource fields start from the owner's defaults (Settings → General) when given. */
+export function defaultBotForm(defaults?: BotDefaults): BotFormValues {
   return {
     name: '',
     slug: '',
@@ -73,9 +75,9 @@ export function defaultBotForm(): BotFormValues {
     avatarShape: 'circle',
     notifications: 'all',
     sidebarVisible: true,
-    memoryMb: '2048',
-    cpus: '2',
-    idleTimeoutMin: '30',
+    memoryMb: String(defaults?.memoryMb ?? 2048),
+    cpus: String(defaults?.cpus ?? 2),
+    idleTimeoutMin: String(defaults?.idleTimeoutMin ?? 30),
     runTimeoutMin: '',
   };
 }

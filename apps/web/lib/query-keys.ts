@@ -55,4 +55,7 @@ export const queryKeys = {
   usage: ['usage'] as const,
   usageReport: (days: number) => ['usage', 'report', days] as const,
   usageSettings: ['usage', 'settings'] as const,
+  doctor: ['settings', 'doctor'] as const,
+  appSettings: ['settings', 'app'] as const,
+  imageBuild: ['settings', 'image-build'] as const,
 };

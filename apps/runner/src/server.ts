@@ -43,6 +43,7 @@ import { registerTaskRoutes } from './tasks/routes';
 import type { TaskService } from './tasks/service';
 import { registerThreadRoutes } from './threads/routes';
 import { registerUsageRoutes } from './usage/routes';
+import { type SystemRouteDeps, registerSystemRoutes } from './system/routes';
 import type { ThreadService } from './threads/service';
 
 declare module 'fastify' {
@@ -91,6 +92,8 @@ export type ServerDeps = {
   connectors?: ConnectorService;
   /** MCP gateway (F35): /api/mcp-servers*, /api/bots/:id/mcp-access. */
   gateway?: GatewayService;
+  /** Doctor, app settings, image build, onboarding (F31). Onboarding also needs `bots` and `threads`. */
+  system?: Omit<SystemRouteDeps, 'bots' | 'threads'>;
 };
 
 /** Log paths that could carry engine credentials (defence in depth: nothing should log them). */
@@ -156,6 +159,8 @@ export async function buildServer(config: RunnerConfig, deps: ServerDeps = {}): 
   if (deps.notifications) registerNotificationRoutes(app, deps.notifications);
   if (deps.connectors) registerConnectorRoutes(app, deps.connectors);
   if (deps.gateway) registerGatewayRoutes(app, deps.gateway);
+  if (deps.system && deps.repos)
+    registerSystemRoutes(app, { ...deps.system, bots: deps.bots, threads: deps.threads });
   if (deps.live || deps.terminals || deps.desktops) {
     // 64 KiB per frame: control messages and pasted input (the web client splits larger pastes).
     await app.register(websocket, { options: { maxPayload: 64 * 1024 } });

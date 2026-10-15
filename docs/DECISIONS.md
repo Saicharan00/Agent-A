@@ -809,3 +809,24 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   apart, so "for research bots" means all bot computers). The matching command goes to HUMAN_TODO.md on save.
 - **Tool cards** show gateway calls as `<server-slug>: <Tool>` with "via the MCP gateway" (and the approval id on a
   retry), hiding `_approval_id` from the arguments.
+
+## F31 — Onboarding wizard, settings & doctor
+
+- **`pnpm doctor` is shadowed by pnpm's built-in `doctor` command** (pnpm 10 runs its own check and never the script).
+  The script keeps the name; run it as **`pnpm run doctor`** (`-- --json` for machine output). Docs say so.
+- **One doctor, two entry points.** The checks live in `apps/runner/src/system/doctor.ts` over injected probes
+  (unit-tested with fakes and an output snapshot). `GET /api/doctor` runs them in the runner; `pnpm run doctor` asks the
+  running runner first and otherwise runs the same checks locally, opening the DB without migrating it.
+- **Inside the Docker Sandbox VM** = `IS_SANDBOX=1`, `SANDBOX_ID` or `SANDBOX_NAME` is set (the sandbox sets all three).
+  Outside, the doctor warns with a banner (CLI) / alert (UI) rather than failing, so it still runs in CI.
+- **Image "up to date"** = nothing under `docker/bot` differs between the image's
+  `org.opencontainers.image.revision` label (set by `pnpm image:build`) and the working tree. A `-dirty` build warns.
+- **Ports:** free, Agent A (its `/api/health` answers directly or through the web proxy; the runner's own ports; the
+  MCP port when the runner answers) or another program (fail, with an `ss -ltnp` hint).
+- **Build image from the UI** spawns `pnpm image:build` in the runner (one at a time, last 400 lines kept). The UI polls
+  `GET /api/image/build` every second while it runs: simpler than a WS channel for a rare, minutes-long job.
+- **Wizard** shows on Home while there are no (unarchived) bots. Warnings never block: "Create the team" calls
+  `POST /api/onboarding/team` = "Reset team to defaults" + the owner's hello to Agent A in its DM; the UI opens that DM.
+- **App settings** live in the `settings` table: `app.timezone` (default for new schedules, default
+  America/New_York as before) and `app.botDefaults` (CPUs, RAM, idle stop for new bots and newly created team bots;
+  existing bots keep theirs). Concurrency/budgets reuse the F28 form on the Settings page.

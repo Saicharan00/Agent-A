@@ -1,6 +1,7 @@
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { closeDb, createRepos, openDb } from '@agenta/db';
-import { loadRootEnv } from '@agenta/shared/env';
+import { DEFAULT_PORTS } from '@agenta/shared';
+import { findRepoRoot, loadRootEnv } from '@agenta/shared/env';
 import { BotService } from './bots/service';
 import { ensureMcpToken } from './bots/mcp-token';
 import { EventBus } from './bus';
@@ -38,6 +39,8 @@ import { GatewayService } from './gateway/service';
 import { appendHumanTodo } from './gateway/human-todo';
 import { GatewayOAuth } from './gateway/oauth';
 import { LOG_REDACT, buildServer } from './server';
+import { realProbes } from './system/doctor';
+import { ImageBuilder } from './system/image-build';
 import pino from 'pino';
 
 // Snapshot before .env.local is merged in: variables set by the shell win over the file (see envFileSource).
@@ -230,7 +233,32 @@ const terminals =
 const desktops =
   containers && new DesktopService({ containers, bus, log: rootLog.child({ module: 'desktop' }) });
 const dockerMonitor = containers && new DockerMonitor({ bus, health: () => containers.dockerHealth() });
+const repoRoot = findRepoRoot();
 const app = await buildServer(config, {
+  system: {
+    images: new ImageBuilder({ cwd: repoRoot, log: rootLog.child({ module: 'image-build' }) }),
+    paths: {
+      data: join(repoRoot, 'data'),
+      db: config.dbPath,
+      bots: config.botsDir,
+      shared: config.sharedDir,
+      secrets: config.secretsDir,
+      backups: join(repoRoot, 'data', 'backups'),
+    },
+    probes: () =>
+      realProbes({
+        repoRoot,
+        dataDir: dirname(config.dbPath),
+        ports: {
+          web: Number(process.env.AGENTA_WEB_PORT) || DEFAULT_PORTS.web,
+          runner: config.port,
+          mcp: config.mcpPort,
+        },
+        selfPorts: [config.port, config.mcpPort],
+        integrity: () => db.$client.pragma('integrity_check', { simple: true }) as string,
+        engines: () => engineAuth.statuses(),
+      }),
+  },
   repos,
   containers,
   engineAuth,

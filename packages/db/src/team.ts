@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { AVATAR_SHAPES, ENGINES, botSettingsSchema, skillNameSchema } from '@agenta/shared';
+import { AVATAR_SHAPES, type BotSettings, ENGINES, botSettingsSchema, skillNameSchema } from '@agenta/shared';
 import { z } from 'zod';
 import type { Repos } from './repos';
 import type { Bot, Thread } from './schema';
@@ -94,7 +94,7 @@ export type TeamApplyResult = { created: Bot[]; restored: Bot[]; leadRoom: Threa
 export function applyTeamTemplate(
   repos: Repos,
   template: TeamTemplate,
-  opts: { restore: boolean },
+  opts: { restore: boolean; defaults?: Partial<BotSettings> },
 ): TeamApplyResult {
   const created: Bot[] = [];
   const restored: Bot[] = [];
@@ -111,7 +111,7 @@ export function applyTeamTemplate(
         isLead: t.isLead,
         avatarColor: t.avatarColor,
         avatarShape: t.avatarShape,
-        settings: botSettingsSchema.parse({ skills: t.skills }),
+        settings: botSettingsSchema.parse({ ...opts.defaults, skills: t.skills }),
       });
       created.push(bot);
       team.push(bot);

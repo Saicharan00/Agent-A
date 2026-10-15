@@ -48,6 +48,11 @@ describe('bot form logic', () => {
     expect(res.ok && 'slug' in res.body).toBe(false); // blank handle → derived by the runner
   });
 
+  it('starts from the owner resource defaults when given (F31)', () => {
+    const form = defaultBotForm({ cpus: 1.5, memoryMb: 1024, idleTimeoutMin: 0 });
+    expect(form).toMatchObject({ cpus: '1.5', memoryMb: '1024', idleTimeoutMin: '0' });
+  });
+
   it('reports field-level errors with friendly messages', () => {
     const res = formToRequest({
       ...defaultBotForm(),

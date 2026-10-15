@@ -1,6 +1,7 @@
 'use client';
 
 import { DEFAULT_SCHEDULE_TIMEZONE, type ScheduleView } from '@agenta/shared';
+import { useAppSettings } from '@/components/settings/general-section';
 import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -33,7 +34,10 @@ export function ScheduleForm({ schedule, onDone }: { schedule?: ScheduleView; on
   const [time, setTime] = useState(initial.time);
   const [day, setDay] = useState(initial.day);
   const [rawCron, setRawCron] = useState(initial.cron);
-  const [timezone, setTimezone] = useState(schedule?.timezone ?? DEFAULT_SCHEDULE_TIMEZONE);
+  const appSettings = useAppSettings();
+  const [tzInput, setTimezone] = useState<string | undefined>(schedule?.timezone);
+  // New schedules start in the owner's time zone (Settings → General).
+  const timezone = tzInput ?? appSettings.data?.timezone ?? DEFAULT_SCHEDULE_TIMEZONE;
   const [threadId, setThreadId] = useState(schedule?.threadId ?? NEW_THREAD);
   const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
   const [catchUp, setCatchUp] = useState(schedule?.catchUp ?? false);

@@ -12,6 +12,7 @@ import type { EventBus } from '../bus';
 import { bootstrapHome, botHomeDir, removeBotDir } from '../containers/home';
 import type { ContainerManager } from '../containers/manager';
 import type { RunService } from '../runs/service';
+import { readAppSettings } from '../system/settings';
 import { ensureMcpToken } from './mcp-token';
 
 type Log = { info(obj: object, msg?: string): void; warn(obj: object, msg?: string): void };
@@ -228,7 +229,10 @@ export class BotService {
    */
   resetTeam(): TeamResetResponse {
     if (!this.opts.teamDir) throw new BotError('team_unavailable', 'No team template is configured', 503);
-    const res = applyTeamTemplate(this.opts.repos, loadTeamTemplate(this.opts.teamDir), { restore: true });
+    const res = applyTeamTemplate(this.opts.repos, loadTeamTemplate(this.opts.teamDir), {
+      restore: true,
+      defaults: readAppSettings(this.opts.repos).botDefaults,
+    });
     for (const b of res.created) {
       this.provision(b.id);
       this.changed(b.id, 'created');
