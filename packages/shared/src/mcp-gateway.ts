@@ -179,8 +179,8 @@ export const WEB_ACCESS_MODES = ['per-domain', 'broad'] as const;
 export type WebAccessMode = (typeof WEB_ACCESS_MODES)[number];
 export const researchSettingsSchema = z.object({ webAccess: z.enum(WEB_ACCESS_MODES) });
 export const researchSettingsViewSchema = researchSettingsSchema.extend({
-  /** The owner's matching `sbx` command (also written to HUMAN_TODO.md when the choice is saved). */
-  command: z.string(),
+  /** The owner's matching `sbx` command (also written to HUMAN_TODO.md when saved); null outside a sandbox. */
+  command: z.string().nullable(),
 });
 export type ResearchSettings = z.infer<typeof researchSettingsViewSchema>;
 

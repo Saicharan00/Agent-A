@@ -466,6 +466,7 @@ describe('MCP gateway (F35)', () => {
         secrets: { get: () => undefined },
         approvals,
         log: silent,
+        sandboxName: 'agent-a',
         humanTodo: (i) => todo.push(i),
       });
       const app = await buildServer(config, { repos: h.repos, gateway: g });
@@ -491,6 +492,19 @@ describe('MCP gateway (F35)', () => {
       } finally {
         await app.close();
       }
+    });
+
+    it('research settings outside a Docker Sandbox: no sbx command and nothing for HUMAN_TODO', () => {
+      const todo: unknown[] = [];
+      const g = new GatewayService({
+        repos: h.repos,
+        secrets: { get: () => undefined },
+        approvals,
+        log: silent,
+        humanTodo: (i) => todo.push(i),
+      });
+      expect(g.setResearch('broad')).toEqual({ webAccess: 'broad', command: null });
+      expect(todo).toEqual([]);
     });
 
     it('creates, validates, rejects duplicate slugs, grants bots and deletes', async () => {

@@ -48,9 +48,11 @@ export function defaultDomains(s: {
   return [];
 }
 
-/** The owner's host-side command to allow `domains` for this sandbox. */
-export function networkAllowCommand(domains: string[], sandbox = 'agent-a'): string | null {
-  return domains.length ? `sbx policy allow network --sandbox ${sandbox} ${domains.join(',')}` : null;
+/** The owner's host-side command to allow `domains` for this sandbox; null outside a sandbox (no network policy). */
+export function networkAllowCommand(domains: string[], sandbox: string | null): string | null {
+  return sandbox && domains.length
+    ? `sbx policy allow network --sandbox ${sandbox} ${domains.join(',')}`
+    : null;
 }
 
 export type McpPreset = {

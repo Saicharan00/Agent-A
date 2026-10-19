@@ -3,8 +3,8 @@
 Agent A is a single-owner app on one laptop. It has **no login**: whoever can reach port 3000 controls the team, the
 bot computers and their connectors. The design rests on three walls, from outside in:
 
-1. **Network reach.** Only the owner's machine can reach the web server: everything binds to `127.0.0.1` inside the
-   Docker Sandbox VM, and the sandbox publishes port 3000 to `127.0.0.1` on the Windows host
+1. **Network reach.** Only the owner's machine can reach the web server: everything binds to `127.0.0.1` (natively,
+   or inside the Docker Sandbox VM). In the sandbox setup, the sandbox publishes port 3000 to `127.0.0.1` on the host
    (`sbx create … -p 127.0.0.1:3000:3000`).
 2. **The browser.** Other websites the owner visits must not drive the API. That is the request guard below.
 3. **Bot computers.** Each bot runs in its own container with limits, and can reach only its home, the team share and
@@ -18,7 +18,7 @@ not assumed.
 | Area | Check | How it was verified | Result |
 |---|---|---|---|
 | Binding | Web 3000, runner 3001 and MCP 3002 listen on `127.0.0.1` only. MCP also listens on the bot network gateway, so containers can reach it. | `ss -ltn` with `pnpm dev` running | ✅ `127.0.0.1:3000/3001/3002` and `172.19.0.1:3002`. Nothing on `0.0.0.0`. |
-| Binding | Windows host publishes 3000 to loopback only | HUMAN_TODO 4 (`-p 127.0.0.1:3000:3000`) | ✅ Owner action, already done |
+| Binding | Sandbox setup: the host publishes 3000 to loopback only | `sbx create … -p 127.0.0.1:3000:3000` (README, Option B) | ✅ Owner action at setup |
 | CSRF | A page on another site can't send writes to the API | `request-guard.ts`; unit `test/request-guard.test.ts`; e2e `resilience.spec.ts` through the Next proxy | ✅ **Fixed in F33.** Before the fix, a cross-site `POST /api/onboarding/team` from any website reset the team. |
 | DNS rebinding | A foreign host name pointing at 127.0.0.1 can't read or write the API | Same tests, using a `Host: rebind.evil.example` request | ✅ **Fixed in F33.** Returns 403 for every method. |
 | WebSockets | The live, terminal and desktop sockets refuse foreign origins | `live/routes.ts`, `server.ts` origin checks; `ws.test.ts` | ✅ |

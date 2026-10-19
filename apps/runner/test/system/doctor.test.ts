@@ -57,7 +57,7 @@ describe('doctor', () => {
     expect(report.checks.every((c) => c.status === 'ok')).toBe(true);
     expect(formatDoctor(report)).toMatchInlineSnapshot(`
       "Agent A doctor
-        ✓ Docker Sandbox VM              running inside sandbox agent-a
+        ✓ Isolation                      running inside Docker Sandbox agent-a
         ✓ Node.js                        v22.22.1
         ✓ pnpm                           10.34.7
         ✓ Docker                         client 29.8.1, daemon 29.8.1
@@ -72,13 +72,12 @@ describe('doctor', () => {
     `);
   });
 
-  it('warns loudly when not inside the Docker Sandbox VM', async () => {
-    const report = await runDoctor(probes({ env: {} }), NOW);
-    expect(report.insideSandbox).toBe(false);
-    expect(byId(report, 'sandbox').status).toBe('warn');
-    expect(formatDoctor(report)).toMatch(
-      /^!+\n!! WARNING: Agent A is NOT running inside the Docker Sandbox VM/,
-    );
+  it('runs natively outside a Docker Sandbox, warning only when the uid is not 1000', async () => {
+    const native = await runDoctor(probes({ env: {}, uid: 1000 }), NOW);
+    expect(native.insideSandbox).toBe(false);
+    expect(byId(native, 'sandbox').status).toBe('ok');
+    expect(formatDoctor(native)).not.toMatch(/WARNING/);
+    expect(byId(await runDoctor(probes({ env: {}, uid: 0 }), NOW), 'sandbox').status).toBe('warn');
   });
 
   it('Docker daemon down: fails Docker and skips the image check', async () => {

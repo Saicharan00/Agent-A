@@ -21,6 +21,8 @@ export default defineConfig({
     // Localhost-only even if .env.local exposes the web server for Windows (shell env wins over .env.local).
     env: {
       AGENTA_ENGINE_OVERRIDE: 'mock',
+      // The MCP specs assert the Docker Sandbox network commands, so e2e always acts as sandbox `agent-a`.
+      SANDBOX_NAME: 'agent-a',
       AGENTA_DB_PATH: 'data/e2e/agenta.db',
       AGENTA_WEB_HOST: '127.0.0.1',
       // Engines always look "not set up" in e2e, whatever the owner has in .env.local / data/secrets.

@@ -98,7 +98,8 @@ describe('MCP presets & pasted JSON (F35)', () => {
       'files.pythonhosted.org',
     ]);
     expect(defaultDomains({ transport: 'stdio', command: 'node' })).toEqual([]);
-    expect(networkAllowCommand([])).toBeNull();
+    expect(networkAllowCommand([], 'box')).toBeNull();
+    expect(networkAllowCommand(['a.com'], null)).toBeNull();
     expect(networkAllowCommand(['a.com', 'b.com'], 'box')).toBe(
       'sbx policy allow network --sandbox box a.com,b.com',
     );

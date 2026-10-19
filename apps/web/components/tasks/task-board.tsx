@@ -172,7 +172,13 @@ export function TaskBoard() {
           }
         />
       ) : view === 'board' ? (
-        <div className="grid auto-cols-[minmax(12rem,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2">
+        <div
+          className="grid auto-cols-[minmax(12rem,1fr)] grid-flow-col gap-3 overflow-x-auto pb-2"
+          // Scrolls sideways when columns overflow; focusable so keyboard users can scroll it (WCAG).
+          tabIndex={0}
+          role="region"
+          aria-label="Task columns"
+        >
           {TASK_STATUSES.map((status) => (
             <section
               key={status}

@@ -6,20 +6,17 @@ your goals, delegates to specialist bots, reviews their work, asks before anythi
 lead thinks along the way.
 
 The bots run on **your own subscriptions** through the official CLIs: Claude Code (Claude Pro/Max) and Codex
-(ChatGPT Plus/Pro). No API keys are needed.
-
-Everything runs inside one **Docker Sandbox** (`sbx`) microVM on your machine: the web app, the runner, the database
-and every bot computer. Nothing is installed on Windows except `sbx` and Git, and the app is never run on the laptop
-directly.
+(ChatGPT Plus/Pro). No API keys are needed. Without a subscription, everything still runs on the built-in **mock
+engine** (the one the tests use), so you can try the whole app first.
 
 ```
-Windows browser ── http://localhost:3000 ──▶ sbx sandbox "agent-a" (Linux VM)
-                                              ├─ web (Next.js, :3000) ──/api──▶ runner (Fastify, :3001)
-                                              │                                  ├─ SQLite  data/agenta.db
-                                              │                                  ├─ Platform MCP server (:3002)
-                                              └─ private Docker daemon ◀─────────┘
-                                                   └─ agenta-bot containers (one per bot): Claude Code / Codex,
-                                                      terminal, Chromium + noVNC desktop, /home/bot, /shared
+browser ── http://localhost:3000 ──▶ Linux machine (native, WSL2, or an sbx sandbox VM)
+                                      ├─ web (Next.js, :3000) ──/api──▶ runner (Fastify, :3001)
+                                      │                                  ├─ SQLite  data/agenta.db
+                                      │                                  ├─ Platform MCP server (:3002)
+                                      └─ Docker daemon ◀─────────────────┘
+                                           └─ agenta-bot containers (one per bot): Claude Code / Codex,
+                                              terminal, Chromium + noVNC desktop, /home/bot, /shared
 ```
 
 More detail: `docs/architecture.md` (how it fits together), `docs/engines.md` (CLI flags), `docs/SECURITY.md`,
@@ -27,30 +24,65 @@ More detail: `docs/architecture.md` (how it fits together), `docs/engines.md` (C
 
 ---
 
-## Requirements
+## Choose a setup
 
-- Windows 11 (or macOS/Linux) with hardware virtualization enabled in the BIOS.
-- [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) CLI `sbx` (`winget install Docker.sbx`), signed in with
-  `sbx login`. Git for Windows.
-- About **25 GB** free disk for the sandbox (bot image ≈ 2 GB, dependencies and builds ≈ 3 GB, plus bot work).
-- A Claude Pro/Max and/or ChatGPT Plus/Pro subscription for real bots. Without one, everything still runs on the
-  built-in **mock engine** (used by the tests).
+| Setup | Runs on | Pick it when |
+|---|---|---|
+| **A. Native** | Linux, or Windows through a WSL2 distro (Ubuntu) with Docker Engine installed inside it | You want the simplest setup. Bot containers run on your own Docker daemon. |
+| **B. Docker Sandbox (`sbx`)** | Windows or macOS | You want everything, including the bots' Docker daemon, inside one isolated microVM. |
 
-Inside the sandbox (set up once, step 4 below): Node 22 LTS, pnpm 10, and Docker (the sandbox ships its own daemon).
+**Docker Desktop is not supported yet.** The bots reach the runner's MCP server through the Docker bridge's gateway
+IP, which does not exist on a Docker Desktop host. On Windows, install Docker Engine inside WSL2 (setup A) or use
+setup B. On macOS, use setup B.
 
-## Setup (once)
+Both setups need:
 
-1. **Get the code** (Windows PowerShell):
-   ```powershell
-   git clone <repo url> E:\Agent-A-GrokBot
-   cd E:\Agent-A-GrokBot
+- About **25 GB** free disk (bot image ≈ 2 GB, dependencies and builds ≈ 3 GB, plus bot work).
+- Outbound access to npm, GitHub, Docker Hub and Debian/Ubuntu mirrors for the first build, plus `api.anthropic.com`
+  / `claude.ai` and `chatgpt.com` / `api.openai.com` for real engines.
+- Optional: a Claude Pro/Max and/or ChatGPT Plus/Pro subscription for real bots.
+
+## Setup A: native Linux or WSL2
+
+1. **Install the tools** (Ubuntu/Debian shown; use your distro's equivalents):
+   - Node **22 LTS** (e.g. via [nvm](https://github.com/nvm-sh/nvm): `nvm install 22`), then `corepack enable` so the
+     pinned pnpm is used.
+   - Build tools for native modules: `sudo apt install -y build-essential python3 git`.
+   - [Docker Engine](https://docs.docker.com/engine/install/). Add yourself to the `docker` group
+     (`sudo usermod -aG docker $USER`, then log out and in) and check that `docker version` shows a server.
+   - On WSL2: install Docker Engine **inside** the distro (not Docker Desktop's WSL integration).
+2. **Check your user id:** `id -u` should print `1000`. The bot user in the containers is uid 1000 and bot homes are
+   bind-mounted from `data/bots`, so a different uid makes the bots' home folders unwritable. The first user on most
+   Linux and WSL installs is 1000.
+3. **Get the code and configure:**
+   ```bash
+   git clone https://github.com/Saicharan00/Agent-A-GrokBot.git agent-a
+   cd agent-a
+   cp .env.example .env.local
    ```
-2. **Create the sandbox** with port 3000 published to your machine only:
-   ```powershell
+   The defaults in `.env.local` are fine. Everything binds to `127.0.0.1`.
+4. **Launch:** `pnpm launch`. The first launch installs dependencies, builds the app and the bot image
+   (~10 minutes), then prints `✔ Agent A is running: http://localhost:3000`.
+5. **Open http://localhost:3000.** On WSL2, your Windows browser reaches it at the same address. The first-run wizard
+   checks Docker and the image, shows engine sign-in, and creates the team.
+6. **Sign the bots in** (see below).
+
+## Setup B: Docker Sandbox (`sbx`) on Windows or macOS
+
+1. Install the [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/) CLI `sbx` (Windows:
+   `winget install Docker.sbx`), and sign in with `sbx login`. Install Git. Hardware virtualization must be enabled.
+2. **Get the code** and open a terminal in the project folder:
+   ```bash
+   git clone https://github.com/Saicharan00/Agent-A-GrokBot.git agent-a
+   cd agent-a
+   ```
+3. **Create the sandbox** with port 3000 published to your machine only. The examples use the name `agent-a`;
+   any name works.
+   ```bash
    sbx create --name agent-a -p 127.0.0.1:3000:3000 claude .
    ```
-3. **Allow the network the build needs.** The sandbox blocks unknown domains. Allow these once:
-   ```powershell
+4. **Allow the network the build needs.** The sandbox blocks unknown domains. Allow these once:
+   ```bash
    sbx policy allow network --sandbox agent-a registry.npmjs.org,github.com,objects.githubusercontent.com,codeload.github.com,nodejs.org
    sbx policy allow network --sandbox agent-a registry-1.docker.io,auth.docker.io,production.cloudflare.docker.com,production.cloudfront.docker.com
    sbx policy allow network --sandbox agent-a deb.debian.org,cli.github.com,archive.ubuntu.com,security.ubuntu.com
@@ -60,34 +92,38 @@ Inside the sandbox (set up once, step 4 below): Node 22 LTS, pnpm 10, and Docker
    If a command later fails with HTTP 403 "Approval required", run `sbx policy approval ls` and approve it, or allow
    the domain it names the same way. (`cdn.playwright.dev`, `playwright.download.prss.microsoft.com` and
    `storage.googleapis.com` are only needed to run the browser tests.)
-4. **Prepare the sandbox** (once). Open a shell in it with `sbx exec -it agent-a bash`, then:
+5. **Prepare the sandbox** (once). Open a shell in it with `sbx exec -it agent-a bash`, then go to your project
+   folder as the sandbox sees it (on Windows, `E:\code\agent-a` is `/e/code/agent-a`):
    ```bash
-   cd /e/Agent-A-GrokBot                 # your project folder, as the sandbox sees it
+   cd /path/to/agent-a
    npm i -g pnpm@10
-   # node_modules, .next and the bot homes must live on the VM disk (the Windows folder forbids symlinks):
-   echo '[ -x /e/Agent-A-GrokBot/scripts/vm-mounts.sh ] && /e/Agent-A-GrokBot/scripts/vm-mounts.sh' | sudo tee -a /etc/sandbox-persistent.sh
+   # node_modules, .next and the bot homes must live on the VM disk (host folders forbid symlinks):
+   echo "[ -x $PWD/scripts/vm-mounts.sh ] && $PWD/scripts/vm-mounts.sh" | sudo tee -a /etc/sandbox-persistent.sh
    sh scripts/vm-mounts.sh
    cp .env.example .env.local
    ```
    Then edit `.env.local` and set `AGENTA_WEB_HOST=0.0.0.0`. The published port only reaches a server listening on
    the VM's network interface. The runner and the MCP server stay on 127.0.0.1 regardless, and the API rejects
    unknown hosts and cross-site writes (`docs/SECURITY.md`).
-5. **Launch:** `pnpm launch` (see below). The first launch installs dependencies, builds the app and the bot image
-   (~10 minutes), then prints `✔ Agent A is running: http://localhost:3000`.
-6. **Open http://localhost:3000** on Windows. The first-run wizard checks Docker and the image, shows engine
-   sign-in, and creates the team.
-7. **Sign the bots in to your subscriptions** (in the sandbox shell; never paste tokens into a chat):
-   - Claude: `pnpm auth:claude`. It runs `claude setup-token` in a throwaway container and saves the token to
-     `.env.local`.
-   - Codex: `pnpm auth:codex`. Open the link, enter the code. It saves `data/secrets/codex/auth.json`.
+6. **Launch:** `pnpm launch` in the sandbox shell (~10 minutes the first time), then open http://localhost:3000 on
+   your machine. On Windows, `scripts\windows\AgentA.cmd` does both (see Daily use).
+7. **Sign the bots in** (below, in the sandbox shell).
 
-   Settings → Engines then shows both as **configured**.
+## Sign the bots in
+
+In the project folder (the sandbox shell for setup B). Never paste tokens into a chat.
+
+- Claude: `pnpm auth:claude`. It runs `claude setup-token` in a throwaway container and saves the token to
+  `.env.local`.
+- Codex: `pnpm auth:codex`. Open the link, enter the code. It saves `data/secrets/codex/auth.json`.
+
+Settings → Engines then shows both as **configured**. You can skip this and use the mock engine.
 
 ## Daily use
 
 | You want to… | Do this |
 |---|---|
-| Start Agent A | Double-click `scripts\windows\AgentA.cmd`, or in the sandbox run `pnpm launch` |
+| Start Agent A | `pnpm launch` (setup B on Windows: double-click `scripts\windows\AgentA.cmd`) |
 | Open it | http://localhost:3000 |
 | Stop it | Ctrl+C in the launch window (bot computers stop on their own when idle) |
 | Check health | `pnpm run doctor` (or Settings → Health). Note: `pnpm doctor` is a pnpm built-in. |
@@ -101,9 +137,9 @@ migrate the database → build the bot image if it does not exist → start web 
 URL once both answer. If the app is already running it just prints the URL. `pnpm launch -- --rebuild` forces a new
 web build.
 
-**`scripts/windows/AgentA.cmd`** starts the `agent-a` sandbox if it is stopped and runs `pnpm launch` in it in a new
-window (`sbx exec`). It opens your browser when the app answers. Make a desktop shortcut to it if you like. If you
-moved the project, edit `WORKDIR` at the top (`E:\X` is `/e/X` in the sandbox).
+**`scripts/windows/AgentA.cmd`** (setup B) starts the sandbox if it is stopped and runs `pnpm launch` in it in a new
+window (`sbx exec`). It opens your browser when the app answers. It finds the project folder from its own location;
+set `AGENTA_SANDBOX` if your sandbox is not named `agent-a`, or `AGENTA_WORKDIR` to override the folder.
 
 ### Developer commands
 | Command | What it does |
@@ -139,8 +175,8 @@ Bots use your subscriptions, which have rolling usage windows (e.g. Claude's 5-h
   move machines.
 - **Restore:** stop nothing by hand. Run `pnpm restore data/backups/<time>`. It stops the app and bot computers, saves
   the current data as a `pre-restore` backup, then puts the backup back. Run `pnpm launch` afterwards.
-- **Copy off the machine:** `data/backups` is in your Windows project folder (`E:\Agent-A-GrokBot\data\backups`), so
-  any Windows backup tool can pick it up.
+- **Copy off the machine:** `data/backups` is inside the project folder, so any backup tool that covers that folder
+  picks it up. (Setup B on a host folder: it is on the host disk.)
 - **Export to Markdown:** a thread (thread header), a goal report (goal bar), decisions and lessons (Learn).
 - **Factory reset:** Settings → Backups → Factory reset, type `RESET`. It backs up first and keeps engine sign-ins.
 
@@ -155,14 +191,16 @@ Bots use your subscriptions, which have rolling usage windows (e.g. Claude's 5-h
 
 ## Troubleshooting
 
-Start with `pnpm run doctor`. It checks the sandbox VM, Node, pnpm, Docker, the image, disk, ports, the database
-and engine sign-in, and says what to do for each failure.
+Start with `pnpm run doctor`. It checks where it runs (sandbox or native), Node, pnpm, Docker, the image, disk,
+ports, the database and engine sign-in, and says what to do for each failure.
 
 | Symptom | Fix |
 |---|---|
-| http://localhost:3000 does not load on Windows, but `curl localhost:3000` works in the sandbox | Set `AGENTA_WEB_HOST=0.0.0.0` in `.env.local` and relaunch. Check `sbx ports agent-a` lists 3000. |
-| `ENOSPC: no space left on device` | The sandbox disk is full. Check with `df -h /`. Free space with `docker image ls agenta-bot` (remove old tags), old backups in `data/backups`, and leftover `~/.cache/agenta-vm-*` dirs of deleted worktrees. |
-| HTTP 403 "Approval required" / "Blocked by network policy" | A domain is not allowed. Run `sbx policy allow network --sandbox agent-a <domain>` on Windows, or approve it with `sbx policy approval ls`. |
+| `docker version` shows no server, or "permission denied" on the Docker socket | Start Docker Engine (`sudo service docker start` on WSL2) and make sure you are in the `docker` group. |
+| Bots cannot write their home folder | Your uid is not 1000 (`id -u`). Run Agent A as a uid-1000 user. |
+| Setup B: http://localhost:3000 does not load on the host, but `curl localhost:3000` works in the sandbox | Set `AGENTA_WEB_HOST=0.0.0.0` in `.env.local` and relaunch. Check `sbx ports <sandbox>` lists 3000. |
+| `ENOSPC: no space left on device` | The disk is full. Check with `df -h /`. Free space with `docker image ls agenta-bot` (remove old tags), old backups in `data/backups`, and leftover `~/.cache/agenta-vm-*` dirs. |
+| Setup B: HTTP 403 "Approval required" / "Blocked by network policy" | A domain is not allowed. Run `sbx policy allow network --sandbox <sandbox> <domain>` on the host, or approve it with `sbx policy approval ls`. |
 | Engine shows **not set up** | Run `pnpm auth:claude` / `pnpm auth:codex`, then Settings → Engines → Re-check. |
 | A bot's runs end as *limited* | Its subscription window is used up. See "How limits work". It resumes by itself. |
 | Bot computer won't start / "image missing" | `pnpm image:build`, then reset the bot's computer. |
@@ -176,5 +214,15 @@ Logs go to the launch window (pino, `LOG_LEVEL` in `.env.local`). Prompts and se
 ## Configuration
 
 All settings live in `.env.local` (git-ignored; template and comments in `.env.example`). Ports: web 3000, runner
-3001, MCP 3002, all inside the sandbox. Data lives in `data/`: the database, bot homes, the team share, backups and
+3001, MCP 3002, all on `127.0.0.1`. Data lives in `data/`: the database, bot homes, the team share, backups and
 engine credentials. `data/` is never committed.
+
+## Security notes
+
+Agent A has **no login**: whoever can reach port 3000 controls the bots. Keep it bound to `127.0.0.1` and do not
+expose it to a network. Bots run real commands in their containers with your subscriptions; review approvals before
+you accept them. See `docs/SECURITY.md`.
+
+## License
+
+MIT. See `LICENSE`.

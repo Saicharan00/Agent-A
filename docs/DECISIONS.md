@@ -911,7 +911,18 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   No Docker: the app still starts (bot computers report docker_unavailable).
 - **Readiness = runner `/api/health` direct, then the same through the web proxy;** polling only the web made the Next
   proxy log ECONNREFUSED while the runner booted. If the app is already up, launch prints the URL and exits.
-- **`scripts/windows/AgentA.cmd` uses `sbx exec -it -w /e/Agent-A-GrokBot agent-a bash -lc "pnpm launch"`** in its own
+- **`scripts/windows/AgentA.cmd` uses `sbx exec -it -w <project folder in the sandbox> agent-a bash -lc "pnpm launch"`** in its own
   window (`sbx exec` starts a stopped sandbox), polls `/api/health` with Windows' `curl.exe`, then opens the browser.
   Port 3000 reaches the app through the sandbox's `-p 127.0.0.1:3000:3000` plus `AGENTA_WEB_HOST=0.0.0.0` (F01).
   CRLF line endings: cmd's `goto` labels can misparse LF-only files.
+
+## Public release: native Linux/WSL2 alongside Docker Sandboxes
+
+- **Running natively is supported, not just inside an `sbx` sandbox.** The sandbox name is now `SANDBOX_NAME || SANDBOX_VM_ID || null` (no `agent-a` default).
+  Outside a sandbox there is no network policy, so `networkAllowCommand` and the web-research command return `null`.
+  The UI hides the command box, and nothing is appended to `HUMAN_TODO.md`.
+  `pnpm doctor` reports "Isolation" as ok for both setups and no longer prints the "stop, run only in the sandbox" banner.
+  It warns when a native run's uid is not 1000, because bot homes are bind-mounted for the image's uid-1000 `bot` user.
+- **Docker Desktop (VM-based daemon) is not supported.** The Platform MCP server listens on the bot network's
+  gateway IP, which exists on a Linux host (and in the sandbox VM) but not on a Docker Desktop host.
+- e2e pins `SANDBOX_NAME=agent-a`, because the MCP specs assert the sandbox commands.

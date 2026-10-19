@@ -57,15 +57,6 @@ export function DoctorSection() {
       </div>
       {!data && !error && <p className="text-sm text-muted-foreground">Checking…</p>}
       {error && <p className="text-sm text-destructive">Could not run the health check: {error.message}</p>}
-      {data && !data.insideSandbox && (
-        <p
-          role="alert"
-          className="rounded-md border border-destructive p-3 text-sm font-medium text-destructive"
-        >
-          Agent A is not running inside the Docker Sandbox VM. Stop it and run it only inside the agent-a
-          sandbox.
-        </p>
-      )}
       {data && (
         <ul className="divide-y rounded-lg border px-4" aria-label="Health checks">
           {data.checks.map((c) => (

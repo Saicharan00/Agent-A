@@ -28,8 +28,8 @@ const configSchema = z.object({
   envFile: z.string().min(1),
   /** HUMAN_TODO.md, where owner actions (network allow commands, F35) are appended. AGENTA_HUMAN_TODO overrides. */
   humanTodoFile: z.string().min(1),
-  /** This Docker Sandbox's name for `sbx` commands shown to the owner (SANDBOX_NAME in the VM). */
-  sandboxName: z.string().min(1),
+  /** This Docker Sandbox's name for `sbx` commands shown to the owner (SANDBOX_NAME in the VM); null when run natively. */
+  sandboxName: z.string().min(1).nullable(),
   /** Set AGENTA_DOCKER=0 to run without Docker (container routes then return docker_unavailable). */
   dockerEnabled: z.boolean(),
 });
@@ -62,7 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RunnerConfig {
     backupsDir: repoPath(root, env.AGENTA_BACKUPS_DIR, 'data/backups'),
     envFile: join(root, '.env.local'),
     humanTodoFile: repoPath(root, env.AGENTA_HUMAN_TODO, 'HUMAN_TODO.md'),
-    sandboxName: env.SANDBOX_NAME || 'agent-a',
+    sandboxName: env.SANDBOX_NAME || env.SANDBOX_VM_ID || null,
     dockerEnabled: env.AGENTA_DOCKER !== '0',
   });
 }

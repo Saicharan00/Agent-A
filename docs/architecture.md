@@ -21,7 +21,10 @@ Windows browser ──http://localhost:3000──▶ apps/web (Next.js UI)
                                    SQLite: data/agenta.db (Drizzle)
 ```
 
-Everything above runs inside one Docker Sandbox (`sbx`) microVM. Bot containers live in the VM's private Docker daemon.
+Everything above runs on one Linux machine with Docker. Two setups are supported: **native** (a Linux machine,
+or a WSL2 distro on Windows, with Docker Engine; bot containers use that Docker daemon) and **Docker Sandbox**
+(`sbx`, Windows/macOS: everything runs inside one microVM, and bot containers live in the VM's private Docker daemon).
+The network-policy commands (`sbx policy allow …`) the app shows apply only to the sandbox setup.
 
 ## Repository layout
 - `apps/web`: Next.js UI (App Router, Tailwind v4, shadcn/ui). Proxies `/api/*` to the runner.

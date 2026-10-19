@@ -70,7 +70,7 @@ function ResearchCard() {
     },
     onSuccess: (fresh) => {
       qc.setQueryData(queryKeys.research, fresh);
-      toast.success('Saved. The matching command was added to HUMAN_TODO.md.');
+      toast.success(fresh.command ? 'Saved. The matching command was added to HUMAN_TODO.md.' : 'Saved.');
     },
     onError: (err) => {
       toast.error(`Could not save: ${err.message}`);
@@ -94,8 +94,8 @@ function ResearchCard() {
       <h2 className="font-medium">Web research</h2>
       <p className="text-sm text-muted-foreground">
         Every bot can use its engine&apos;s built-in web search (Claude Code web search and fetch, Codex live
-        search) and is told to cite its sources. Pages a bot fetches or browses from its computer must be
-        allowed by the sandbox network policy.
+        search) and is told to cite its sources. In a Docker Sandbox, pages a bot fetches or browses from its
+        computer must be allowed by the sandbox network policy.
       </p>
       <fieldset className="flex flex-col gap-2" disabled={!data}>
         <legend className="sr-only">How pages get through the network policy</legend>
@@ -115,9 +115,9 @@ function ResearchCard() {
           </label>
         ))}
       </fieldset>
-      {data && (
+      {data?.command && (
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Run on your Windows host (PowerShell):</p>
+          <p className="text-xs text-muted-foreground">Run on your host:</p>
           <Command label="Web access command">{data.command}</Command>
         </div>
       )}
@@ -251,8 +251,7 @@ function ServerCard({ server, onEdit }: { server: McpServerView; onEdit: () => v
       {server.networkCommand && (
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground">
-            Allow its domains ({server.domains.join(', ')}) on your Windows host, once (also in
-            HUMAN_TODO.md):
+            Allow its domains ({server.domains.join(', ')}) on your host, once (also in HUMAN_TODO.md):
           </p>
           <Command label={`Network command for ${server.name}`}>{server.networkCommand}</Command>
         </div>

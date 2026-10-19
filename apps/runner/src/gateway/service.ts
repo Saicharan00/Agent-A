@@ -53,7 +53,7 @@ export type GatewayServiceOptions = {
   log: Log;
   connections?: McpConnections;
   /** This sandbox's name, for the owner's `sbx policy allow network --sandbox <name>` commands. */
-  sandboxName?: string;
+  sandboxName?: string | null;
   /** Records an owner action in HUMAN_TODO.md (idempotent per `key`); unset: not recorded. */
   humanTodo?: (item: { key: string; text: string }) => void;
   /** OAuth sign-in for remote servers; unset: OAuth servers are reported as not supported. */
@@ -250,19 +250,21 @@ export class GatewayService {
   setResearch(webAccess: WebAccessMode): ResearchSettings {
     this.opts.repos.settings.set(RESEARCH_KEY, webAccess);
     const command = this.researchCommand(webAccess);
+    if (!command) return { webAccess, command };
     this.opts.humanTodo?.({
       key: command,
       text:
         webAccess === 'broad'
-          ? `(F35) Web research: let the bots reach any website (broad allowance, chosen in Settings). In Windows ` +
-            `PowerShell: \`${command}\`. Undo with \`sbx policy rm network --sandbox ${this.sandbox} --resource "**"\`.`
+          ? `(F35) Web research: let the bots reach any website (broad allowance, chosen in Settings). On the ` +
+            `host: \`${command}\`. Undo with \`sbx policy rm network --sandbox ${this.sandbox} --resource "**"\`.`
           : `(F35) Web research, per-domain (chosen in Settings): when a bot reports a blocked page, allow just that ` +
-            `domain in Windows PowerShell: \`${command}\`.`,
+            `domain on the host: \`${command}\`.`,
     });
     return { webAccess, command };
   }
 
-  private researchCommand(mode: WebAccessMode): string {
+  private researchCommand(mode: WebAccessMode): string | null {
+    if (!this.sandbox) return null;
     return mode === 'broad'
       ? `sbx policy allow network --sandbox ${this.sandbox} "**"`
       : `sbx policy allow network --sandbox ${this.sandbox} <domain>`;
@@ -541,8 +543,8 @@ export class GatewayService {
     return msg;
   }
 
-  private get sandbox(): string {
-    return this.opts.sandboxName ?? 'agent-a';
+  private get sandbox(): string | null {
+    return this.opts.sandboxName ?? null;
   }
 
   /** On save: the owner must allow the server's domains in the sandbox network policy (PLAN F35). */
@@ -552,7 +554,7 @@ export class GatewayService {
     this.opts.humanTodo?.({
       key: command,
       text:
-        `(F35) Allow the network for the MCP server "${s.name}". In Windows PowerShell: \`${command}\`. ` +
+        `(F35) Allow the network for the MCP server "${s.name}". On the host: \`${command}\`. ` +
         'Then press "Test connection" in Settings → MCP servers.',
     });
   }

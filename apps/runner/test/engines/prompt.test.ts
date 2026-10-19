@@ -19,7 +19,7 @@ const dm: PromptThread = { id: 'thr_dm', kind: 'dm', title: 'Code Reviewer', exp
 const group: PromptThread = { id: 'thr_grp', kind: 'group', title: 'Launch prep', explainMode: false };
 const msg = (over: Partial<PromptMessage>): PromptMessage => ({
   authorType: 'user',
-  authorName: 'Charan',
+  authorName: 'Alex',
   contentMd: 'Can you review the login PR?',
   createdAt: '2026-10-12T14:03:27.123Z',
   mentions: [],
@@ -107,8 +107,8 @@ describe('toPromptMessages', () => {
       { ...base, id: 'm4', authorType: 'system', authorBotId: null, contentMd: 'd' },
     ] as Message[];
     expect(
-      toPromptMessages(rows, new Map([['bot_b', { name: 'Builder' }]]), 'Charan').map((m) => m.authorName),
-    ).toEqual(['Charan', 'Builder', 'A former teammate', 'System']);
+      toPromptMessages(rows, new Map([['bot_b', { name: 'Builder' }]]), 'Alex').map((m) => m.authorName),
+    ).toEqual(['Alex', 'Builder', 'A former teammate', 'System']);
   });
 });
 

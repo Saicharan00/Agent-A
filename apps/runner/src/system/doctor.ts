@@ -17,6 +17,8 @@ export type PortState = 'free' | 'agenta' | 'other';
 export type DoctorProbes = {
   nodeVersion: string;
   env: NodeJS.ProcessEnv;
+  /** The process's uid (undefined on platforms without one). */
+  uid?: number;
   /** Trimmed stdout of a command, or null if it failed or isn't installed. */
   run(cmd: string, args: string[]): Promise<string | null>;
   /** Free bytes on the filesystem holding `dir`, or null if unknown. */
@@ -50,7 +52,7 @@ function nodeCheck(version: string): DoctorCheck {
   return ok
     ? check('node', 'Node.js', 'ok', version)
     : check('node', 'Node.js', 'fail', `${version} (needs Node 22.12 or newer 22.x)`, [
-        'Install Node 22 LTS in the sandbox as recorded in docs/DECISIONS.md (F01), then open a new shell.',
+        'Install Node 22 LTS (https://nodejs.org or nvm), then open a new shell.',
       ]);
 }
 
@@ -58,9 +60,7 @@ async function pnpmCheck(p: DoctorProbes): Promise<DoctorCheck> {
   const v = await p.run('pnpm', ['--version']);
   return v
     ? check('pnpm', 'pnpm', 'ok', v)
-    : check('pnpm', 'pnpm', 'fail', 'not found', [
-        'Run `corepack enable` in the sandbox, then `pnpm --version`.',
-      ]);
+    : check('pnpm', 'pnpm', 'fail', 'not found', ['Run `corepack enable`, then `pnpm --version`.']);
 }
 
 async function dockerCheck(p: DoctorProbes): Promise<{ check: DoctorCheck; up: boolean }> {
@@ -69,7 +69,7 @@ async function dockerCheck(p: DoctorProbes): Promise<{ check: DoctorCheck; up: b
     return {
       up: false,
       check: check('docker', 'Docker', 'fail', 'docker CLI not found', [
-        'Install the Docker CLI in the sandbox VM (it ships with the Docker Sandbox image).',
+        'Install Docker Engine (https://docs.docker.com/engine/install/). A Docker Sandbox VM already has it.',
       ]),
     };
   const server = await p.run('docker', ['version', '--format', '{{.Server.Version}}']);
@@ -77,35 +77,45 @@ async function dockerCheck(p: DoctorProbes): Promise<{ check: DoctorCheck; up: b
     return {
       up: false,
       check: check('docker', 'Docker', 'fail', `client ${client}, daemon not reachable`, [
-        "Run `docker version` in the sandbox: the sandbox's private Docker daemon must be running.",
-        'If it is stopped, restart the sandbox from Windows: `sbx run --name agent-a`.',
+        'Run `docker version`: the Docker daemon must be running and your user allowed to use it (docker group).',
+        'In a Docker Sandbox, restart it from the host: `sbx run --name <sandbox>`.',
       ]),
     };
   return { up: true, check: check('docker', 'Docker', 'ok', `client ${client}, daemon ${server}`) };
 }
 
-function sandboxCheck(env: NodeJS.ProcessEnv): DoctorCheck {
-  const name = env.SANDBOX_NAME || env.SANDBOX_VM_ID;
-  if (env.IS_SANDBOX === '1' || env.SANDBOX_ID || name)
-    return check('sandbox', 'Docker Sandbox VM', 'ok', `running inside sandbox ${name ?? '(unnamed)'}`);
-  return check(
-    'sandbox',
-    'Docker Sandbox VM',
-    'warn',
-    'NOT running inside the Docker Sandbox VM: bots would get containers on this machine directly',
-    [
-      'Stop Agent A here. Run it only inside the sandbox: on Windows, `sbx run --name agent-a`, then start it from the sandbox shell.',
-    ],
-  );
+const sandboxName = (env: NodeJS.ProcessEnv) => env.SANDBOX_NAME || env.SANDBOX_VM_ID;
+const inSandbox = (env: NodeJS.ProcessEnv) =>
+  env.IS_SANDBOX === '1' || !!env.SANDBOX_ID || !!sandboxName(env);
+
+/** Where Agent A runs: a Docker Sandbox VM, or natively on this machine's Docker (both supported). */
+function sandboxCheck(env: NodeJS.ProcessEnv, uid: number | undefined): DoctorCheck {
+  if (inSandbox(env))
+    return check(
+      'sandbox',
+      'Isolation',
+      'ok',
+      `running inside Docker Sandbox ${sandboxName(env) ?? '(unnamed)'}`,
+    );
+  // Bot homes are bind-mounted into containers whose `bot` user is uid 1000 (containers/home.ts).
+  if (uid !== undefined && uid !== 1000)
+    return check(
+      'sandbox',
+      'Isolation',
+      'warn',
+      `running natively as uid ${uid}; bot computers expect uid 1000`,
+      [
+        'Run Agent A as a user with uid 1000 (`id -u`), usually the first user on Linux or WSL2, or use a Docker Sandbox.',
+      ],
+    );
+  return check('sandbox', 'Isolation', 'ok', "running natively on this machine's Docker (no sandbox VM)");
 }
 
 async function diskCheck(p: DoctorProbes): Promise<DoctorCheck> {
   const free = await p.freeBytes(p.dataDir);
   if (free === null) return check('disk', 'Disk space (data/)', 'warn', 'could not read free space');
   const summary = `${(free / GB).toFixed(1)} GB free for ${p.dataDir}`;
-  const fix = [
-    'Free up space in the sandbox (old bot images: `docker image ls agenta-bot`), or delete old backups.',
-  ];
+  const fix = ['Free up disk space (old bot images: `docker image ls agenta-bot`), or delete old backups.'];
   if (free < 2 * GB) return check('disk', 'Disk space (data/)', 'fail', summary, fix);
   if (free < 10 * GB) return check('disk', 'Disk space (data/)', 'warn', summary, fix);
   return check('disk', 'Disk space (data/)', 'ok', summary);
@@ -113,7 +123,7 @@ async function diskCheck(p: DoctorProbes): Promise<DoctorCheck> {
 
 async function imageCheck(p: DoctorProbes, dockerUp: boolean): Promise<DoctorCheck> {
   const label = `Bot image (${BOT_IMAGE})`;
-  const build = ['Run `pnpm image:build` in the sandbox (or use "Build image" in Settings).'];
+  const build = ['Run `pnpm image:build` (or use "Build image" in Settings).'];
   if (!dockerUp) return check('image', label, 'warn', 'not checked: Docker is not reachable');
   const rev = await p.run('docker', [
     'image',
@@ -201,7 +211,7 @@ async function engineChecks(p: DoctorProbes): Promise<DoctorCheck[]> {
 export async function runDoctor(p: DoctorProbes, now = new Date()): Promise<DoctorReport> {
   const docker = await dockerCheck(p);
   const checks = [
-    sandboxCheck(p.env),
+    sandboxCheck(p.env, p.uid),
     nodeCheck(p.nodeVersion),
     await pnpmCheck(p),
     docker.check,
@@ -213,7 +223,7 @@ export async function runDoctor(p: DoctorProbes, now = new Date()): Promise<Doct
   ];
   return {
     ok: checks.every((c) => c.status !== 'fail'),
-    insideSandbox: checks[0]!.status === 'ok',
+    insideSandbox: inSandbox(p.env),
     checks,
     generatedAt: now.toISOString(),
   };
@@ -224,13 +234,6 @@ const MARK = { ok: '✓', warn: '!', fail: '✗' } as const;
 /** Plain-text report for `pnpm doctor`. */
 export function formatDoctor(report: DoctorReport): string {
   const lines: string[] = [];
-  if (!report.insideSandbox) {
-    lines.push('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    lines.push('!! WARNING: Agent A is NOT running inside the Docker Sandbox VM.         !!');
-    lines.push('!! It must only run inside the `agent-a` sandbox. See the fix below.     !!');
-    lines.push('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    lines.push('');
-  }
   lines.push('Agent A doctor');
   const width = Math.max(...report.checks.map((c) => c.label.length));
   for (const c of report.checks) {
@@ -305,6 +308,7 @@ export function realProbes(o: {
   return {
     nodeVersion: process.version,
     env: process.env,
+    uid: process.getuid?.(),
     run: runCommand,
     freeBytes,
     portState: (port) => probePort(port, { self: o.selfPorts, runnerPort: o.ports.runner }),

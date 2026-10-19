@@ -8,9 +8,9 @@ has a run budget.
 
 ## Before you start (2 min)
 
-- [ ] The app runs: `scripts\windows\AgentA.cmd`, or `pnpm launch` in the sandbox, then open http://localhost:3000.
+- [ ] The app runs: `pnpm launch` (or `scripts\windows\AgentA.cmd` in the sandbox setup), then open http://localhost:3000.
 - [ ] `pnpm run doctor` is all green, or only warns. Settings → Engines shows Claude **and** Codex as *configured*.
-      If not, see README → Setup step 7.
+      If not, see README → Sign the bots in.
 - [ ] The team exists: the sidebar lists Agent A, Architect, ML Engineer, Data Engineer, Backend Engineer, MLOps
       Engineer and QA & Security. If not, the Home wizard has **Create the team**.
 
@@ -66,8 +66,7 @@ confidential terms before it is saved. Open it and copy it.
 
 ## Done? Note the result
 
-Tick HUMAN_TODO item "Complete docs/DEMO.md". Write one line on anything that confused you or broke. That line is
-the starting list for v2.
+Write one line on anything that confused you or broke, and open an issue with it if you like.
 
 **If something fails:** `pnpm run doctor`, then README → Troubleshooting. A run that ends as *limited* hit your
 subscription window. It resumes by itself after the reset time shown on the **Usage** page.

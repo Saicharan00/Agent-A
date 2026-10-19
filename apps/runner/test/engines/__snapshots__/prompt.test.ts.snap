@@ -3,10 +3,10 @@
 exports[`buildPrompt > DM with several messages, task context and explain mode 1`] = `
 "## New messages in this chat since your last turn
 
-**Charan** · 2026-10-12 14:03 UTC:
+**Alex** · 2026-10-12 14:03 UTC:
 Can you review the login PR?
 
-**Charan** · 2026-10-12 14:04 UTC:
+**Alex** · 2026-10-12 14:04 UTC:
 Focus on error handling.
 
 ## Task tsk_1: Review login PR #42
@@ -47,7 +47,7 @@ Write @owner when you need the owner's attention.
 
 ## New messages in #Launch prep since your last turn
 
-**Charan** · 2026-10-12 14:03 UTC:
+**Alex** · 2026-10-12 14:03 UTC:
 Status check, team?
 
 **Builder (bot)** · 2026-10-12 14:03 UTC (mentions you):
@@ -171,7 +171,7 @@ Plan status: waiting for the owner. Propose the plan (or answer the owner) and a
 
 ## New messages in this goal since your last turn
 
-**Charan** · 2026-10-12 14:03 UTC:
+**Alex** · 2026-10-12 14:03 UTC:
 Here is my goal
 
 Reply as Agent A. Others only see your final message in the thread; mention a teammate with @slug only when you need them."
