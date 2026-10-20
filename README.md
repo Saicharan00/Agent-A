@@ -20,7 +20,8 @@ browser ── http://localhost:3000 ──▶ Linux machine (native, WSL2, or a
 ```
 
 More detail: `docs/architecture.md` (how it fits together), `docs/engines.md` (CLI flags), `docs/SECURITY.md`,
-`docs/DECISIONS.md` (why things are the way they are), `docs/DEMO.md` (a 15-minute tour).
+`docs/DECISIONS.md` (why things are the way they are), `docs/DEMO.md` (a 15-minute tour),
+`docs/PROBLEMS-AND-FIXES.md` (problems hit while building real projects, and their fixes).
 
 ---
 
