@@ -92,6 +92,13 @@ Both setups need:
    If a command later fails with HTTP 403 "Approval required", run `sbx policy approval ls` and approve it, or allow
    the domain it names the same way. (`cdn.playwright.dev`, `playwright.download.prss.microsoft.com` and
    `storage.googleapis.com` are only needed to run the browser tests.)
+
+   **When a bot asks for access to a site** (for example `pypi.org` and `files.pythonhosted.org` to install Python
+   packages), allow it from your machine's terminal, not from the app or the sandbox shell:
+   ```bash
+   sbx policy allow network --sandbox agent-a pypi.org,files.pythonhosted.org
+   ```
+   Replace the domains with the ones the bot names. No restart is needed; the bot's next try gets through.
 5. **Prepare the sandbox** (once). Open a shell in it with `sbx exec -it agent-a bash`, then go to your project
    folder as the sandbox sees it (on Windows, `E:\code\agent-a` is `/e/code/agent-a`):
    ```bash
