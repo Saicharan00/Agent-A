@@ -111,6 +111,38 @@ test.describe('direct chat', () => {
     expect(runs.map((r) => r.status)).toEqual(['cancelled']);
   });
 
+  test("the computer's Runs tab lists the bot's runs live and stops a running one", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    const bot = await createBot(request);
+    await page.goto(`/threads/${bot.dmThreadId}`);
+    await page.getByRole('button', { name: 'Open computer' }).click();
+    const panel = page.getByRole('complementary', { name: 'Computer' });
+    await panel.getByRole('tab', { name: 'Runs' }).click();
+    await expect(panel.getByText('No runs yet')).toBeVisible();
+
+    await send(page, '[mock:hello] hi');
+    const rows = panel.getByRole('list', { name: `${bot.name}'s runs` }).getByTestId('run-row');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toHaveAttribute('data-run-status', 'succeeded');
+    await expect(rows.first()).toContainText('Done');
+    await expect(rows.first()).toContainText('Your message');
+
+    await send(page, '[mock:slow] take your time');
+    await expect(rows).toHaveCount(2);
+    const slow = rows.first(); // newest first
+    await expect(slow).toHaveAttribute('data-run-status', 'running', { timeout: 10_000 });
+    await slow.getByRole('button', { name: 'Stop' }).click();
+    await expect(slow).toHaveAttribute('data-run-status', 'cancelled', { timeout: 15_000 });
+    await expect(slow).toContainText('Stopped');
+    await expect(lastTurn(page)).toHaveAttribute('data-run-status', 'cancelled');
+
+    await slow.getByRole('link', { name: 'Open chat' }).click();
+    await expect(page).toHaveURL(new RegExp(`/threads/${bot.dmThreadId}$`));
+  });
+
   test('[mock:limit] shows the limited state and the queued retry', async ({ page, request }) => {
     test.setTimeout(60_000);
     const db = openDb(dbPath);

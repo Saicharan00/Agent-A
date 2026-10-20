@@ -5,6 +5,7 @@ import { type KeyboardEvent, useState } from 'react';
 import { BotAvatar } from '@/components/bot-avatar';
 import { DesktopView } from '@/components/computer/desktop-view';
 import { FilesPanel } from '@/components/computer/files-panel';
+import { RunsPanel } from '@/components/computer/runs-panel';
 import { TerminalPanel } from '@/components/computer/terminal-panel';
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
@@ -12,11 +13,11 @@ import { useBots } from '@/hooks/use-bots';
 import { cn } from '@/lib/utils';
 import { COMPUTER_TABS, type ComputerTab, useShell } from './shell-context';
 
-const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal; feature: string }> = {
-  terminal: { label: 'Terminal', icon: SquareTerminal, feature: 'F14' }, // TerminalPanel
-  desktop: { label: 'Desktop', icon: MonitorPlay, feature: 'F16' }, // DesktopView
-  files: { label: 'Files', icon: FolderTree, feature: 'F15' }, // FilesPanel
-  runs: { label: 'Runs', icon: ListChecks, feature: 'F10' },
+const TAB_META: Record<ComputerTab, { label: string; icon: typeof SquareTerminal }> = {
+  terminal: { label: 'Terminal', icon: SquareTerminal }, // TerminalPanel
+  desktop: { label: 'Desktop', icon: MonitorPlay }, // DesktopView
+  files: { label: 'Files', icon: FolderTree }, // FilesPanel
+  runs: { label: 'Runs', icon: ListChecks }, // RunsPanel
 };
 
 export function ComputerPanel() {
@@ -108,31 +109,24 @@ export function ComputerPanel() {
         )}
         {/* Mounted only while shown: a watched desktop keeps the computer awake. */}
         {bot && computerTab === 'desktop' && <DesktopView key={`desktop-${bot.id}`} bot={bot} />}
-        {computerTab !== 'terminal' && !((computerTab === 'files' || computerTab === 'desktop') && bot) && (
+        {bot && computerTab === 'runs' && (
+          <div className="flex flex-1 flex-col overflow-auto px-4 pb-4">
+            <RunsPanel key={`runs-${bot.id}`} bot={bot} />
+          </div>
+        )}
+        {computerTab !== 'terminal' && !bot && (
           <div className="flex flex-1 flex-col gap-3 overflow-auto px-4 pb-4">
-            {computerTab === 'files' ? (
-              <EmptyState
-                icon={meta.icon}
-                title="No bot selected"
-                description="Pick a bot (its Computer button) to browse its files and the team share."
-              />
-            ) : computerTab === 'desktop' ? (
-              <EmptyState
-                icon={meta.icon}
-                title="No bot selected"
-                description="Pick a bot (its Computer button) to watch its screen."
-              />
-            ) : (
-              <EmptyState
-                icon={meta.icon}
-                title={`${meta.label} not connected`}
-                description={
-                  bot
-                    ? `${bot.name}'s ${meta.label.toLowerCase()} arrives in ${meta.feature}.`
-                    : `Pick a bot to see its ${meta.label.toLowerCase()}. Arrives in ${meta.feature}.`
-                }
-              />
-            )}
+            <EmptyState
+              icon={meta.icon}
+              title="No bot selected"
+              description={
+                computerTab === 'files'
+                  ? 'Pick a bot (its Computer button) to browse its files and the team share.'
+                  : computerTab === 'desktop'
+                    ? 'Pick a bot (its Computer button) to watch its screen.'
+                    : 'Pick a bot (its Computer button) to see its runs.'
+              }
+            />
           </div>
         )}
       </div>
