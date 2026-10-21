@@ -235,6 +235,46 @@ describe('goal delegation loop', () => {
     expect((await goal(id)).status).toBe('done');
   });
 
+  it('delete removes the goal and its tasks, stops their turns and keeps the history', async () => {
+    const created = await req<GoalView>('POST', '/api/goals', {
+      goalMd: 'Delete goal [mock:plan]',
+      autoRun: true,
+    });
+    const id = created.body.id;
+    const threadId = created.body.threadId!;
+    // Let the planning turn create the tasks; their turns are then queued.
+    const planRun = h.repos.runs.list({ goalId: id })[0]!;
+    await new Promise<void>((resolve) => {
+      const off = h.bus.subscribe(`run:${planRun.id}`, (e) => {
+        if ((e as { type: string; status?: string }).status === 'succeeded') {
+          off();
+          resolve();
+        }
+      });
+      h.service.tick();
+    });
+    const taskIds = h.repos.goals.listTasks(id).map((t) => t.id);
+    expect(taskIds.length).toBeGreaterThan(0);
+    const runIds = h.repos.runs.list({ goalId: id }).map((r) => r.id);
+    const queued = h.repos.runs.list({ goalId: id, status: 'queued' }).map((r) => r.id);
+    expect(queued.length).toBeGreaterThan(0);
+
+    const res = await app.inject({ method: 'DELETE', url: `/api/goals/${id}` });
+    expect(res.statusCode).toBe(204);
+    await h.service.idle();
+
+    expect((await req('GET', `/api/goals/${id}`)).status).toBe(404);
+    expect(taskIds.map((t) => h.repos.tasks.get(t))).toEqual(taskIds.map(() => undefined));
+    // Runs stay as history, unlinked, and none is left queued or running.
+    const kept = runIds.map((r) => h.repos.runs.get(r)!);
+    expect(kept.every((r) => r && r.goalId === null)).toBe(true);
+    expect(kept.some((r) => r.status === 'queued' || r.status === 'running')).toBe(false);
+    expect(queued.map((r) => h.repos.runs.get(r)!.status)).toEqual(queued.map(() => 'cancelled'));
+    expect(h.repos.threads.get(threadId)).toBeTruthy();
+
+    expect((await app.inject({ method: 'DELETE', url: '/api/goals/goal_nope' })).statusCode).toBe(404);
+  });
+
   it('needs a lead bot', async () => {
     h.repos.bots.update(lead, { isLead: false });
     const res = await req<{ error: { code: string } }>('POST', '/api/goals', { goalMd: 'x' });

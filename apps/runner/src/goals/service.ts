@@ -317,6 +317,39 @@ export class GoalService {
   }
 
   /**
+   * Delete: the goal and its tasks go. It is paused first so nothing new starts, then every queued or running turn
+   * for the goal or its tasks is cancelled. The goal's threads, runs and /shared/projects folder are kept as history.
+   */
+  async delete(id: string): Promise<void> {
+    const { repos, log } = this.opts;
+    const goal = this.goal(id);
+    if (!goal.pausedAt) repos.goals.update(id, { pausedAt: nowIso() });
+    const tasks = repos.goals.listTasks(id);
+    const active = new Map<string, Run>();
+    for (const run of repos.runs.list({ goalId: id, status: ['queued', 'running'], limit: 500 })) {
+      active.set(run.id, run);
+    }
+    for (const t of tasks) {
+      for (const run of repos.runs.list({ taskId: t.id, status: ['queued', 'running'], limit: 100 })) {
+        active.set(run.id, run);
+      }
+    }
+    await Promise.all(
+      [...active.keys()].map((runId) =>
+        this.opts.runs.cancel(runId).catch(() => {
+          // It finished meanwhile.
+        }),
+      ),
+    );
+    repos.goals.delete(id);
+    log.info({ goalId: id, tasks: tasks.length, cancelled: active.size }, 'goal deleted');
+    // Inline, not tasks/service's publishTaskChanged: that module already imports this one.
+    for (const t of tasks)
+      this.opts.bus.publish('global', { type: 'task.changed', taskId: t.id } satisfies LiveTaskChanged);
+    this.changed(id);
+  }
+
+  /**
    * Resume: restarts what the pause stopped: assigned tasks with no turn queued or running, handed-in tasks waiting
    * for a review (unless escalated to the owner), and the goal report.
    */

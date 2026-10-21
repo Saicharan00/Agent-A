@@ -61,6 +61,17 @@ export function makeGoalsRepo(db: Db) {
     listTasks(goalId: string) {
       return db.select().from(tasks).where(eq(tasks.goalId, goalId)).orderBy(tasks.createdAt).all();
     },
+
+    /**
+     * Deletes the goal and its tasks in one transaction (task events cascade). Runs, decisions and threads stay as
+     * history: their links to the goal and its tasks are set to null by the foreign keys.
+     */
+    delete(id: string): boolean {
+      return db.transaction((tx) => {
+        tx.delete(tasks).where(eq(tasks.goalId, id)).run();
+        return tx.delete(goals).where(eq(goals.id, id)).run().changes > 0;
+      });
+    },
   };
 }
 export type GoalsRepo = ReturnType<typeof makeGoalsRepo>;

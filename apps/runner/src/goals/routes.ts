@@ -24,7 +24,7 @@ async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise
   }
 }
 
-/** GET/POST /api/goals, GET/PATCH /api/goals/:id, POST /api/goals/:id/{confirm,pause,resume}. */
+/** GET/POST /api/goals, GET/PATCH/DELETE /api/goals/:id, POST /api/goals/:id/{confirm,pause,resume}. */
 export function registerGoalRoutes(app: FastifyInstance, goals: GoalService): void {
   app.get('/api/goals', async () => goals.list());
 
@@ -49,6 +49,10 @@ export function registerGoalRoutes(app: FastifyInstance, goals: GoalService): vo
       return reply.code(400).send(apiError('invalid_body', `${issue?.path.join('.')}: ${issue?.message}`));
     }
     return handle(reply, () => goals.setBudget(req.params.id, parsed.data));
+  });
+  app.delete<IdParams>('/api/goals/:id', async (req, reply) => {
+    await handle(reply, () => goals.delete(req.params.id));
+    if (!reply.sent) return reply.code(204).send();
   });
   app.post<IdParams>('/api/goals/:id/confirm', async (req, reply) =>
     handle(reply, () => goals.confirm(req.params.id)),

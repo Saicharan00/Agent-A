@@ -15,31 +15,50 @@ function tone(g: GoalView) {
   return canConfirm(g) ? ('warn' as const) : ('neutral' as const);
 }
 
-/** Confirm / pause / resume for one goal. */
+/** Confirm / pause / resume for one goal, and Delete (also for a done goal). */
 export function GoalActions({ goal }: { goal: GoalView }) {
-  const { confirm, pause, resume } = useGoalActions();
-  if (goal.status === 'done') return null;
+  const { confirm, pause, resume, remove } = useGoalActions();
+  const open = goal.status !== 'done';
   return (
     <div className="flex items-center gap-2">
-      {canConfirm(goal) && (
+      {open && canConfirm(goal) && (
         <Button size="sm" onClick={() => confirm.mutate(goal.id)} disabled={confirm.isPending}>
           Confirm plan
         </Button>
       )}
-      {goal.pausedAt ? (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => resume.mutate(goal.id)}
-          disabled={resume.isPending}
-        >
-          Resume
-        </Button>
-      ) : (
-        <Button size="sm" variant="outline" onClick={() => pause.mutate(goal.id)} disabled={pause.isPending}>
-          Pause
-        </Button>
-      )}
+      {open &&
+        (goal.pausedAt ? (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => resume.mutate(goal.id)}
+            disabled={resume.isPending}
+          >
+            Resume
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => pause.mutate(goal.id)}
+            disabled={pause.isPending}
+          >
+            Pause
+          </Button>
+        ))}
+      <Button
+        size="sm"
+        variant="outline"
+        className="text-destructive"
+        onClick={() =>
+          window.confirm(
+            `Delete the goal "${goal.title}" and its ${goal.tasksTotal} task${goal.tasksTotal === 1 ? '' : 's'}? Running turns are stopped. The chat stays.`,
+          ) && remove.mutate(goal.id)
+        }
+        disabled={remove.isPending}
+      >
+        Delete
+      </Button>
     </div>
   );
 }

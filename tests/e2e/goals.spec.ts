@@ -77,6 +77,28 @@ test.describe('goals', () => {
     await expect(card.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100');
   });
 
+  test('delete removes the goal and its tasks after a confirm', async ({ page, request }) => {
+    const goalText = `Delete me ${uid()} [mock:plan]`;
+    const res = await request.post('/api/goals', { data: { goalMd: goalText, autoRun: true } });
+    const goal = (await res.json()) as GoalView;
+    await expect
+      .poll(async () => ((await (await request.get(`/api/goals/${goal.id}`)).json()) as GoalView).tasksTotal)
+      .toBeGreaterThan(0);
+
+    await page.goto('/');
+    const card = page.getByTestId('goal-card').filter({ hasText: goal.title });
+    page.once('dialog', (d) => {
+      expect(d.message()).toContain(`Delete the goal "${goal.title}"`);
+      void d.accept();
+    });
+    await card.getByRole('button', { name: 'Delete' }).click();
+    await expect(card).toBeHidden();
+
+    expect((await request.get(`/api/goals/${goal.id}`)).status()).toBe(404);
+    const tasks = (await (await request.get('/api/tasks')).json()) as TaskView[];
+    expect(tasks.filter((t) => t.goalId === goal.id)).toEqual([]);
+  });
+
   test('pause stops new turns until resumed; the palette opens a new goal', async ({ page }) => {
     await page.goto('/');
     await page.keyboard.press('Control+k');

@@ -12,6 +12,7 @@ export const goalsApi = {
   confirm: (id: string) => apiRequest(`/goals/${enc(id)}/confirm`, goalViewSchema, { method: 'POST' }),
   pause: (id: string) => apiRequest(`/goals/${enc(id)}/pause`, goalViewSchema, { method: 'POST' }),
   resume: (id: string) => apiRequest(`/goals/${enc(id)}/resume`, goalViewSchema, { method: 'POST' }),
+  remove: (id: string) => apiRequest(`/goals/${enc(id)}`, z.unknown(), { method: 'DELETE' }),
 };
 
 /** Done tasks as a whole percentage (0 while there are no tasks; 100 once the goal is done). */

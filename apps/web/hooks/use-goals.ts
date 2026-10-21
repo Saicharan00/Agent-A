@@ -13,7 +13,7 @@ export function useGoals() {
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong');
 
-/** Create / confirm / pause / resume; each refreshes the goal queries and toasts on failure. */
+/** Create / confirm / pause / resume / remove; each refreshes the goal queries and toasts on failure. */
 export function useGoalActions() {
   const qc = useQueryClient();
   const onSuccess = () => void qc.invalidateQueries({ queryKey: queryKeys.goals });
@@ -23,6 +23,14 @@ export function useGoalActions() {
     confirm: useMutation({ mutationFn: goalsApi.confirm, onSuccess, onError }),
     pause: useMutation({ mutationFn: goalsApi.pause, onSuccess, onError }),
     resume: useMutation({ mutationFn: goalsApi.resume, onSuccess, onError }),
+    remove: useMutation({
+      mutationFn: goalsApi.remove,
+      onSuccess: () => {
+        void qc.invalidateQueries({ queryKey: queryKeys.goals });
+        void qc.invalidateQueries({ queryKey: queryKeys.tasks });
+      },
+      onError,
+    }),
   };
 }
 

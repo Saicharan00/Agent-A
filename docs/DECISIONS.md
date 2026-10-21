@@ -926,3 +926,13 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
 - **Docker Desktop (VM-based daemon) is not supported.** The Platform MCP server listens on the bot network's
   gateway IP, which exists on a Linux host (and in the sandbox VM) but not on a Docker Desktop host.
 - e2e pins `SANDBOX_NAME=agent-a`, because the MCP specs assert the sandbox commands.
+
+## Delete a goal
+- **`DELETE /api/goals/:id` deletes the goal and its tasks** (sub-tasks included; task events cascade) in one
+  transaction. Tasks are not deletable on their own. Before deleting, the goal is paused so nothing new starts, and
+  every queued or running turn for the goal or its tasks is cancelled.
+- **History is kept:** the goal's chat, task threads, runs, decisions and the `/shared/projects/<slug>/` folder stay.
+  Runs and decisions lose their goal/task links (the FKs are `SET NULL`). Deleting chats or bot work was not asked for
+  and would lose data.
+- The Delete button (goal card and goal bar) is shown for done goals too, behind a `window.confirm` like the other
+  deletes in the app.
