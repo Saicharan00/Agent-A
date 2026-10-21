@@ -936,3 +936,12 @@ New deps: concurrently (dev script), tsx (runner + scripts), globals (ESLint), e
   and would lose data.
 - The Delete button (goal card and goal bar) is shown for done goals too, behind a `window.confirm` like the other
   deletes in the app.
+
+## Delete a task
+- **`DELETE /api/tasks/:id` deletes the task and all its sub-tasks** (any depth) in one statement, so none are left
+  behind as orphaned top-level tasks. Their queued or running turns are cancelled first. Task threads, runs and
+  decisions stay as history (the FKs set their task links to null).
+- **`task.changed` carries an optional `goalId` for deleted tasks**, because the goal can no longer be looked up from
+  a task that is gone. GoalService uses it to re-check the goal, so deleting a goal's last unfinished task lets the
+  goal write its report.
+- The drawer closes before the delete request is sent, so the open drawer never refetches the deleted task (a 404).

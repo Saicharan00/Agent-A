@@ -29,6 +29,7 @@ export const tasksApi = {
       method: 'POST',
       body: { feedback },
     }),
+  remove: (id: string) => apiRequest(`/tasks/${enc(id)}`, z.unknown(), { method: 'DELETE' }),
 };
 
 /** '' = any. Assignee 'none' = unassigned; parent 'top' = top-level tasks only. */

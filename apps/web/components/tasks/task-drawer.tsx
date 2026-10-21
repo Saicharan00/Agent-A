@@ -8,7 +8,7 @@ import {
   type TaskDetail,
   type TaskPatchRequest,
 } from '@agenta/shared';
-import { Check, ExternalLink, FileText, MessagesSquare, Play, Undo2, X } from 'lucide-react';
+import { Check, ExternalLink, FileText, MessagesSquare, Play, Trash2, Undo2, X } from 'lucide-react';
 import Link from 'next/link';
 import { type ReactNode, useEffect, useState } from 'react';
 import { Markdown } from '@/components/markdown';
@@ -76,7 +76,7 @@ export function TaskDrawer({
       </div>
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
         {error && <p className="text-sm text-destructive">{error.message}</p>}
-        {task && <TaskBody task={task} botsById={botsById} onOpen={onOpen} />}
+        {task && <TaskBody task={task} botsById={botsById} onOpen={onOpen} onClose={onClose} />}
       </div>
     </aside>
   );
@@ -86,12 +86,14 @@ function TaskBody({
   task,
   botsById,
   onOpen,
+  onClose,
 }: {
   task: TaskDetail;
   botsById: Map<string, BotView>;
   onOpen: (id: string) => void;
+  onClose: () => void;
 }) {
-  const { update, start, approve, requestChanges } = useTaskActions();
+  const { update, start, approve, requestChanges, remove } = useTaskActions();
   const { openFile } = useShell();
   const [feedback, setFeedback] = useState('');
   const patch = (p: TaskPatchRequest) => update.mutate({ id: task.id, patch: p });
@@ -206,6 +208,22 @@ function TaskBody({
             <ExternalLink /> Origin thread
           </Link>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-destructive"
+          disabled={remove.isPending}
+          onClick={() => {
+            const subs = task.subtasks.length;
+            const what = subs ? ` and its ${subs} sub-task${subs === 1 ? '' : 's'}` : '';
+            if (!window.confirm(`Delete the task "${task.title}"${what}? Running turns are stopped.`)) return;
+            // Close first so the open drawer never refetches the deleted task.
+            onClose();
+            remove.mutate(task.id);
+          }}
+        >
+          <Trash2 /> Delete
+        </Button>
       </div>
 
       {task.status === 'in_review' && (

@@ -174,4 +174,35 @@ describe('task board API', () => {
     expect(cycle.body).toMatchObject({ error: { code: 'parent_cycle' } });
     expect((await req('GET', '/api/tasks/tsk_missing')).status).toBe(404);
   });
+
+  it('delete removes the task and all its sub-tasks, cancels their turns and keeps the runs', async () => {
+    const parent = (await req<TaskDetail>('POST', '/api/tasks', { title: 'Parent' })).body;
+    const child = (await req<TaskDetail>('POST', '/api/tasks', { title: 'Child', parentTaskId: parent.id }))
+      .body;
+    // Assigned at creation, so its turn starts at once; [mock:slow] keeps it busy until cancelled.
+    const grandchild = (
+      await req<TaskDetail>('POST', '/api/tasks', {
+        title: 'Grandchild',
+        parentTaskId: child.id,
+        assigneeBotId: alice,
+        descriptionMd: '[mock:slow]',
+      })
+    ).body;
+    const other = (await req<TaskDetail>('POST', '/api/tasks', { title: 'Unrelated' })).body;
+    const [run] = h.repos.runs.list({ taskId: grandchild.id });
+    expect(['queued', 'running']).toContain(run?.status);
+    h.published.length = 0;
+
+    const res = await app.inject({ method: 'DELETE', url: `/api/tasks/${parent.id}` });
+    expect(res.statusCode).toBe(204);
+    await h.service.idle();
+
+    for (const id of [parent.id, child.id, grandchild.id]) expect(h.repos.tasks.get(id)).toBeUndefined();
+    expect(h.repos.tasks.get(other.id)).toBeTruthy();
+    expect(h.repos.runs.get(run!.id)).toMatchObject({ status: 'cancelled', taskId: null });
+    expect(new Set(taskEvents().map((p) => (p.event as { taskId: string }).taskId))).toEqual(
+      new Set([parent.id, child.id, grandchild.id]),
+    );
+    expect((await app.inject({ method: 'DELETE', url: '/api/tasks/tsk_missing' })).statusCode).toBe(404);
+  });
 });

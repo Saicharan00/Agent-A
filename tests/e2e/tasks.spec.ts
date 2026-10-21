@@ -100,4 +100,33 @@ test.describe('task board', () => {
     await page.getByLabel('Priority').selectOption('p3');
     await expect(page.getByTestId('task-list').getByText(title)).toBeHidden();
   });
+
+  test('delete in the drawer removes the task and its sub-task after a confirm', async ({
+    page,
+    request,
+  }) => {
+    const title = `Throwaway ${uid()}`;
+    const parent = (await (await request.post('/api/tasks', { data: { title } })).json()) as TaskDetail;
+    const child = (await (
+      await request.post('/api/tasks', { data: { title: `${title} child`, parentTaskId: parent.id } })
+    ).json()) as TaskDetail;
+
+    await page.goto('/tasks');
+    await column(page, 'todo')
+      .getByTestId('task-card')
+      .filter({ has: page.getByText(title, { exact: true }) })
+      .click();
+    const drawer = page.getByTestId('task-drawer');
+    await expect(drawer.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    page.once('dialog', (d) => {
+      expect(d.message()).toBe(`Delete the task "${title}" and its 1 sub-task? Running turns are stopped.`);
+      void d.accept();
+    });
+    await drawer.getByRole('button', { name: 'Delete' }).click();
+
+    await expect(drawer).toBeHidden();
+    await expect(page.getByTestId('task-card').filter({ hasText: title })).toHaveCount(0);
+    expect((await request.get(`/api/tasks/${parent.id}`)).status()).toBe(404);
+    expect((await request.get(`/api/tasks/${child.id}`)).status()).toBe(404);
+  });
 });

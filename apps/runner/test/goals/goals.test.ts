@@ -275,6 +275,35 @@ describe('goal delegation loop', () => {
     expect((await app.inject({ method: 'DELETE', url: '/api/goals/goal_nope' })).statusCode).toBe(404);
   });
 
+  it('deleting the last unfinished task lets the goal finish with its report', async () => {
+    const created = await req<GoalView>('POST', '/api/goals', {
+      goalMd: 'Task delete goal [mock:plan]',
+      autoRun: true,
+    });
+    const id = created.body.id;
+    const planRun = h.repos.runs.list({ goalId: id })[0]!;
+    await new Promise<void>((resolve) => {
+      const off = h.bus.subscribe(`run:${planRun.id}`, (e) => {
+        if ((e as { type: string; status?: string }).status === 'succeeded') {
+          off();
+          resolve();
+        }
+      });
+      h.service.tick();
+    });
+    // Hold the work, mark all but the last task done, then let the goal go again without restarting anything.
+    await req('POST', `/api/goals/${id}/pause`);
+    await h.service.idle();
+    const tasks = h.repos.goals.listTasks(id);
+    for (const t of tasks.slice(0, -1)) h.repos.tasks.update(t.id, { status: 'done' });
+    h.repos.goals.update(id, { pausedAt: null });
+
+    const res = await app.inject({ method: 'DELETE', url: `/api/tasks/${tasks.at(-1)!.id}` });
+    expect(res.statusCode).toBe(204);
+    await h.service.idle();
+    expect(await goal(id)).toMatchObject({ status: 'done', tasksTotal: tasks.length - 1 });
+  });
+
   it('needs a lead bot', async () => {
     h.repos.bots.update(lead, { isLead: false });
     const res = await req<{ error: { code: string } }>('POST', '/api/goals', { goalMd: 'x' });

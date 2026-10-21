@@ -22,9 +22,9 @@ function parse<S extends z.ZodType>(schema: S, value: unknown, reply: FastifyRep
   return undefined;
 }
 
-async function handle<T>(reply: FastifyReply, fn: () => T): Promise<T | undefined> {
+async function handle<T>(reply: FastifyReply, fn: () => T | Promise<T>): Promise<T | undefined> {
   try {
-    return fn();
+    return await fn();
   } catch (err) {
     if (err instanceof TaskError || err instanceof RunError) {
       void reply.code(err.statusCode).send(apiError(err.code, err.message));
@@ -34,7 +34,7 @@ async function handle<T>(reply: FastifyReply, fn: () => T): Promise<T | undefine
   }
 }
 
-/** GET/POST /api/tasks, GET/PATCH /api/tasks/:id, POST /api/tasks/:id/{start,approve,request-changes}. */
+/** GET/POST /api/tasks, GET/PATCH/DELETE /api/tasks/:id, POST /api/tasks/:id/{start,approve,request-changes}. */
 export function registerTaskRoutes(app: FastifyInstance, tasks: TaskService): void {
   app.get('/api/tasks', async () => tasks.list());
 
@@ -51,6 +51,11 @@ export function registerTaskRoutes(app: FastifyInstance, tasks: TaskService): vo
     const body = parse(taskPatchRequestSchema, req.body, reply);
     if (!body) return;
     return handle(reply, () => tasks.update(req.params.id, body));
+  });
+
+  app.delete<IdParams>('/api/tasks/:id', async (req, reply) => {
+    await handle(reply, () => tasks.delete(req.params.id));
+    if (!reply.sent) return reply.code(204).send();
   });
 
   app.post<IdParams>('/api/tasks/:id/start', async (req, reply) =>

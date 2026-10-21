@@ -21,7 +21,7 @@ export function useTask(id: string | null) {
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong');
 
-/** Create / patch / start / approve / request changes; each refreshes the task queries and toasts on failure. */
+/** Create / patch / start / approve / request changes / remove; each refreshes the task queries and toasts on failure. */
 export function useTaskActions() {
   const qc = useQueryClient();
   const onSuccess = (task: TaskDetail) => {
@@ -50,6 +50,16 @@ export function useTaskActions() {
       mutationFn: ({ id, feedback }: { id: string; feedback: string }) =>
         tasksApi.requestChanges(id, feedback),
       onSuccess,
+      onError,
+    }),
+    remove: useMutation({
+      mutationFn: tasksApi.remove,
+      onSuccess: (_res, id) => {
+        // Dropped, not invalidated: refetching a deleted task's detail would 404.
+        qc.removeQueries({ queryKey: queryKeys.task(id) });
+        void qc.invalidateQueries({ queryKey: queryKeys.taskList });
+        void qc.invalidateQueries({ queryKey: queryKeys.goals });
+      },
       onError,
     }),
   };

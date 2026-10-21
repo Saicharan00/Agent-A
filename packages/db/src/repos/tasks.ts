@@ -67,6 +67,11 @@ export function makeTasksRepo(db: Db) {
       return db.delete(tasks).where(eq(tasks.id, id)).run().changes > 0;
     },
 
+    /** One statement, so a task and its sub-tasks go together or not at all. */
+    deleteMany(ids: string[]): number {
+      return ids.length ? db.delete(tasks).where(inArray(tasks.id, ids)).run().changes : 0;
+    },
+
     addEvent(input: TaskEventCreateInput): TaskEvent {
       const data = taskEventCreateSchema.parse(input);
       return db

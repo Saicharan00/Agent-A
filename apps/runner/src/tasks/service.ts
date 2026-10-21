@@ -33,7 +33,7 @@ export type TaskServiceOptions = {
   repos: Repos;
   bus: EventBus;
   log: Log;
-  runs: Pick<RunService, 'enqueue' | 'admitGoal'>;
+  runs: Pick<RunService, 'enqueue' | 'admitGoal' | 'cancel'>;
   threads: Pick<ThreadService, 'publish'>;
 };
 
@@ -45,8 +45,8 @@ export function toTaskView(t: Task): TaskView {
 }
 
 /** Tells every client the task changed (board and drawer refetch). Also used by the Platform MCP tools. */
-export function publishTaskChanged(bus: EventBus, taskId: string): void {
-  const event: LiveTaskChanged = { type: 'task.changed', taskId };
+export function publishTaskChanged(bus: EventBus, taskId: string, goalId?: string): void {
+  const event: LiveTaskChanged = { type: 'task.changed', taskId, ...(goalId ? { goalId } : {}) };
   bus.publish('global', event);
 }
 
@@ -99,6 +99,34 @@ export class TaskService {
       subtasks: repos.tasks.list({ parentTaskId: id }).map(toTaskView),
       events: repos.tasks.listEvents(id),
     };
+  }
+
+  /**
+   * Deletes the task and its sub-tasks (all levels; their events cascade). Their queued or running turns are cancelled
+   * first. Task threads and runs stay as history (the FKs set their task links to null).
+   */
+  async delete(id: string): Promise<void> {
+    const { repos, log } = this.opts;
+    const root = this.task(id);
+    const all: Task[] = [];
+    for (const queue = [root]; queue.length;) {
+      const t = queue.shift()!;
+      all.push(t);
+      queue.push(...repos.tasks.list({ parentTaskId: t.id }));
+    }
+    const active = all.flatMap((t) =>
+      repos.runs.list({ taskId: t.id, status: ['queued', 'running'], limit: 100 }),
+    );
+    await Promise.all(
+      active.map((run) =>
+        this.opts.runs.cancel(run.id).catch(() => {
+          // It finished meanwhile.
+        }),
+      ),
+    );
+    repos.tasks.deleteMany(all.map((t) => t.id));
+    log.info({ taskId: id, tasks: all.length, cancelled: active.length }, 'task deleted');
+    for (const t of all) publishTaskChanged(this.opts.bus, t.id, t.goalId ?? undefined);
   }
 
   create(body: TaskCreateRequest): TaskDetail {

@@ -67,7 +67,7 @@ export class GoalService {
     opts.bus.subscribe('global', (e) => {
       const event = e as LiveTaskChanged;
       if (event.type !== 'task.changed') return;
-      const goalId = opts.repos.tasks.get(event.taskId)?.goalId;
+      const goalId = event.goalId ?? opts.repos.tasks.get(event.taskId)?.goalId;
       if (goalId) this.sync(goalId);
     });
   }

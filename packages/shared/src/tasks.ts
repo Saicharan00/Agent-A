@@ -94,5 +94,7 @@ export type TaskRequestChanges = z.input<typeof taskRequestChangesSchema>;
 export const liveTaskChangedSchema = z.object({
   type: z.literal('task.changed'),
   taskId: z.string(),
+  /** Set when the task was deleted: its goal can no longer be looked up from the task. */
+  goalId: z.string().optional(),
 });
 export type LiveTaskChanged = z.infer<typeof liveTaskChangedSchema>;
