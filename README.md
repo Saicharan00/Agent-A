@@ -57,7 +57,7 @@ Both setups need:
    Linux and WSL installs is 1000.
 3. **Get the code and configure:**
    ```bash
-   git clone https://github.com/Saicharan00/Agent-A-GrokBot.git agent-a
+   git clone https://github.com/Saicharan00/Agent-A.git agent-a
    cd agent-a
    cp .env.example .env.local
    ```
@@ -74,7 +74,7 @@ Both setups need:
    `winget install Docker.sbx`), and sign in with `sbx login`. Install Git. Hardware virtualization must be enabled.
 2. **Get the code** and open a terminal in the project folder:
    ```bash
-   git clone https://github.com/Saicharan00/Agent-A-GrokBot.git agent-a
+   git clone https://github.com/Saicharan00/Agent-A.git agent-a
    cd agent-a
    ```
 3. **Create the sandbox** with port 3000 published to your machine only. The examples use the name `agent-a`;
